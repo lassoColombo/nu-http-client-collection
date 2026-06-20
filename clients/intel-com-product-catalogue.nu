@@ -155,7 +155,7 @@ export def "products-get-codename get-code-name" [
 #
 # GET /api/products/get-ordering-info
 # operationId: getorderinginfo
-export def "products-get-ordering-info get-getorderinginfo" [
+export def "products-get-ordering-info get-orderinginfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

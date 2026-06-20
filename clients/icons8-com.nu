@@ -1,6 +1,6 @@
 # Auto-generated client for Use a [New Version](https://icons8.github.io/icons8-docs/) Instead v1.0.0
 # Source: https://api.apis.guru/v2/specs/icons8.com/1.0.0/openapi.json
-# Auth: --token flag or $env.USE_A_NEW_VERSION__HTTPS___ICONS8_GITHUB_IO_ICONS8_DOCS___INSTEAD_TOKEN
+# Auth: --token flag or $env.USE_A_NEW_VERSION_HTTPS_ICONS8_GITHUB_IO_ICONS8_DOCS_INSTEAD_TOKEN
 
 const BASE_URL = "https://api.icons8.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://api.icons8.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o USE_A_NEW_VERSION__HTTPS___ICONS8_GITHUB_IO_ICONS8_DOCS___INSTEAD_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o USE_A_NEW_VERSION_HTTPS_ICONS8_GITHUB_IO_ICONS8_DOCS_INSTEAD_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -101,7 +101,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iconsets-categories-platform-platform-language-language get-categories" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iconsets-categories-platformplatformlanguagelanguage get-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/iconsets/v3/categories?platform={platform}&language={language}
 # operationId: Categories
-export def "iconsets-categories-platform-platform-language-language get-categories" [
+export def "iconsets-categories-platformplatformlanguagelanguage get-categories" [
   platform: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -152,7 +152,7 @@ export def "iconsets-categories-platform-platform-language-language get-categori
 #
 # GET /api/iconsets/v3/category?category={category}&subcategory={subcategory}&amount={amount}&offset={offset}&platform={platform}&language={language}
 # operationId: By Category
-export def "iconsets-category-category-category-subcategory-subcategory-amount-amount-offset-offset-platform-platform-language-language get" [
+export def "iconsets-category-categorycategorysubcategorysubcategoryamountamountoffsetoffsetplatformplatformlanguagelanguage get" [
   category: string
   subcategory: string
   amount: float
@@ -187,7 +187,7 @@ export def "iconsets-category-category-category-subcategory-subcategory-amount-a
 #
 # GET /api/iconsets/v3/latest?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}
 # operationId: Latest
-export def "iconsets-latest-term-term-amount-amount-offset-offset-platform-platform-language-language get-latest" [
+export def "iconsets-latest-termtermamountamountoffsetoffsetplatformplatformlanguagelanguage get-latest" [
   term: any
   amount: float
   offset: float
@@ -220,7 +220,7 @@ export def "iconsets-latest-term-term-amount-amount-offset-offset-platform-platf
 #
 # GET /api/iconsets/v3/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}
 # operationId: By Keyword v3
-export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platform-language-language-exact-amount-exact-amount get-by-keyword-by-term-amount-offset-platform-language-exact-amount" [
+export def "iconsets-search-termtermamountamountoffsetoffsetplatformplatformlanguagelanguageexact-amountexact-amount get-by-keyword-by-term-amount-offset-platform-language-exact-amount" [
   term: string
   amount: float
   offset: float
@@ -255,7 +255,7 @@ export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platf
 #
 # GET /api/iconsets/v3/total?since={since}
 # operationId: Totals
-export def "iconsets-total-since-since get-totals" [
+export def "iconsets-total-sincesince get-totals" [
   since: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -280,7 +280,7 @@ export def "iconsets-total-since-since get-totals" [
 #
 # GET /api/iconsets/v4/search?term={term}&amount={amount}&offset={offset}&platform={platform}&language={language}&exact_amount={exact_amount}
 # operationId: By Keyword v4
-export def "iconsets-search-term-term-amount-amount-offset-offset-platform-platform-language-language-exact-amount-exact-amount get-by-keyword-by-term-amount-offset-platform-language-exact-amount-1" [
+export def "iconsets-search-termtermamountamountoffsetoffsetplatformplatformlanguagelanguageexact-amountexact-amount get-by-keyword-by-term-amount-offset-platform-language-exact-amount-1" [
   term: string
   amount: float
   offset: float

@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.vercel.com"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def conclusion-completer [] { ["canceled" "failed" "neutral" "skipped" "succeeded"] }
@@ -517,7 +517,7 @@ export def "registration create-email-login" [
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
 ]: any -> record<securityCode: string, token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/registration")
   let req_body = {"email": $email, "tokenName": $token_name} | compact
@@ -546,7 +546,7 @@ export def "registration-verify verify-token" [
   --token-name: string # The desired name for the token. It will be displayed on the user account details.
   --sso-user-id: string # The SAML Profile ID, when connecting a SAML Profile to a Team member for the first time.
 ]: nothing -> record<email: string, teamId: string, token: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "tokenName" $token_name "scalar") (serialize-qp "ssoUserId" $sso_user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/registration/verify" $qp)

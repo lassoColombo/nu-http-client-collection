@@ -7629,7 +7629,7 @@ export def "2-workflowscheme update" [
 #
 # POST /api/2/workflowscheme/{id}/createdraft
 # operationId: createDraftForParent
-export def "2-workflowscheme-createdraft create-draft-for-parent" [
+export def "2-workflowscheme-create-draft create-for-parent" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

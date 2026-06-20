@@ -2382,7 +2382,7 @@ export def "itv-changemarketing create-change-marketing" [
 #
 # POST /itv/deleteaccount
 # operationId: deleteAccount
-export def "itv-deleteaccount delete-account" [
+export def "itv-delete-account delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

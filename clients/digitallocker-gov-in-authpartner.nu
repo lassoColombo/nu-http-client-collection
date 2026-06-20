@@ -577,7 +577,7 @@ export def "oauth2-1-revoke get-token-revocation" [
 # --Get access token using authorization code shape: {client_id: string, client_secret: string, code?: string, code_verifier?: string, grant_type: "authorization_code", redirect_uri?: string}
 # --Get access token using device code and OTP shape: {client_id?: string, device_code?: string, dl_otp?: string, grant_type?: string}
 # --Get access token using refresh token shape: {client_id: string, client_secret: string, grant_type: "refresh_token", refresh_token: string}
-export def "oauth2-1-token create-getaccesstoken" [
+export def "oauth2-1-token get-accesstoken" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

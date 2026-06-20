@@ -1,6 +1,6 @@
 # Auto-generated client for ETSI GS MEC 010-2 - Part 2: Application lifecycle, rules and requirements management v2.1.1
 # Source: https://api.apis.guru/v2/specs/etsi.local/MEC010-2_AppPkgMgmt/2.1.1/openapi.json
-# Auth: --token flag or $env.ETSI_GS_MEC_010_2_PART_2__APPLICATION_LIFECYCLE__RULES_AND_REQUIREMENTS_MANAGEMENT_TOKEN
+# Auth: --token flag or $env.ETSI_GS_MEC_010_2_PART_2_APPLICATION_LIFECYCLE_RULES_AND_REQUIREMENTS_MANAGEMENT_TOKEN
 
 const BASE_URL = "http://etsi.local"
 
@@ -8,7 +8,7 @@ const BASE_URL = "http://etsi.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ETSI_GS_MEC_010_2_PART_2__APPLICATION_LIFECYCLE__RULES_AND_REQUIREMENTS_MANAGEMENT_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ETSI_GS_MEC_010_2_PART_2_APPLICATION_LIFECYCLE_RULES_AND_REQUIREMENTS_MANAGEMENT_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

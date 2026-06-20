@@ -4378,7 +4378,7 @@ export def "spaces-folders-vat-declarations update" [
 # Returns folder with Id
 #
 # GET /spaces/{spaceId}/folders/{id}
-export def "spaces-folders get-by-space-id-id" [
+export def "spaces-folders get-by-space-id-1" [
   space_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7276,7 +7276,7 @@ export def "spaces-folders delete" [
 # Returns document of documentClass (without specific data) of the folder
 #
 # GET /spaces/{spaceId}/folders/{id}/{documentClass}
-export def "spaces-folders get-by-space-id-id-document-class" [
+export def "spaces-folders get-by-space-id-document-class" [
   space_id: string
   id: string
   document_class: string

@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.dev.openbankingproject.ch"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def psu-http-method-completer [] { ["DELETE" "GET" "PATCH" "POST" "PUT"] }
@@ -162,7 +162,7 @@ export def "accounts get-list" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/accounts" $qp)
@@ -205,7 +205,7 @@ export def "accounts get-details" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   let qp = [(serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
@@ -248,7 +248,7 @@ export def "accounts-balances get" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/v1/accounts/{account_id}/balances"))
@@ -296,7 +296,7 @@ export def "accounts-transactions get-list" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   let qp = [(serialize-qp "dateFrom" $date_from "scalar") (serialize-qp "dateTo" $date_to "scalar") (serialize-qp "entryReferenceFrom" $entry_reference_from "scalar") (serialize-qp "bookingStatus" $booking_status "scalar") (serialize-qp "deltaList" $delta_list "scalar") (serialize-qp "withBalance" $with_balance "scalar")] | flatten | str join "&"
@@ -340,7 +340,7 @@ export def "accounts-transactions get-details" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'account-id' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
@@ -399,7 +399,7 @@ export def "consents create" [
   valid_until: string # This parameter is defining a valid until date (including the mentioned date) for the requested consent. The content is the local ASPSP date in ISO-Date format, e.g. 2017-10-30. Future dates might get adjusted by ASPSP. If a maximal available date is requested, a date in far future is to be used: "9999-12-31". In both cases the consent object to be retrieved by the get consent request will contain the adjusted date. (format: date, e.g. 2020-12-31)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/consents")
   let req_body = {"access": $access, "combinedServiceIndicator": $combined_service_indicator, "frequencyPerDay": $frequency_per_day, "recurringIndicator": $recurring_indicator, "validUntil": $valid_until} | compact
@@ -441,7 +441,7 @@ export def "consents delete" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}"))
@@ -482,7 +482,7 @@ export def "consents get-information" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}"))
@@ -523,7 +523,7 @@ export def "consents-authorisations get" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations"))
@@ -578,7 +578,7 @@ export def "consents-authorisations start" [
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/authorisations"))
@@ -622,7 +622,7 @@ export def "consents-authorisations get-sca-status" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
@@ -675,7 +675,7 @@ export def "consents-authorisations update-psu-data" [
   --confirmation-code: string # Confirmation Code as retrieved by the TPP from the redirect based SCA process.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
@@ -719,7 +719,7 @@ export def "consents-status get" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/v1/consents/{consent_id}/status"))
@@ -757,7 +757,7 @@ export def "funds-confirmations check-availability" [
   --payee: string # Name payee.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/funds-confirmations")
   let req_body = {"account": $account, "cardNumber": $card_number, "instructedAmount": $instructed_amount, "payee": $payee} | compact
@@ -812,7 +812,7 @@ export def "signing-baskets create" [
   --payment-ids: list<string> # A list of paymentIds.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/signing-baskets")
   let req_body = {"consentIds": $consent_ids, "paymentIds": $payment_ids} | compact
@@ -854,7 +854,7 @@ export def "signing-baskets delete" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}"))
@@ -895,7 +895,7 @@ export def "signing-baskets get" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}"))
@@ -936,7 +936,7 @@ export def "signing-baskets-authorisations get" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations"))
@@ -991,7 +991,7 @@ export def "signing-baskets-authorisations start" [
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/authorisations"))
@@ -1035,7 +1035,7 @@ export def "signing-baskets-authorisations get-sca-status" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
@@ -1088,7 +1088,7 @@ export def "signing-baskets-authorisations update-psu-data" [
   --confirmation-code: string # Confirmation Code as retrieved by the TPP from the redirect based SCA process.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   if ($authorisation_id | is-empty) { error make --unspanned { msg: "path parameter 'authorisationId' must be non-empty" } }
@@ -1136,7 +1136,7 @@ export def "signing-baskets-status get" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($basket_id | is-empty) { error make --unspanned { msg: "path parameter 'basketId' must be non-empty" } }
   let full_url = (build-url $base ({basket_id: (encode-path-segment $basket_id)} | format pattern "/v1/signing-baskets/{basket_id}/status"))
@@ -1235,7 +1235,7 @@ export def "payment-initiation-service-pis create-initiate" [
   --requested-execution-time: string # format: date-time
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1285,7 +1285,7 @@ export def "payment-initiation-service-pis cancel" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1330,7 +1330,7 @@ export def "payment-initiation-service-pis get-information" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1375,7 +1375,7 @@ export def "authorisations get-initiation" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1434,7 +1434,7 @@ export def "authorisations start" [
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1482,7 +1482,7 @@ export def "authorisations get-initiation-sca-status" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1539,7 +1539,7 @@ export def "authorisations update-psu-data" [
   --confirmation-code: string # Confirmation Code as retrieved by the TPP from the redirect based SCA process.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1587,7 +1587,7 @@ export def "cancellation-authorisations get-initiation-information" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1646,7 +1646,7 @@ export def "cancellation-authorisations start-initiation" [
   --sca-authentication-data: string # SCA authentication data, depending on the chosen authentication method. If the data is binary, then it is base64 encoded.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1694,7 +1694,7 @@ export def "cancellation-authorisations get-sca-status" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1751,7 +1751,7 @@ export def "cancellation-authorisations update-psu-data" [
   --confirmation-code: string # Confirmation Code as retrieved by the TPP from the redirect based SCA process.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }
@@ -1799,7 +1799,7 @@ export def "status get-initiation" [
   --psu-device-id: string # UUID (Universally Unique Identifier) for a device, which is used by the PSU, if available. UUID identifies either a device or a device dependant application installation. In case of an installation identification this ID needs to be unaltered until removal from device. (e.g. 99435c7e-ad88-49ec-a2ad-99ddcb1f5555)
   --psu-geo-location: string # The forwarded Geo Location of the corresponding http request between PSU and TPP if available. (e.g. GEO:52.506931;13.144558)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_service | is-empty) { error make --unspanned { msg: "path parameter 'payment-service' must be non-empty" } }
   if ($payment_product | is-empty) { error make --unspanned { msg: "path parameter 'payment-product' must be non-empty" } }

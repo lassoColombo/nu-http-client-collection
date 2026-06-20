@@ -1,6 +1,6 @@
 # Auto-generated client for LetMC Api V2, Basic (Tier 2) vv2-basic-tier
 # Source: https://api.apis.guru/v2/specs/letmc.com/basic-tier/v2-basic-tier/swagger.json
-# Auth: --token flag or $env.LETMC_API_V2_BASIC__TIER_2_TOKEN
+# Auth: --token flag or $env.LETMC_API_V2_BASIC_TIER_2_TOKEN
 
 const BASE_URL = "https://live-api.letmc.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://live-api.letmc.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LETMC_API_V2_BASIC__TIER_2_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LETMC_API_V2_BASIC_TIER_2_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

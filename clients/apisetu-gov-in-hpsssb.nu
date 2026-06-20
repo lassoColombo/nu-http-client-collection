@@ -1,6 +1,6 @@
 # Auto-generated client for HP Staff Selection Commission - HPSSC - Himachal Pradesh, Himachal Pradesh v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/hpsssb/3.0.0/openapi.json
-# Auth: --token flag or $env.HP_STAFF_SELECTION_COMMISSION_HPSSC___HIMACHAL_PRADESH__HIMACHAL_PRADESH_TOKEN
+# Auth: --token flag or $env.HP_STAFF_SELECTION_COMMISSION_HPSSC_HIMACHAL_PRADESH_HIMACHAL_PRADESH_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/hpsssb/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/hpsssb/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o HP_STAFF_SELECTION_COMMISSION_HPSSC___HIMACHAL_PRADESH__HIMACHAL_PRADESH_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o HP_STAFF_SELECTION_COMMISSION_HPSSC_HIMACHAL_PRADESH_HIMACHAL_PRADESH_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

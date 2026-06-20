@@ -486,7 +486,7 @@ export def "dashboards-blocks get" [
 # PATCH /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: updateBlock
 # --block_feeds item shape: {feed_id?: string, group_id?: string}
-export def "dashboards-blocks update-by-username-dashboard-id-id" [
+export def "dashboards-blocks update-by-username-dashboard-id" [
   username: string
   dashboard_id: string
   id: string
@@ -531,7 +531,7 @@ export def "dashboards-blocks update-by-username-dashboard-id-id" [
 # PUT /{username}/dashboards/{dashboard_id}/blocks/{id}
 # operationId: replaceBlock
 # --block_feeds item shape: {feed_id?: string, group_id?: string}
-export def "dashboards-blocks update-by-username-dashboard-id-id-1" [
+export def "dashboards-blocks update-by-username-dashboard-id-1" [
   username: string
   dashboard_id: string
   id: string
@@ -2292,7 +2292,7 @@ export def "acl get-permission" [
 #
 # PATCH /{username}/{type}/{type_id}/acl/{id}
 # operationId: updatePermission
-export def "acl update-permission-by-username-type-type-id-id" [
+export def "acl update-permission-by-username-type-type-id" [
   username: string
   type: string
   type_id: string
@@ -2330,7 +2330,7 @@ export def "acl update-permission-by-username-type-type-id-id" [
 #
 # PUT /{username}/{type}/{type_id}/acl/{id}
 # operationId: replacePermission
-export def "acl update-permission-by-username-type-type-id-id-1" [
+export def "acl update-permission-by-username-type-type-id-1" [
   username: string
   type: string
   type_id: string

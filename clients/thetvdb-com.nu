@@ -378,7 +378,7 @@ export def "series get" [
 # Returns header information only about the given series ID.
 #
 # HEAD /series/{id}
-export def "series head-head" [
+export def "series head" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

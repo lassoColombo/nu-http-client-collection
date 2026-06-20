@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-service-bus-namesp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ServiceBus/namespaces/{namespaceName}/networkrulesets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default create-or-update-network-rule-update" [
+export def "subscriptions-resource-groups-providers-microsoft-service-bus-namespaces-networkrulesets-default create-or-update-network-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

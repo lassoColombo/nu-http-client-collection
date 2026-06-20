@@ -1657,7 +1657,7 @@ export def "setup-locations-appointmentreminders update" [
 # Delete All Location Images
 #
 # DELETE /setup/v1/locations/{id}/deleteallimages
-export def "setup-locations-deleteallimages delete" [
+export def "setup-locations-delete-allimages delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1683,7 +1683,7 @@ export def "setup-locations-deleteallimages delete" [
 # Delete Location Image
 #
 # DELETE /setup/v1/locations/{id}/deleteimage
-export def "setup-locations-deleteimage delete" [
+export def "setup-locations-delete-image delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2994,7 +2994,7 @@ export def "setup-resources-calendar-auth-outlook get" [
 # Delete Resource Image
 #
 # DELETE /setup/v1/resources/{id}/deleteimage
-export def "setup-resources-deleteimage delete" [
+export def "setup-resources-delete-image delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3989,7 +3989,7 @@ export def "setup-services-calendar get" [
 # Delete Service Image
 #
 # DELETE /setup/v1/services/{id}/deleteimage
-export def "setup-services-deleteimage delete" [
+export def "setup-services-delete-image delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

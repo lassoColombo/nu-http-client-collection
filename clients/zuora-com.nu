@@ -1687,7 +1687,7 @@ export def "settings-batch-requests create-process" [
 #
 # GET /settings/listing
 # operationId: GET_ListAllSettings
-export def "settings-listing get-list-list" [
+export def "settings-listing get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

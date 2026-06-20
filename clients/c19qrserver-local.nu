@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://c19qrserver.local" "https://virtserver.swaggerhub.com/aijaz/QRCodeSigninServer/1.1"] }
-def auth-scheme-completer [] { ["token"] }
+def auth-scheme-completer [] { ["token" "none"] }
 
 # Completers for enum parameters
 def source-completer [] { ["android" "iOS" "web"] }
@@ -169,7 +169,7 @@ export def "login create" [
   --body-source: string@source-completer
 ]: any -> record<admin: bool, login_id: int, name: string, read_only: bool, token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "token"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/login")
   let req_body = {"email": $email, "password": $password, "source": $body_source} | compact

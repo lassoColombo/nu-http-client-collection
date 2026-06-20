@@ -1,6 +1,6 @@
 # Auto-generated client for Open Policy Agent (OPA) REST API v0.28.0
 # Source: https://api.apis.guru/v2/specs/openpolicy.local/0.28.0/openapi.json
-# Auth: --token flag or $env.OPEN_POLICY_AGENT_OPA__REST_API_TOKEN
+# Auth: --token flag or $env.OPEN_POLICY_AGENT_OPA_REST_API_TOKEN
 
 const BASE_URL = "http://openpolicy.local"
 
@@ -8,7 +8,7 @@ const BASE_URL = "http://openpolicy.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPEN_POLICY_AGENT_OPA__REST_API_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o OPEN_POLICY_AGENT_OPA_REST_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

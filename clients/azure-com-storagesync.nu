@@ -863,7 +863,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/postbackup
 # operationId: CloudEndpoints_PostBackup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-postbackup create-backup" [
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-post-backup create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -903,7 +903,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/postrestore
 # operationId: CloudEndpoints_PostRestore
 # --restoreFileSpec item shape: {path?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-postrestore create-restore" [
+export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-post-restore create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string

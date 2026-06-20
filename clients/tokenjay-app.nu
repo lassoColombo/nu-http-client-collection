@@ -171,7 +171,7 @@ export def "cancelbabel create-ergo-pay-babel-box-by-box-id" [
 # GET /createbabel/{address}
 #
 # operationId: ergoPayCreateBabelBox
-export def "createbabel create-ergo-pay-babel-box" [
+export def "create-babel create-ergo-pay-box" [
   address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

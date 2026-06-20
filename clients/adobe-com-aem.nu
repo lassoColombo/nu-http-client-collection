@@ -1,6 +1,6 @@
 # Auto-generated client for Adobe Experience Manager (AEM) API v3.7.1-pre.0
 # Source: https://api.apis.guru/v2/specs/adobe.com/aem/3.7.1-pre.0/openapi.json
-# Auth: --token flag or $env.ADOBE_EXPERIENCE_MANAGER_AEM__API_TOKEN
+# Auth: --token flag or $env.ADOBE_EXPERIENCE_MANAGER_AEM_API_TOKEN
 
 const BASE_URL = "http://localhost"
 
@@ -8,7 +8,7 @@ const BASE_URL = "http://localhost"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ADOBE_EXPERIENCE_MANAGER_AEM__API_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ADOBE_EXPERIENCE_MANAGER_AEM_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -125,7 +125,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["http://localhost" "http://adobe.local"] }
-def auth-scheme-completer [] { ["basic" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "none" "basic-credentials"] }
 
 
 # List all available API commands with their parameters
@@ -998,7 +998,7 @@ export def "libs-granite-core-content-login-html get-page" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/libs/granite/core/content/login.html")
   let accept_val = "text/html"

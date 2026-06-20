@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.tomtom.com"] }
-def auth-scheme-completer [] { ["query-key"] }
+def auth-scheme-completer [] { ["query-key" "none"] }
 
 # Completers for enum parameters
 def layer-completer [] { ["basic" "hybrid" "labels"] }
@@ -456,7 +456,7 @@ export def "map-wmts-wmts-capabilities-xml get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($version_number | is-empty) { error make --unspanned { msg: "path parameter 'versionNumber' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }

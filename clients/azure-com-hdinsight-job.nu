@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/hdinsight-job/2018-11-01-preview/swagger.json
 # Auth: --token flag or $env.HDINSIGHTJOBMANAGEMENTCLIENT_TOKEN
 
-const BASE_URL = "https://azure.local"
+const BASE_URL = "https://{clusterDnsName}"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local"] }
+def base-url-completer [] { ["https://{clusterDnsName}"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -240,7 +240,7 @@ export def "templeton-jobs get" [
 #
 # GET /templeton/v1/jobs?op=LISTAFTERID
 # operationId: Job_ListAfterJobId
-export def "templeton-jobs-op-listafterid list-job-after-job" [
+export def "templeton-jobs-op-list-afterid list-job-after-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

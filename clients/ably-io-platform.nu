@@ -98,7 +98,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://rest.ably.io"] }
-def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "bearer" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def format-completer [] { ["html" "json" "jsonp" "msgpack"] }
@@ -813,7 +813,7 @@ export def "time get" [
   --format: string@format-completer # The response format you would like
   --x-ably-version: string # The version of the API you wish to use.
 ]: nothing -> list<int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/time" $qp)

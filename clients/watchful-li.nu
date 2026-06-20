@@ -1353,7 +1353,7 @@ export def "sites-tags create" [
 #
 # POST /sites/{id}/updatejoomla
 # operationId: updateJoomla
-export def "sites-updatejoomla update-joomla" [
+export def "sites-update-joomla update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

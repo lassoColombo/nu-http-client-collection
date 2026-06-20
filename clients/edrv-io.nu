@@ -384,7 +384,7 @@ export def "commands-cancelreservation create" [
 #
 # DELETE /v1/commands/chargingschedule
 # operationId: deletechargingschedule
-export def "commands-chargingschedule delete-deletechargingschedule" [
+export def "commands-chargingschedule delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "reservations get" [
 #
 # PATCH /v1/reservations/{id}
 # operationId: updatereservation
-export def "reservations update-updatereservation" [
+export def "reservations update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

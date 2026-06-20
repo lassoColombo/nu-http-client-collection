@@ -187,7 +187,7 @@ export def "proxy get" [
 #
 # OPTIONS /proxy
 # operationId: optionsProxy
-export def "proxy options-options" [
+export def "proxy options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

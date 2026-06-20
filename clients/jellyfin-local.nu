@@ -476,7 +476,7 @@ export def "artists-images get" [
 #
 # HEAD /Artists/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadArtistImage
-export def "artists-images head-head" [
+export def "artists-images head" [
   name: string
   image_type: string
   image_index: int
@@ -803,7 +803,7 @@ export def "audio-master-m3u8 get-hls-playlist" [
 #
 # HEAD /Audio/{itemId}/master.m3u8
 # operationId: HeadMasterHlsAudioPlaylist
-export def "audio-master-m3u8 head-head-hls-playlist" [
+export def "audio-master-m3u8 head-hls-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +952,7 @@ export def "audio-stream get" [
 #
 # HEAD /Audio/{itemId}/stream
 # operationId: HeadAudioStream
-export def "audio-stream head-head" [
+export def "audio-stream head" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1101,7 +1101,7 @@ export def "audio-stream-container get" [
 #
 # HEAD /Audio/{itemId}/stream.{container}
 # operationId: HeadAudioStreamByContainer
-export def "audio-stream-container head-head" [
+export def "audio-stream-container head" [
   item_id: string
   container: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1219,7 +1219,7 @@ export def "audio-universal get-stream" [
 #
 # HEAD /Audio/{itemId}/universal
 # operationId: HeadUniversalAudioStream
-export def "audio-universal head-head-stream" [
+export def "audio-universal head-stream" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2860,7 +2860,7 @@ export def "genres-images get" [
 #
 # HEAD /Genres/{name}/Images/{imageType}
 # operationId: HeadGenreImage
-export def "genres-images head-head" [
+export def "genres-images head" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2947,7 +2947,7 @@ export def "genres-images get-by-index" [
 #
 # HEAD /Genres/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadGenreImageByIndex
-export def "genres-images head-head-by-index" [
+export def "genres-images head-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -4282,7 +4282,7 @@ export def "items-images get" [
 #
 # HEAD /Items/{itemId}/Images/{imageType}
 # operationId: HeadItemImage
-export def "items-images head-head" [
+export def "items-images head" [
   item_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4425,7 +4425,7 @@ export def "items-images get-by-index" [
 #
 # HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}
 # operationId: HeadItemImageByIndex
-export def "items-images head-head-by-index" [
+export def "items-images head-by-index" [
   item_id: string
   image_type: string
   image_index: int
@@ -4579,7 +4579,7 @@ export def "items-images get-image2" [
 #
 # HEAD /Items/{itemId}/Images/{imageType}/{imageIndex}/{tag}/{format}/{maxWidth}/{maxHeight}/{percentPlayed}/{unplayedCount}
 # operationId: HeadItemImage2
-export def "items-images head-head-image2" [
+export def "items-images head-image2" [
   item_id: string
   image_type: string
   image_index: int
@@ -7233,7 +7233,7 @@ export def "music-genres-images get" [
 #
 # HEAD /MusicGenres/{name}/Images/{imageType}
 # operationId: HeadMusicGenreImage
-export def "music-genres-images head-head" [
+export def "music-genres-images head" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7320,7 +7320,7 @@ export def "music-genres-images get-by-index" [
 #
 # HEAD /MusicGenres/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadMusicGenreImageByIndex
-export def "music-genres-images head-head-by-index" [
+export def "music-genres-images head-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -7791,7 +7791,7 @@ export def "persons-images get" [
 #
 # HEAD /Persons/{name}/Images/{imageType}
 # operationId: HeadPersonImage
-export def "persons-images head-head" [
+export def "persons-images head" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7878,7 +7878,7 @@ export def "persons-images get-by-index" [
 #
 # HEAD /Persons/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadPersonImageByIndex
-export def "persons-images head-head-by-index" [
+export def "persons-images head-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -9891,7 +9891,7 @@ export def "studios-images get" [
 #
 # HEAD /Studios/{name}/Images/{imageType}
 # operationId: HeadStudioImage
-export def "studios-images head-head" [
+export def "studios-images head" [
   name: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9978,7 +9978,7 @@ export def "studios-images get-by-index" [
 #
 # HEAD /Studios/{name}/Images/{imageType}/{imageIndex}
 # operationId: HeadStudioImageByIndex
-export def "studios-images head-head-by-index" [
+export def "studios-images head-by-index" [
   name: string
   image_type: string
   image_index: int
@@ -11793,7 +11793,7 @@ export def "users-images get" [
 #
 # HEAD /Users/{userId}/Images/{imageType}
 # operationId: HeadUserImage
-export def "users-images head-head" [
+export def "users-images head" [
   user_id: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11909,7 +11909,7 @@ export def "users-images get-by-index" [
 #
 # HEAD /Users/{userId}/Images/{imageType}/{imageIndex}
 # operationId: HeadUserImageByIndex
-export def "users-images head-head-by-index" [
+export def "users-images head-by-index" [
   user_id: string
   image_type: string
   image_index: int
@@ -13241,7 +13241,7 @@ export def "videos-master-m3u8 get-hls-playlist" [
 #
 # HEAD /Videos/{itemId}/master.m3u8
 # operationId: HeadMasterHlsVideoPlaylist
-export def "videos-master-m3u8 head-head-hls-playlist" [
+export def "videos-master-m3u8 head-hls-playlist" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13389,7 +13389,7 @@ export def "videos-stream get" [
 #
 # HEAD /Videos/{itemId}/stream
 # operationId: HeadVideoStream
-export def "videos-stream head-head" [
+export def "videos-stream head" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13644,7 +13644,7 @@ export def "videos get" [
 #
 # HEAD /Videos/{itemId}/{stream}.{container}
 # operationId: HeadVideoStreamByContainer
-export def "videos head-head" [
+export def "videos head" [
   item_id: string
   stream: string
   container: string

@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.lucidtech.ai/v1"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def content-type-completer [] { ["application/pdf" "image/jpeg" "image/png" "image/tiff"] }
@@ -153,7 +153,7 @@ export def "app-clients get" [
 }
 
 # OPTIONS /appClients
-export def "app-clients options-options" [
+export def "app-clients options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "app-clients delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<appClientId: string, callbackUrls: list<string>, clientId: string, clientSecret: string, createdBy: string, createdTime: string, defaultLoginUrl: string, description: string, hasSecret: bool, loginUrls: list<string>, logoutUrls: list<string>, name: string, updatedBy: string, updatedTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_client_id | is-empty) { error make --unspanned { msg: "path parameter 'appClientId' must be non-empty" } }
   let full_url = (build-url $base ({app_client_id: (encode-path-segment $app_client_id)} | format pattern "/appClients/{app_client_id}"))
@@ -234,7 +234,7 @@ export def "app-clients delete" [
 }
 
 # OPTIONS /appClients/{appClientId}
-export def "app-clients options-options-by-app-client-id" [
+export def "app-clients options-by-app-client-id" [
   app_client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +317,7 @@ export def "assets list" [
 }
 
 # OPTIONS /assets
-export def "assets options-options" [
+export def "assets options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "assets get" [
 }
 
 # OPTIONS /assets/{assetId}
-export def "assets options-options-by-asset-id" [
+export def "assets options-by-asset-id" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "datasets list" [
 }
 
 # OPTIONS /datasets
-export def "datasets options-options" [
+export def "datasets options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "datasets get" [
 }
 
 # OPTIONS /datasets/{datasetId}
-export def "datasets options-options-by-dataset-id" [
+export def "datasets options-by-dataset-id" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "deployment-environments list" [
 }
 
 # OPTIONS /deploymentEnvironments
-export def "deployment-environments options-options" [
+export def "deployment-environments options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "deployment-environments get" [
 }
 
 # OPTIONS /deploymentEnvironments/{deploymentEnvironmentId}
-export def "deployment-environments options-options-by-deployment-environment-id" [
+export def "deployment-environments options-by-deployment-environment-id" [
   deployment_environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -809,7 +809,7 @@ export def "documents list" [
 }
 
 # OPTIONS /documents
-export def "documents options-options" [
+export def "documents options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "documents get" [
 }
 
 # OPTIONS /documents/{documentId}
-export def "documents options-options-by-document-id" [
+export def "documents options-by-document-id" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "logs list" [
 }
 
 # OPTIONS /logs
-export def "logs options-options" [
+export def "logs options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "logs get" [
 }
 
 # OPTIONS /logs/{logId}
-export def "logs options-options-by-log-id" [
+export def "logs options-by-log-id" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1104,7 +1104,7 @@ export def "models list" [
 }
 
 # OPTIONS /models
-export def "models options-options" [
+export def "models options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1210,7 +1210,7 @@ export def "models get" [
 }
 
 # OPTIONS /models/{modelId}
-export def "models options-options-by-model-id" [
+export def "models options-by-model-id" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "models-data-bundles get" [
 }
 
 # OPTIONS /models/{modelId}/dataBundles
-export def "models-data-bundles options-options-by-model-id" [
+export def "models-data-bundles options-by-model-id" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1375,7 +1375,7 @@ export def "models-data-bundles delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<createdBy: string, createdTime: string, dataBundleId: string, datasets: table<containsPersonallyIdentifiableInformation: bool, createdBy: string, createdTime: string, datasetId: string, description: string, groundTruthSummary: record, metadata: record, name: string, numberOfDocuments: int, retentionInDays: int, storageLocation: string, updatedBy: string, updatedTime: string, version: int>, description: string, modelId: string, name: string, retentionInDays: int, status: string, summary: record, updatedBy: string, updatedTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($model_id | is-empty) { error make --unspanned { msg: "path parameter 'modelId' must be non-empty" } }
   if ($data_bundle_id | is-empty) { error make --unspanned { msg: "path parameter 'dataBundleId' must be non-empty" } }
@@ -1386,7 +1386,7 @@ export def "models-data-bundles delete" [
 }
 
 # OPTIONS /models/{modelId}/dataBundles/{dataBundleId}
-export def "models-data-bundles options-options-by-model-id-data-bundle-id" [
+export def "models-data-bundles options-by-model-id-data-bundle-id" [
   model_id: string
   data_bundle_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1474,7 +1474,7 @@ export def "models-trainings get" [
 }
 
 # OPTIONS /models/{modelId}/trainings
-export def "models-trainings options-options-by-model-id" [
+export def "models-trainings options-by-model-id" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1539,7 +1539,7 @@ export def "models-trainings create" [
 }
 
 # OPTIONS /models/{modelId}/trainings/{trainingId}
-export def "models-trainings options-options-by-model-id-training-id" [
+export def "models-trainings options-by-model-id-training-id" [
   model_id: string
   training_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1627,7 +1627,7 @@ export def "organizations list" [
 }
 
 # OPTIONS /organizations
-export def "organizations options-options" [
+export def "organizations options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1702,7 +1702,7 @@ export def "organizations get" [
 }
 
 # OPTIONS /organizations/{organizationId}
-export def "organizations options-options-by-organization-id" [
+export def "organizations options-by-organization-id" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1785,7 +1785,7 @@ export def "payment-methods list" [
 }
 
 # OPTIONS /paymentMethods
-export def "payment-methods options-options" [
+export def "payment-methods options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1883,7 +1883,7 @@ export def "payment-methods get" [
 }
 
 # OPTIONS /paymentMethods/{paymentMethodId}
-export def "payment-methods options-options-by-payment-method-id" [
+export def "payment-methods options-by-payment-method-id" [
   payment_method_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1966,7 +1966,7 @@ export def "plans list" [
 }
 
 # OPTIONS /plans
-export def "plans options-options" [
+export def "plans options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2012,7 +2012,7 @@ export def "plans get" [
 }
 
 # OPTIONS /plans/{planId}
-export def "plans options-options-by-plan-id" [
+export def "plans options-by-plan-id" [
   plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2063,7 +2063,7 @@ export def "predictions get" [
 }
 
 # OPTIONS /predictions
-export def "predictions options-options" [
+export def "predictions options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2145,7 +2145,7 @@ export def "profiles get" [
 }
 
 # OPTIONS /profiles/{profileId}
-export def "profiles options-options" [
+export def "profiles options" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2216,7 +2216,7 @@ export def "secrets get" [
 }
 
 # OPTIONS /secrets
-export def "secrets options-options" [
+export def "secrets options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2283,7 +2283,7 @@ export def "secrets delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<createdBy: string, createdTime: string, description: string, name: string, secretId: string, updatedBy: string, updatedTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($secret_id | is-empty) { error make --unspanned { msg: "path parameter 'secretId' must be non-empty" } }
   let full_url = (build-url $base ({secret_id: (encode-path-segment $secret_id)} | format pattern "/secrets/{secret_id}"))
@@ -2293,7 +2293,7 @@ export def "secrets delete" [
 }
 
 # OPTIONS /secrets/{secretId}
-export def "secrets options-options-by-secret-id" [
+export def "secrets options-by-secret-id" [
   secret_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2352,7 +2352,7 @@ export def "secrets update" [
 }
 
 # OPTIONS /signup
-export def "signup options-options" [
+export def "signup options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2432,7 +2432,7 @@ export def "transitions list" [
 }
 
 # OPTIONS /transitions
-export def "transitions options-options" [
+export def "transitions options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2535,7 +2535,7 @@ export def "transitions get" [
 }
 
 # OPTIONS /transitions/{transitionId}
-export def "transitions options-options-by-transition-id" [
+export def "transitions options-by-transition-id" [
   transition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2630,7 +2630,7 @@ export def "transitions-executions list" [
 }
 
 # OPTIONS /transitions/{transitionId}/executions
-export def "transitions-executions options-options-by-transition-id" [
+export def "transitions-executions options-by-transition-id" [
   transition_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2711,7 +2711,7 @@ export def "transitions-executions get" [
 }
 
 # OPTIONS /transitions/{transitionId}/executions/{executionId}
-export def "transitions-executions options-options-by-transition-id-execution-id" [
+export def "transitions-executions options-by-transition-id-execution-id" [
   transition_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2777,7 +2777,7 @@ export def "transitions-executions update" [
 }
 
 # OPTIONS /transitions/{transitionId}/executions/{executionId}/heartbeats
-export def "transitions-executions-heartbeats options-options" [
+export def "transitions-executions-heartbeats options" [
   transition_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2861,7 +2861,7 @@ export def "users list" [
 }
 
 # OPTIONS /users
-export def "users options-options" [
+export def "users options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2962,7 +2962,7 @@ export def "users get" [
 }
 
 # OPTIONS /users/{userId}
-export def "users options-options-by-user-id" [
+export def "users options-by-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,7 +3044,7 @@ export def "workflows list" [
 }
 
 # OPTIONS /workflows
-export def "workflows options-options" [
+export def "workflows options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3149,7 +3149,7 @@ export def "workflows get" [
 }
 
 # OPTIONS /workflows/{workflowId}
-export def "workflows options-options-by-workflow-id" [
+export def "workflows options-by-workflow-id" [
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3242,7 +3242,7 @@ export def "workflows-executions list" [
 }
 
 # OPTIONS /workflows/{workflowId}/executions
-export def "workflows-executions options-options-by-workflow-id" [
+export def "workflows-executions options-by-workflow-id" [
   workflow_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3347,7 +3347,7 @@ export def "workflows-executions get" [
 }
 
 # OPTIONS /workflows/{workflowId}/executions/{executionId}
-export def "workflows-executions options-options-by-workflow-id-execution-id" [
+export def "workflows-executions options-by-workflow-id-execution-id" [
   workflow_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL

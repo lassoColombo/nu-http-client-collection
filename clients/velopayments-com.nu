@@ -126,7 +126,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.sandbox.velopayments.com" "https://api.payouts.velopayments.com"] }
-def auth-scheme-completer [] { ["bearer" "basic" "basic-credentials"] }
+def auth-scheme-completer [] { ["bearer" "basic" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def link-type-completer [] { ["PARENT_OF"] }
@@ -319,7 +319,7 @@ export def "password-reset reset" [
   email: string # the email address of the user requesting the reset password (format: email, e.g. foo@example.com)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/password/reset")
   let req_body = {"email": $email} | compact
@@ -717,7 +717,7 @@ export def "supported-countries list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<countries: table<currencies: list, isoCountryCode: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/supportedCountries")
   let accept_val = "application/json"
@@ -909,7 +909,7 @@ export def "currencies list-supported" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currencies: table<currency: string, maxPaymentAmount: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/currencies")
   let accept_val = "application/json"
@@ -1174,7 +1174,7 @@ export def "supported-countries list-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<countries: table<currencies: list, isoCountryCode: string, regions: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/supportedCountries")
   let accept_val = "application/json"

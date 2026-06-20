@@ -1,14 +1,14 @@
 # Auto-generated client for Language Understanding Intelligent Service (LUIS) Endpoint API for running predictions and extracting user intentions and entities from utterances. vv2.0 preview
 # Source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-LUIS-Runtime/v2.0 preview/swagger.json
-# Auth: --token flag or $env.LANGUAGE_UNDERSTANDING_INTELLIGENT_SERVICE_LUIS__ENDPOINT_API_FOR_RUNNING_PREDICTIONS_AND_EXTRACTING_USER_INTENTIONS_AND_ENTITIES_FROM_UTTERANCES_TOKEN
+# Auth: --token flag or $env.LANGUAGE_UNDERSTANDING_INTELLIGENT_SERVICE_LUIS_ENDPOINT_API_FOR_RUNNING_PREDICTIONS_AND_EXTRACTING_USER_INTENTIONS_AND_ENTITIES_FROM_UTTERANCES_TOKEN
 
-const BASE_URL = "https://azure.local/luis/v2.0/apps"
+const BASE_URL = "https://{AzureRegion}.api.cognitive.microsoft.com/luis/v2.0/apps"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LANGUAGE_UNDERSTANDING_INTELLIGENT_SERVICE_LUIS__ENDPOINT_API_FOR_RUNNING_PREDICTIONS_AND_EXTRACTING_USER_INTENTIONS_AND_ENTITIES_FROM_UTTERANCES_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LANGUAGE_UNDERSTANDING_INTELLIGENT_SERVICE_LUIS_ENDPOINT_API_FOR_RUNNING_PREDICTIONS_AND_EXTRACTING_USER_INTENTIONS_AND_ENTITIES_FROM_UTTERANCES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local/luis/v2.0/apps"] }
+def base-url-completer [] { ["https://{AzureRegion}.api.cognitive.microsoft.com/luis/v2.0/apps"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 

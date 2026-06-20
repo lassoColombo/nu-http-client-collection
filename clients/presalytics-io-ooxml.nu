@@ -1448,7 +1448,7 @@ export def "images-details get-shared" [
 #
 # PUT /Images/GetImage/{Id}
 # operationId: shared_images_getimage_put_id
-export def "images-get-image update-shared-getimage" [
+export def "images-get-image update-shared" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

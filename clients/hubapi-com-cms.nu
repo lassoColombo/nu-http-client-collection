@@ -163,7 +163,7 @@ export def "cms-domains get-page" [
 #
 # GET /cms/v3/domains/{domainId}
 # operationId: get-/cms/v3/domains/{domainId}_getById
-export def "cms-domains get-{domain-id}" [
+export def "cms-domains get" [
   domain_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -1186,7 +1186,7 @@ export def "api create-get-listener-certificates" [
 #
 # GET /
 # operationId: GET_DescribeListeners
-export def "api get-listeners" [
+export def "api get-list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1225,7 +1225,7 @@ export def "api get-listeners" [
 #
 # POST /
 # operationId: POST_DescribeListeners
-export def "api create-get-listeners" [
+export def "api create-get-list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

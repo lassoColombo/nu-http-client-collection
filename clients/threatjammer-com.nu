@@ -2399,7 +2399,7 @@ export def "source-ip-range get-and-timerange" [
 #
 # GET /v1/token
 # operationId: query_token_info_v1_token_get
-export def "token list-get-get" [
+export def "token list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

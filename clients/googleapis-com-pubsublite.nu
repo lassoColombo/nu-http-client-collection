@@ -829,7 +829,7 @@ export def "cursor commit" [
 #
 # POST /v1/topicStats/{topic}:computeHeadCursor
 # operationId: pubsublite.topicStats.projects.locations.topics.computeHeadCursor
-export def "topic-stats create-compute-head-cursor" [
+export def "topic-stats head-compute-cursor" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

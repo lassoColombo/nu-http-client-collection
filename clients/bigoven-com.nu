@@ -1,6 +1,6 @@
 # Auto-generated client for 1,000,000+ Recipe and Grocery List API (v2) vpartner
 # Source: https://api.apis.guru/v2/specs/bigoven.com/partner/openapi.json
-# Auth: --token flag or $env.1_000_000_RECIPE_AND_GROCERY_LIST_API__V2_TOKEN
+# Auth: --token flag or $env.1_000_000_RECIPE_AND_GROCERY_LIST_API_V2_TOKEN
 
 const BASE_URL = "https://api2.bigoven.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://api2.bigoven.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o 1_000_000_RECIPE_AND_GROCERY_LIST_API__V2_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o 1_000_000_RECIPE_AND_GROCERY_LIST_API_V2_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

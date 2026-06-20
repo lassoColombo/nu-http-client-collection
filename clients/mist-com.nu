@@ -16969,7 +16969,7 @@ export def "sites-devices-ha update-swap-node" [
 #
 # DELETE /api/v1/sites/{site_id}/devices/{device_id}/image{image_number}
 # operationId: deleteSiteDeviceImage
-export def "sites-devices-image-image-number delete" [
+export def "sites-devices-imageimage-number delete" [
   site_id: string
   device_id: string
   image_number: int
@@ -16998,7 +16998,7 @@ export def "sites-devices-image-image-number delete" [
 #
 # POST /api/v1/sites/{site_id}/devices/{device_id}/image{image_number}
 # operationId: addSiteDeviceImage
-export def "sites-devices-image-image-number create" [
+export def "sites-devices-imageimage-number create" [
   site_id: string
   device_id: string
   image_number: int

@@ -1048,7 +1048,7 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings
 # operationId: androidpublisher.edits.listings.deleteall
-export def "androidpublisher-applications-edits-listings delete-deleteall-by-package-name-edit-id" [
+export def "androidpublisher-applications-edits-listings delete-by-package-name-edit-id" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1306,7 +1306,7 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
 #
 # DELETE /androidpublisher/v3/applications/{packageName}/edits/{editId}/listings/{language}/{imageType}
 # operationId: androidpublisher.edits.images.deleteall
-export def "androidpublisher-applications-edits-listings delete-deleteall-by-package-name-edit-id-language-image-type" [
+export def "androidpublisher-applications-edits-listings delete-by-package-name-edit-id-language-image-type" [
   package_name: string
   edit_id: string
   language: string
@@ -3897,7 +3897,7 @@ export def "androidpublisher delete" [
 #
 # GET /androidpublisher/v3/{name}
 # operationId: androidpublisher.externaltransactions.getexternaltransaction
-export def "androidpublisher get-getexternaltransaction" [
+export def "androidpublisher get-externaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4031,7 +4031,7 @@ export def "androidpublisher create-refundexternaltransaction" [
 # --originalTaxAmount shape: {currency?: string, priceMicros?: string}
 # --recurringTransaction shape: {externalSubscription?: record, externalTransactionToken?: string, initialExternalTransactionId?: string}
 # --userTaxAddress shape: {regionCode?: string}
-export def "androidpublisher-external-transactions create-createexternaltransaction" [
+export def "androidpublisher-external-transactions create-externaltransaction" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -126,7 +126,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.surevoip.co.uk" "https://sandbox.surevoip.co.uk"] }
-def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "bearer" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def hypermedia-completer [] { ["no" "yes"] }
@@ -583,7 +583,7 @@ export def "ip-address get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ip-address")
   let accept_val = "application/json"
@@ -627,7 +627,7 @@ export def "numbers get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/numbers")
   let accept_val = "application/json"
@@ -649,7 +649,7 @@ export def "numbers-areacodes get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/numbers/areacodes")
   let accept_val = "application/json"
@@ -715,7 +715,7 @@ export def "service-status get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/service-status")
   let accept_val = "application/json"
@@ -803,7 +803,7 @@ export def "support-ip-address get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/support/ip-address")
   let accept_val = "application/json"
@@ -825,7 +825,7 @@ export def "support-service-status get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/support/service-status")
   let accept_val = "application/json"

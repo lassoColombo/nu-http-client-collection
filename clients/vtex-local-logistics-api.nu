@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Search capacity reservations in time range
 #
 # GET /api/logistics-capacity/resources/carrier@{capacityType}@{shippingPolicyId}/time-frames
-export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id" [
+export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id" [
   capacity_type: string
   shipping_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -159,7 +159,7 @@ export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-i
 # Get capacity reservation usage by window
 #
 # GET /api/logistics-capacity/resources/carrier@{capacityType}@{shippingPolicyId}/time-frames/{windowDay}F{windowStartTime}T{windowEndTime}
-export def "logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id-window-day-window-start-time-window-end-time" [
+export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id-window-day-window-start-time-window-end-time" [
   capacity_type: string
   shipping_policy_id: string
   window_day: string
@@ -231,7 +231,7 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked create-bloc
 #
 # GET /api/logistics/pvt/configuration/carriers/{carrierId}/getdayofweekblocked
 # operationId: RetrieveBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-getdayofweekblocked get-blocked-delivery-windows" [
+export def "logistics-pvt-configuration-carriers-get-dayofweekblocked get-blocked-delivery-windows" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "logistics-pvt-configuration-carriers-getdayofweekblocked get-blocked
 #
 # POST /api/logistics/pvt/configuration/carriers/{carrierId}/removedayofweekblocked
 # operationId: RemoveBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-removedayofweekblocked delete-blocked-delivery-windows" [
+export def "logistics-pvt-configuration-carriers-remove-dayofweekblocked delete-blocked-delivery-windows" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -818,7 +818,7 @@ export def "logistics-pvt-configuration-pickuppoints list-pickup-ppoints" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints/_search
 # operationId: Getpaged
-export def "logistics-pvt-configuration-pickuppoints-search get-getpaged" [
+export def "logistics-pvt-configuration-pickuppoints-search get-paged" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1132,7 +1132,7 @@ export def "logistics-pvt-configuration-warehouses-deactivation create-deactivat
 #
 # GET /api/logistics/pvt/inventory/items/{itemId}/warehouses/{warehouseId}/dispatched
 # operationId: Getinventorywithdispatchedreservations
-export def "logistics-pvt-inventory-items-warehouses-dispatched get-getinventorywithdispatchedreservations" [
+export def "logistics-pvt-inventory-items-warehouses-dispatched get-inventorywithdispatchedreservations" [
   item_id: string
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL

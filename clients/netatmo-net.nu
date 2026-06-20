@@ -156,7 +156,7 @@ export def "addwebhook get" [
 #
 # POST /createnewschedule
 # operationId: createnewschedule
-export def "createnewschedule create" [
+export def "create-newschedule create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "dropwebhook get" [
 #
 # GET /getcamerapicture
 # operationId: getcamerapicture
-export def "getcamerapicture get" [
+export def "get-camerapicture get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "getcamerapicture get" [
 #
 # GET /geteventsuntil
 # operationId: geteventsuntil
-export def "geteventsuntil get" [
+export def "get-eventsuntil get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "geteventsuntil get" [
 #
 # GET /gethomecoachsdata
 # operationId: gethomecoachsdata
-export def "gethomecoachsdata get" [
+export def "get-homecoachsdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "gethomecoachsdata get" [
 #
 # GET /gethomedata
 # operationId: gethomedata
-export def "gethomedata get" [
+export def "get-homedata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "gethomedata get" [
 #
 # GET /getlasteventof
 # operationId: getlasteventof
-export def "getlasteventof get" [
+export def "get-lasteventof get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "getlasteventof get" [
 #
 # GET /getmeasure
 # operationId: getmeasure
-export def "getmeasure get" [
+export def "get-measure get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "getmeasure get" [
 #
 # GET /getnextevents
 # operationId: getnextevents
-export def "getnextevents get" [
+export def "get-nextevents get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "getnextevents get" [
 #
 # GET /getpublicdata
 # operationId: getpublicdata
-export def "getpublicdata get" [
+export def "get-publicdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "getpublicdata get" [
 #
 # GET /getstationsdata
 # operationId: getstationsdata
-export def "getstationsdata get" [
+export def "get-stationsdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "getstationsdata get" [
 #
 # GET /getthermostatsdata
 # operationId: getthermostatsdata
-export def "getthermostatsdata get" [
+export def "get-thermostatsdata get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "getthermostatsdata get" [
 # DEPRECATED
 # operationId: getthermstate
 @deprecated
-export def "getthermstate get" [
+export def "get-thermstate get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

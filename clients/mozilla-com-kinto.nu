@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://firefox.settings.services.mozilla.com/v1"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 
 # List all available API commands with their parameters
@@ -135,7 +135,7 @@ export def "utilities get-server" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
   let accept_val = "application/json"
@@ -157,7 +157,7 @@ export def "api get-openapi-spec" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__api__")
   let accept_val = "application/json"
@@ -179,7 +179,7 @@ export def "heartbeat get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__heartbeat__")
   let accept_val = "application/json"
@@ -201,7 +201,7 @@ export def "lbheartbeat get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__lbheartbeat__")
   let accept_val = "application/json"
@@ -223,7 +223,7 @@ export def "version get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/__version__")
   let accept_val = "application/json"
@@ -250,7 +250,7 @@ export def "batch create" [
   requests: list # item shape: {body?: record, headers?: record, method?: "GET"|"HEAD"|"DELETE"|"TRACE"|"POST"|"PUT"|"PATCH", path: string}
 ]: any -> record<responses: table<body: record, headers: record, path: string, status: int>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/batch")
   let req_body = {"defaults": $defaults, "requests": $requests} | compact
@@ -285,7 +285,7 @@ export def "buckets list" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: table<collection_schema: record, group_schema: record, record_schema: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets" $qp)
@@ -321,7 +321,7 @@ export def "buckets-monitor-collections-changes-records get-changess" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: table<bucket: string, collection: string, host: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
   let full_url = (build-url $base "/buckets/monitor/collections/changes/records" $qp)
@@ -353,7 +353,7 @@ export def "buckets-collections-changeset get" [
   --bucket: string
   --collection: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bid | is-empty) { error make --unspanned { msg: "path parameter 'bid' must be non-empty" } }
   if ($cid | is-empty) { error make --unspanned { msg: "path parameter 'cid' must be non-empty" } }
@@ -390,7 +390,7 @@ export def "buckets-collections list" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: table<cache_expires: int, schema: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
@@ -429,7 +429,7 @@ export def "buckets-collections-records list" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: list<record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -462,7 +462,7 @@ export def "buckets-collections-records get" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: record, permissions: record<read: list<string>, write: list<string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -493,7 +493,7 @@ export def "buckets-collections-records-attachment delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -521,7 +521,7 @@ export def "buckets-collections-records-attachment create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -551,7 +551,7 @@ export def "buckets-collections get" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: record<cache_expires: int, schema: record>, permissions: record<read: list<string>, record_create: list<string>, write: list<string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -590,7 +590,7 @@ export def "buckets-groups list" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: table<members: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   let qp = [(serialize-qp "_limit" $limit "scalar") (serialize-qp "_sort" $qp_sort "csv") (serialize-qp "_token" $qp_token "scalar") (serialize-qp "_since" $since "scalar") (serialize-qp "_to" $qp_to "scalar") (serialize-qp "_before" $before "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "last_modified" $last_modified "scalar") (serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
@@ -621,7 +621,7 @@ export def "buckets-groups get" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: record<members: list<string>>, permissions: record<read: list<string>, write: list<string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket_id | is-empty) { error make --unspanned { msg: "path parameter 'bucket_id' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -652,7 +652,7 @@ export def "buckets get" [
   --if-match: string
   --if-none-match: string
 ]: nothing -> record<data: record<collection_schema: record, group_schema: record, record_schema: record>, permissions: record<collection_create: list<string>, group_create: list<string>, read: list<string>, write: list<string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "_fields" $fields "csv")] | flatten | str join "&"
@@ -678,7 +678,7 @@ export def "contribute-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contribute.json")
   let accept_val = "application/json"

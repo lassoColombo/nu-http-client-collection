@@ -1,6 +1,6 @@
 # Auto-generated client for Department of Labour, Govt of Punjab, Punjab v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/pblabour/3.0.0/openapi.json
-# Auth: --token flag or $env.DEPARTMENT_OF_LABOUR_GOVT_OF_PUNJAB__PUNJAB_TOKEN
+# Auth: --token flag or $env.DEPARTMENT_OF_LABOUR_GOVT_OF_PUNJAB_PUNJAB_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/pblabour/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/pblabour/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DEPARTMENT_OF_LABOUR_GOVT_OF_PUNJAB__PUNJAB_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DEPARTMENT_OF_LABOUR_GOVT_OF_PUNJAB_PUNJAB_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

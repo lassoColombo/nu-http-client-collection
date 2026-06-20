@@ -5649,7 +5649,7 @@ export def "v-4-data-index create-non-unique" [
 #
 # GET /api/v/4/data/{systemKey}/{collectionName}/listindexes
 # operationId: GetIndexes
-export def "v-4-data-listindexes get-indexes" [
+export def "v-4-data-list-indexes get" [
   system_key: string
   collection_name: string
   --base-url(-b): string@base-url-completer # API base URL

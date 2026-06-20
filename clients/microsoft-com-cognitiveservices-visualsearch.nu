@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/microsoft.com/cognitiveservices-VisualSearch/1.0/swagger.json
 # Auth: --token flag or $env.VISUAL_SEARCH_CLIENT_TOKEN
 
-const BASE_URL = "https://api.cognitive.microsoft.com/bing/v7.0"
+const BASE_URL = "{Endpoint}/bing/v7.0"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -123,7 +123,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
   {content_type: $"multipart/form-data; boundary=($boundary)", body: $body}
 }
 
-def base-url-completer [] { ["https://api.cognitive.microsoft.com/bing/v7.0"] }
+def base-url-completer [] { ["{Endpoint}/bing/v7.0"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # Completers for enum parameters

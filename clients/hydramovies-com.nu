@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://hydramovies.com/api-v2/%3Fsource=http:/hydramovies.com/api-v2"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 
 # List all available API commands with their parameters
@@ -137,7 +137,7 @@ export def "current-movie-data-csvimdb-id-imd-bid get-csv" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($imd_bid | is-empty) { error make --unspanned { msg: "path parameter 'IMDBid' must be non-empty" } }
   let full_url = (build-url $base ({imd_bid: (encode-path-segment $imd_bid)} | format pattern "/current-Movie-Data.csv&imdb_id={imd_bid}"))
@@ -162,7 +162,7 @@ export def "current-movie-data-csvmovie-year-movie-year get-csv-get2" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($movie_year | is-empty) { error make --unspanned { msg: "path parameter 'MovieYear' must be non-empty" } }
   let full_url = (build-url $base ({movie_year: (encode-path-segment $movie_year)} | format pattern "/current-Movie-Data.csv&movie_year={movie_year}"))

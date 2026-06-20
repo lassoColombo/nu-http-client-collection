@@ -170,7 +170,7 @@ export def "canceljob cancel-job" [
 # operationId: CreateComputeEnvironment
 # --computeResources shape: {type?: any, allocationStrategy?: any, minvCpus?: any, maxvCpus?: any, desiredvCpus?: any, instanceTypes?: any, imageId?: any, subnets?: any, securityGroupIds?: any, ec2KeyPair?: any, instanceRole?: any, tags?: any, placementGroup?: any, bidPercentage?: any, spotIamFleetRole?: any, launchTemplate?: any, ec2Configuration?: any}
 # --eksConfiguration shape: {eksClusterArn?: any, kubernetesNamespace?: any}
-export def "createcomputeenvironment create-compute-environment" [
+export def "create-computeenvironment create-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "createcomputeenvironment create-compute-environment" [
 # POST /v1/createjobqueue
 # operationId: CreateJobQueue
 # --computeEnvironmentOrder item shape: {order: any, computeEnvironment: any}
-export def "createjobqueue create-job-queue" [
+export def "create-jobqueue create-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "createjobqueue create-job-queue" [
 # POST /v1/createschedulingpolicy
 # operationId: CreateSchedulingPolicy
 # --fairsharePolicy shape: {shareDecaySeconds?: any, computeReservation?: any, shareDistribution?: any}
-export def "createschedulingpolicy create-scheduling-policy" [
+export def "create-schedulingpolicy create-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "createschedulingpolicy create-scheduling-policy" [
 #
 # POST /v1/deletecomputeenvironment
 # operationId: DeleteComputeEnvironment
-export def "deletecomputeenvironment delete-compute-environment" [
+export def "delete-computeenvironment delete-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "deletecomputeenvironment delete-compute-environment" [
 #
 # POST /v1/deletejobqueue
 # operationId: DeleteJobQueue
-export def "deletejobqueue delete-job-queue" [
+export def "delete-jobqueue delete-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "deletejobqueue delete-job-queue" [
 #
 # POST /v1/deleteschedulingpolicy
 # operationId: DeleteSchedulingPolicy
-export def "deleteschedulingpolicy delete-scheduling-policy" [
+export def "delete-schedulingpolicy delete-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "listjobs list-jobs" [
 #
 # POST /v1/listschedulingpolicies
 # operationId: ListSchedulingPolicies
-export def "listschedulingpolicies list-scheduling-policies" [
+export def "list-schedulingpolicies list-scheduling-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -977,7 +977,7 @@ export def "tags untag-resource" [
 # operationId: UpdateComputeEnvironment
 # --computeResources shape: {minvCpus?: any, maxvCpus?: any, desiredvCpus?: any, subnets?: any, securityGroupIds?: any, allocationStrategy?: any, instanceTypes?: any, ec2KeyPair?: any, instanceRole?: any, tags?: any, placementGroup?: any, bidPercentage?: any, launchTemplate?: any, ec2Configuration?: any, updateToLatestImageVersion?: any, type?: any, imageId?: any}
 # --updatePolicy shape: {terminateJobsOnUpdate?: any, jobExecutionTimeoutMinutes?: any}
-export def "updatecomputeenvironment update-compute-environment" [
+export def "update-computeenvironment update-compute-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "updatecomputeenvironment update-compute-environment" [
 # POST /v1/updatejobqueue
 # operationId: UpdateJobQueue
 # --computeEnvironmentOrder item shape: {order: any, computeEnvironment: any}
-export def "updatejobqueue update-job-queue" [
+export def "update-jobqueue update-job-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "updatejobqueue update-job-queue" [
 # POST /v1/updateschedulingpolicy
 # operationId: UpdateSchedulingPolicy
 # --fairsharePolicy shape: {shareDecaySeconds?: any, computeReservation?: any, shareDistribution?: any}
-export def "updateschedulingpolicy update-scheduling-policy" [
+export def "update-schedulingpolicy update-scheduling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

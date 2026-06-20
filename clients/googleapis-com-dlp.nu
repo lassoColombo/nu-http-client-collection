@@ -1,6 +1,6 @@
 # Auto-generated client for Cloud Data Loss Prevention (DLP) API vv2
 # Source: https://api.apis.guru/v2/specs/googleapis.com/dlp/v2/openapi.json
-# Auth: --token flag or $env.CLOUD_DATA_LOSS_PREVENTION_DLP__API_TOKEN
+# Auth: --token flag or $env.CLOUD_DATA_LOSS_PREVENTION_DLP_API_TOKEN
 
 const BASE_URL = "https://dlp.googleapis.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://dlp.googleapis.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CLOUD_DATA_LOSS_PREVENTION_DLP__API_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o CLOUD_DATA_LOSS_PREVENTION_DLP_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

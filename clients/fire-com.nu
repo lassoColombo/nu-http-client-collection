@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.fire.com/business"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def currency-completer [] { ["EUR" "GBP"] }
@@ -327,7 +327,7 @@ export def "apps-accesstokens create-authenticate" [
   --refresh-token: string # The Refresh Token for this API Application (e.g. 4ADFB67A-0F5B-4A9A-9D74-34437250045C)
 ]: any -> record<accessToken: string, apiApplicationId: int, businessId: int, expiry: string, permissions: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/apps/accesstokens")
   let req_body = {"clientId": $client_id, "clientSecret": $client_secret, "grantType": $grant_type, "nonce": $nonce, "refreshToken": $refresh_token} | compact

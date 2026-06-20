@@ -282,7 +282,7 @@ export def "entries-antonyms get" [
 #
 # GET /entries/{source_lang}/{word_id}/regions={region}
 # Docs: https://helloreverb.com/about — find more info here
-export def "entries-regions-region get" [
+export def "entries-regionsregion get" [
   source_lang: string
   word_id: string
   region: string
@@ -408,7 +408,7 @@ export def "entries get" [
 # Retrieve translation for a given word
 #
 # GET /entries/{source_translation_language}/{word_id}/translations={target_translation_language}
-export def "entries-translations-target-translation-language get" [
+export def "entries-translationstarget-translation-language get" [
   source_translation_language: string
   word_id: string
   target_translation_language: string
@@ -733,7 +733,7 @@ export def "search get" [
 #
 # GET /search/{source_search_language}/translations={target_search_language}
 # Docs: https://helloreverb.com/about — find more info here
-export def "search-translations-target-search-language get" [
+export def "search-translationstarget-search-language get" [
   source_search_language: string
   target_search_language: string
   --base-url(-b): string@base-url-completer # API base URL

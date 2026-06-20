@@ -650,7 +650,7 @@ export def "patch-systems list" [
 #
 # DELETE /api/patch/v1/systems/{inventory_id}
 # operationId: deletesystem
-export def "patch-systems delete-deletesystem" [
+export def "patch-systems delete" [
   inventory_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

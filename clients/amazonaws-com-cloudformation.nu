@@ -5184,7 +5184,7 @@ export def "api create-update-stack-instances" [
 #
 # GET /
 # operationId: GET_UpdateStackSet
-export def "api get-update-stack-update" [
+export def "api get-update-stack-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5238,7 +5238,7 @@ export def "api get-update-stack-update" [
 #
 # POST /
 # operationId: POST_UpdateStackSet
-export def "api create-update-stack-update" [
+export def "api create-update-stack-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

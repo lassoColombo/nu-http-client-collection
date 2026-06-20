@@ -500,7 +500,7 @@ export def "zones-pools-resize resize" [
 # --action shape: {commands?: list<string>, envVariables?: list, timeoutMilliSeconds?: int}
 # --healthChecks item shape: {checkIntervalSec?: int, description?: string, healthyThreshold?: int, host?: string, name?: string, path?: string, port?: int, timeoutSec?: int, unhealthyThreshold?: int}
 # --vmParams shape: {baseInstanceName?: string, canIpForward?: bool, description?: string, disksToAttach?: list, disksToCreate?: list, machineType?: string, metadata?: record, networkInterfaces?: list, onHostMaintenance?: string, serviceAccounts?: list, tags?: record}
-export def "zones-pools-update-template create-updatetemplate" [
+export def "zones-pools-update-template update" [
   project_name: string
   zone: string
   pool_name: string

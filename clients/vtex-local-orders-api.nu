@@ -241,7 +241,7 @@ export def "oms-pvt-admin-reports-inprogress get-status-in-progress" [
 #
 # GET /api/oms/pvt/feed/orders/status
 # operationId: Getfeedorderstatus
-export def "oms-pvt-feed-orders-status get-getfeedorderstatus" [
+export def "oms-pvt-feed-orders-status get-feedorderstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

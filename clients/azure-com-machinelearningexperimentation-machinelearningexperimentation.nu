@@ -673,7 +673,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces{workspaceName}/projects
 # operationId: Projects_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-workspace-name-projects list-by-workspace" [
+export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspacesworkspace-name-projects list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   account_name: string

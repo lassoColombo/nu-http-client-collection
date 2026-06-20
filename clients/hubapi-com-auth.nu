@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.hubapi.com"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 # Completers for enum parameters
 def grant-type-completer [] { ["authorization_code" "refresh_token"] }
@@ -103,7 +103,7 @@ def grant-type-completer [] { ["authorization_code" "refresh_token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-access-tokens get-{token}" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-access-tokens get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # GET /oauth/v1/access-tokens/{token}
 #
 # operationId: get-/oauth/v1/access-tokens/{token}_get
-export def "oauth-access-tokens get-{token}" [
+export def "oauth-access-tokens get" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -138,7 +138,7 @@ export def "oauth-access-tokens get-{token}" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<app_id: int, expires_in: int, hub_domain: string, hub_id: int, scope_to_scope_group_pks: list<int>, scopes: list<string>, token: string, token_type: string, trial_scope_to_scope_group_pks: list<int>, trial_scopes: list<string>, user: string, user_id: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/oauth/v1/access-tokens/{token_arg}"))
@@ -150,7 +150,7 @@ export def "oauth-access-tokens get-{token}" [
 # DELETE /oauth/v1/refresh-tokens/{token}
 #
 # operationId: delete-/oauth/v1/refresh-tokens/{token}_archive
-export def "oauth-refresh-tokens delete-{token}-archive" [
+export def "oauth-refresh-tokens delete-archive" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -162,7 +162,7 @@ export def "oauth-refresh-tokens delete-{token}-archive" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/oauth/v1/refresh-tokens/{token_arg}"))
@@ -174,7 +174,7 @@ export def "oauth-refresh-tokens delete-{token}-archive" [
 # GET /oauth/v1/refresh-tokens/{token}
 #
 # operationId: get-/oauth/v1/refresh-tokens/{token}_get
-export def "oauth-refresh-tokens get-{token}" [
+export def "oauth-refresh-tokens get" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "oauth-refresh-tokens get-{token}" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<client_id: string, hub_domain: string, hub_id: int, scopes: list<string>, token: string, token_type: string, user: string, user_id: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/oauth/v1/refresh-tokens/{token_arg}"))
@@ -216,7 +216,7 @@ export def "oauth-token create" [
   --refresh-token: string
 ]: any -> record<access_token: string, expires_in: int, id_token: string, refresh_token: string, token_type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/v1/token")
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token} | compact

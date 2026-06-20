@@ -102,7 +102,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info-configuration-media-type-extension get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info-configurationmedia-type-extension get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 # Returns an object with the current configuration that Buffer is using, including supported services, their icons and the varying limits of character and schedules.
 #
 # GET /info/configuration{mediaTypeExtension}
-export def "info-configuration-media-type-extension get" [
+export def "info-configurationmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -149,7 +149,7 @@ export def "info-configuration-media-type-extension get" [
 # Returns an object with a the numbers of shares a link has had using Buffer.
 #
 # GET /links/shares{mediaTypeExtension}
-export def "links-shares-media-type-extension get" [
+export def "links-sharesmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -201,7 +201,7 @@ export def "profiles-schedules-update-media-type-extension create" [
 # Returns details of the posting schedules associated with a social media profile.
 #
 # GET /profiles/{id}/schedules{mediaTypeExtension}
-export def "profiles-schedules-media-type-extension get" [
+export def "profiles-schedulesmedia-type-extension get" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -227,7 +227,7 @@ export def "profiles-schedules-media-type-extension get" [
 # "Returns an array of updates that are currently in the buffer for an individual social media profile.
 #
 # GET /profiles/{id}/updates/pending{mediaTypeExtension}
-export def "profiles-updates-pending-media-type-extension get" [
+export def "profiles-updates-pendingmedia-type-extension get" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -258,7 +258,7 @@ export def "profiles-updates-pending-media-type-extension get" [
 # Edit the order at which statuses for the specified social media profile will be sent out of the buffer.
 #
 # POST /profiles/{id}/updates/reorder{mediaTypeExtension}
-export def "profiles-updates-reorder-media-type-extension create" [
+export def "profiles-updates-reordermedia-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -284,7 +284,7 @@ export def "profiles-updates-reorder-media-type-extension create" [
 # Returns an array of updates that have been sent from the buffer for an individual social media profile.
 #
 # GET /profiles/{id}/updates/sent{mediaTypeExtension}
-export def "profiles-updates-sent-media-type-extension get" [
+export def "profiles-updates-sentmedia-type-extension get" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -315,7 +315,7 @@ export def "profiles-updates-sent-media-type-extension get" [
 # Randomize the order at which statuses for the specified social media profile will be sent out of the buffer.
 #
 # POST /profiles/{id}/updates/shuffle{mediaTypeExtension}
-export def "profiles-updates-shuffle-media-type-extension create" [
+export def "profiles-updates-shufflemedia-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -367,7 +367,7 @@ export def "profiles get" [
 # Returns an array of social media profiles connected to a users account.
 #
 # GET /profiles{mediaTypeExtension}
-export def "profiles-media-type-extension get" [
+export def "profilesmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "updates-destroy-media-type-extension create" [
 # Returns the detailed information on individual interactions with the social media update such as favorites, retweets and likes.
 #
 # GET /updates/{id}/interactions{mediaTypeExtension}
-export def "updates-interactions-media-type-extension get" [
+export def "updates-interactionsmedia-type-extension get" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -471,7 +471,7 @@ export def "updates-interactions-media-type-extension get" [
 # Move an existing status update to the top of the queue and recalculate times for all updates in the queue. Returns the update with its new posting time.
 #
 # POST /updates/{id}/move_to_top{mediaTypeExtension}
-export def "updates-move-to-top-media-type-extension create" [
+export def "updates-move-to-topmedia-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -497,7 +497,7 @@ export def "updates-move-to-top-media-type-extension create" [
 # Immediately shares a single pending update and recalculates times for updates remaining in the queue.
 #
 # POST /updates/{id}/share{mediaTypeExtension}
-export def "updates-share-media-type-extension create" [
+export def "updates-sharemedia-type-extension create" [
   id: string
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -575,7 +575,7 @@ export def "updates get" [
 # Returns a single user.
 #
 # GET /user{mediaTypeExtension}
-export def "user-media-type-extension get" [
+export def "usermedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

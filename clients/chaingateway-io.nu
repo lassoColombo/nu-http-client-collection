@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://eu.eth.chaingateway.io/v1"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 
 # List all available API commands with their parameters
@@ -141,7 +141,7 @@ export def "clear-address create" [
   password: string
 ]: any -> record<amount: float, ethereumaddress: string, gas: float, newaddress: string, ok: bool, total: string, txid: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clearAddress")
   let req_body = {"ethereumaddress": $ethereumaddress, "newaddress": $newaddress, "password": $password} | compact
@@ -172,7 +172,7 @@ export def "delete-address delete" [
   password: string
 ]: any -> record<deleted: bool, ethereumaddress: string, ok: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deleteAddress")
   let req_body = {"ethereumaddress": $ethereumaddress, "password": $password} | compact
@@ -203,7 +203,7 @@ export def "export-address export" [
   password: string
 ]: any -> record<content: string, filename: string, ok: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/exportAddress")
   let req_body = {"ethaddress": $ethaddress, "password": $password} | compact
@@ -233,7 +233,7 @@ export def "get-block get" [
   block: string
 ]: any -> record<block_number: string, difficulty: string, gas_limit: string, gas_used: string, hash: string, miner: string, ok: bool, parent_hash: string, size_in_bytes: string, time_stamp: string, transactions_count: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getBlock")
   let req_body = {"block": $block} | compact
@@ -263,7 +263,7 @@ export def "get-ethereum-balance get" [
   ethereumaddress: string
 ]: any -> record<balance: float, ethereumaddress: string, ok: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getEthereumBalance")
   let req_body = {"ethereumaddress": $ethereumaddress} | compact
@@ -293,7 +293,7 @@ export def "get-exchange-rate get" [
   currency: string
 ]: any -> record<currency: string, ok: bool, rate: float> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getExchangeRate")
   let req_body = {"currency": $currency} | compact
@@ -322,7 +322,7 @@ export def "get-gas-price get" [
   --content-type: string # e.g. application/json
   --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<gasprice: int, ok: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getGasPrice")
   let accept_val = "application/json"
@@ -349,7 +349,7 @@ export def "get-last-block-number get" [
   --content-type: string # e.g. application/json
   --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<blocknumber: int, ok: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getLastBlockNumber")
   let accept_val = "application/json"
@@ -377,7 +377,7 @@ export def "get-token get" [
   contractaddress: string
 ]: any -> record<contractaddress: string, decimals: int, name: string, ok: bool, supply: int, symbol: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getToken")
   let req_body = {"contractaddress": $contractaddress} | compact
@@ -408,7 +408,7 @@ export def "get-token-balance get" [
   ethereumaddress: string
 ]: any -> record<balance: int, contractaddress: string, ethereumaddress: string, ok: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTokenBalance")
   let req_body = {"contractaddress": $contractaddress, "ethereumaddress": $ethereumaddress} | compact
@@ -438,7 +438,7 @@ export def "get-transactions get" [
   txid: string
 ]: any -> record<ok: bool, transactions: table<amount: string, block_number: string, contract_address: string, from: string, gas: string, gas_price: string, to: string, token_decimals: string, token_name: string, token_supply: string, token_symbol: string, txid: string, type: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/getTransactions")
   let req_body = {"txid": $txid} | compact
@@ -471,7 +471,7 @@ export def "import-address import" [
   password: string
 ]: any -> record<ethaddress: string, filename: string, ok: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/importAddress")
   let req_body = {"content": $content, "filename": $filename, "password": $password} | compact
@@ -500,7 +500,7 @@ export def "list-addresses list" [
   --content-type: string # e.g. application/json
   --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<addresses: table<ethereumaddress: string>, ok: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listAddresses")
   let accept_val = "application/json"
@@ -527,7 +527,7 @@ export def "list-failed-ip-ns list" [
   --content-type: string # e.g. application/json
   --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<failed_ipns: table<action: string, amount: string, contractaddress: string, ethereumaddress: string, id: string, timestamp: string, url: string>, ok: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listFailedIPNs")
   let accept_val = "application/json"
@@ -554,7 +554,7 @@ export def "list-subscribed-addresses list" [
   --content-type: string # e.g. application/json
   --authorization: string # API Key (e.g. q9PdaWuD4j6DK6vsUgehhL8pgarSrS9m)
 ]: nothing -> record<ipns: table<contractaddress: string, ethereumaddress: string, url: string>, ok: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/listSubscribedAddresses")
   let accept_val = "application/json"
@@ -582,7 +582,7 @@ export def "new-address create" [
   password: string
 ]: any -> record<ethereumaddress: string, ok: bool, password: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/newAddress")
   let req_body = {"password": $password} | compact
@@ -612,7 +612,7 @@ export def "resend-failed-ipn resend" [
   id: int # format: int32
 ]: any -> record<id: int, ok: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/resendFailedIPN")
   let req_body = {"id": $id} | compact
@@ -645,7 +645,7 @@ export def "send-ethereum send" [
   --body-to: string
 ]: any -> record<amount: string, from: string, ok: bool, to: string, txid: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendEthereum")
   let req_body = {"amount": $amount, "from": $body_from, "password": $password, "to": $body_to} | compact
@@ -680,7 +680,7 @@ export def "send-token send" [
   --body-to: string
 ]: any -> record<amount: int, contractaddress: string, from: string, identifier: string, ok: bool, to: string, txid: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sendToken")
   let req_body = {"amount": $amount, "contractaddress": $contractaddress, "from": $body_from, "identifier": $identifier, "password": $password, "to": $body_to} | compact
@@ -712,7 +712,7 @@ export def "subscribe-address subscribe" [
   url: string
 ]: any -> record<contractaddress: string, ethereumaddress: string, ok: bool, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscribeAddress")
   let req_body = {"contractaddress": $contractaddress, "ethereumaddress": $ethereumaddress, "url": $url} | compact
@@ -744,7 +744,7 @@ export def "unsubscribe-address unsubscribe" [
   url: string
 ]: any -> record<contractaddress: string, deleted: bool, ethereumaddress: string, ok: bool, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unsubscribeAddress")
   let req_body = {"contractaddress": $contractaddress, "ethereumaddress": $ethereumaddress, "url": $url} | compact

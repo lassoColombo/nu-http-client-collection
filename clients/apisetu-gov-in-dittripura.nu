@@ -1,6 +1,6 @@
 # Auto-generated client for Directorate of Information Technology, Government of Tripura, Tripura v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/dittripura/3.0.0/openapi.json
-# Auth: --token flag or $env.DIRECTORATE_OF_INFORMATION_TECHNOLOGY_GOVERNMENT_OF_TRIPURA__TRIPURA_TOKEN
+# Auth: --token flag or $env.DIRECTORATE_OF_INFORMATION_TECHNOLOGY_GOVERNMENT_OF_TRIPURA_TRIPURA_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/dittripura/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/dittripura/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DIRECTORATE_OF_INFORMATION_TECHNOLOGY_GOVERNMENT_OF_TRIPURA__TRIPURA_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DIRECTORATE_OF_INFORMATION_TECHNOLOGY_GOVERNMENT_OF_TRIPURA_TRIPURA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

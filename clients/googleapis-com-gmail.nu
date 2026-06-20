@@ -595,7 +595,7 @@ export def "gmail-users-labels get" [
 # PATCH /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.patch
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels update-by-user-id-id" [
+export def "gmail-users-labels update-by-user-id" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -648,7 +648,7 @@ export def "gmail-users-labels update-by-user-id-id" [
 # PUT /gmail/v1/users/{userId}/labels/{id}
 # operationId: gmail.users.labels.update
 # --color shape: {backgroundColor?: string, textColor?: string}
-export def "gmail-users-labels update-by-user-id-id-1" [
+export def "gmail-users-labels update-by-user-id-1" [
   user_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://169.254.169.254/metadata" "https://169.254.169.254/metadata"] }
-def auth-scheme-completer [] { ["basic" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def api-version-completer [] { ["2018-10-01"] }
@@ -207,7 +207,7 @@ export def "identity-oauth2-token get" [
   --bypass-cache: string@bypass-cache-completer # If provided, the value must be 'true'. This indicates to the server that the token must be retrieved from Azure AD and cannot be retrieved from an internal cache.
   --metadata: string@metadata-completer # This must be set to 'true'.
 ]: nothing -> record<access_token: string, client_id: string, expires_in: string, expires_on: string, ext_expires_in: string, msi_res_id: string, not_before: string, object_id: string, resource: string, token_type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resource" $resource "scalar") (serialize-qp "api-version" $api_version "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "object_id" $object_id "scalar") (serialize-qp "msi_res_id" $msi_res_id "scalar") (serialize-qp "authority" $authority "scalar") (serialize-qp "bypass_cache" $bypass_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/identity/oauth2/token" $qp)

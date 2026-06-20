@@ -124,7 +124,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["http://localhost/api"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def auth-type-completer [] { ["active_directory" "basic" "radius"] }
@@ -192,7 +192,7 @@ export def "auth-login create" [
   --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> record<token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/login")
   let req_body = {"authType": $auth_type, "language": $language, "login": $login, "password": $password, "state": $state, "token": $body_token, "userName": $user_name} | compact
@@ -225,7 +225,7 @@ export def "auth-openid-login open-initiate" [
   --language: string # Language ID or ISO 639-1 code (DEPRECATED)
   --test: oneof<nothing, bool> # Flag to test the authentication parameters. If the request is valid, the API will respond with `204 No Content`.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "issuer" $issuer "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "test" $test "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/auth/openid/login" $qp)
@@ -255,7 +255,7 @@ export def "auth-openid-login complete-open" [
   --id-token: string # Identity token
   --state: string # Authentication state
 ]: nothing -> record<token: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar") (serialize-qp "id_token" $id_token "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/auth/openid/login" $qp)
@@ -279,7 +279,7 @@ export def "auth-ping ping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/ping")
   let accept_val = "text/plain"
@@ -305,7 +305,7 @@ export def "auth-recover-username create-user-name" [
   email: string # Email
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/recover_username")
   let req_body = {"creatorLanguage": $creator_language, "email": $email} | compact
@@ -337,7 +337,7 @@ export def "auth-reset-password request" [
   --user-name: string # &#128640; Since v4.13.0 Username
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/auth/reset_password")
   let req_body = {"creatorLanguage": $creator_language, "language": $language, "login": $login, "userName": $user_name} | compact
@@ -363,7 +363,7 @@ export def "auth-reset-password validate" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<allowSystemGlobalWeakPassword: bool, firstName: string, gender: string, lastName: string, loginPasswordPolicies: record<characterRules: record<mustContainCharacters: list, numberOfCharacteristicsToEnforce: int>, minLength: int, numberOfArchivedPasswords: int, passwordExpiration: record<enabled: bool, maxPasswordAge: int>, rejectDictionaryWords: bool, rejectKeyboardPatterns: bool, rejectUserInfo: bool, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, userLockout: record<enabled: bool, lockoutPeriod: int, maxNumberOfLoginFailures: int>>, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}"))
@@ -390,7 +390,7 @@ export def "auth-reset-password reset" [
   password: string # New password
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/auth/reset_password/{token_arg}"))
@@ -766,7 +766,7 @@ export def "downloads-avatar download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -792,7 +792,7 @@ export def "downloads-zip archive-via" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/downloads/zip/{token_arg}"))
@@ -821,7 +821,7 @@ export def "downloads download-file-via" [
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
   --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
@@ -853,7 +853,7 @@ export def "downloads download-file-via-by-token" [
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
   --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let qp = [(serialize-qp "generic_mimetype" $generic_mimetype "scalar") (serialize-qp "inline" $inline "scalar")] | flatten | str join "&"
@@ -1358,7 +1358,7 @@ export def "internal-tenant-subscription-plan request" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<subscriptionPlanId: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/internal/tenant/subscription_plan")
   let accept_val = "application/json"
@@ -1386,7 +1386,7 @@ export def "internal-tenant-subscription-plan update" [
   subscription_plan_id: int # subscription plan id (format: int32)
 ]: any -> record<subscriptionPlanId: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/internal/tenant/subscription_plan")
   let req_body = {"subscriptionPlanId": $subscription_plan_id} | compact
@@ -3594,7 +3594,7 @@ export def "provisioning-customers list" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<items: table<activationCode: string, cntGuestUser: int, cntInternalUser: int, companyName: string, createdAt: string, customerAttributes: record, customerContractType: string, customerUuid: string, id: int, isLocked: bool, lastLoginAt: string, lockStatus: bool, providerCustomerId: string, quotaMax: int, quotaUsed: int, trialDaysLeft: int, updatedAt: string, userMax: int, userUsed: int, webhooksMax: int>, range: record<limit: int, offset: int, total: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/provisioning/customers" $qp)
@@ -3639,7 +3639,7 @@ export def "provisioning-customers create" [
   --webhooks-max: int # &#128640; Since v4.19.0 Maximal number of webhooks (format: int64)
 ]: any -> record<activationCode: string, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, firstAdminUser: record<authData: record<adConfigId: int, login: string, method: string, mustChangePassword: bool, oidConfigId: int, password: string>, authMethods: list<record>, email: string, firstName: string, gender: string, language: string, lastName: string, login: string, needsToChangePassword: bool, needsToChangeUserName: bool, notifyUser: bool, password: string, phone: string, receiverLanguage: string, title: string, userName: string>, id: int, isLocked: bool, lockStatus: bool, providerCustomerId: string, quotaMax: int, trialDays: int, userMax: int, webhooksMax: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/provisioning/customers")
   let req_body = {"activationCode": $activation_code, "companyName": $company_name, "customerAttributes": $customer_attributes, "customerContractType": $customer_contract_type, "firstAdminUser": $first_admin_user, "isLocked": $is_locked, "lockStatus": $lock_status, "providerCustomerId": $provider_customer_id, "quotaMax": $quota_max, "trialDays": $trial_days, "userMax": $user_max, "webhooksMax": $webhooks_max} | compact
@@ -3668,7 +3668,7 @@ export def "provisioning-customers delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}"))
@@ -3698,7 +3698,7 @@ export def "provisioning-customers request" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<activationCode: string, cntGuestUser: int, cntInternalUser: int, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, id: int, isLocked: bool, lastLoginAt: string, lockStatus: bool, providerCustomerId: string, quotaMax: int, quotaUsed: int, trialDaysLeft: int, updatedAt: string, userMax: int, userUsed: int, webhooksMax: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "include_attributes" $include_attributes "scalar")] | flatten | str join "&"
@@ -3738,7 +3738,7 @@ export def "provisioning-customers update" [
   --webhooks-max: int # &#128640; Since v4.19.0 Maximal number of webhooks (format: int64)
 ]: any -> record<activationCode: string, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, id: int, isLocked: bool, lockStatus: bool, providerCustomerId: string, quotaMax: int, trialDays: int, updatedAt: string, userMax: int, webhooksMax: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}"))
@@ -3772,7 +3772,7 @@ export def "provisioning-customers-customer-attributes request" [
   --qp-sort: string # Sort string
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<items: table<key: string, value: string>, range: record<limit: int, offset: int, total: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3807,7 +3807,7 @@ export def "provisioning-customers-customer-attributes update-by-customer-id" [
   items: list # List of customer attributes — item shape: {key: string, value: string}
 ]: any -> record<activationCode: string, cntGuestUser: int, cntInternalUser: int, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, id: int, isLocked: bool, lastLoginAt: string, lockStatus: bool, providerCustomerId: string, quotaMax: int, quotaUsed: int, trialDaysLeft: int, updatedAt: string, userMax: int, userUsed: int, webhooksMax: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
@@ -3841,7 +3841,7 @@ export def "provisioning-customers-customer-attributes update-by-customer-id-1" 
   items: list # List of customer attributes — item shape: {key: string, value: string}
 ]: any -> record<activationCode: string, cntGuestUser: int, cntInternalUser: int, companyName: string, createdAt: string, customerAttributes: record<items: list<record>>, customerContractType: string, customerUuid: string, id: int, isLocked: bool, lastLoginAt: string, lockStatus: bool, providerCustomerId: string, quotaMax: int, quotaUsed: int, trialDaysLeft: int, updatedAt: string, userMax: int, userUsed: int, webhooksMax: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let full_url = (build-url $base ({customer_id: (encode-path-segment $customer_id)} | format pattern "/v4/provisioning/customers/{customer_id}/customerAttributes"))
@@ -3872,7 +3872,7 @@ export def "provisioning-customers-customer-attributes delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -3909,7 +3909,7 @@ export def "provisioning-customers-users request" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<items: table<avatarUuid: string, createdAt: string, email: string, expireAt: string, firstName: string, gender: string, hasManageableRooms: bool, homeRoomId: int, id: int, isEncryptionEnabled: bool, isLocked: bool, lastLoginSuccessAt: string, lastName: string, lockStatus: int, login: string, phone: string, title: string, userAttributes: record, userName: string, userRoles: record>, range: record<limit: int, offset: int, total: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customer_id' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "include_attributes" $include_attributes "scalar") (serialize-qp "include_roles" $include_roles "scalar") (serialize-qp "include_manageable_rooms" $include_manageable_rooms "scalar")] | flatten | str join "&"
@@ -3942,7 +3942,7 @@ export def "provisioning-webhooks request-list-of-tenant" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<items: table<createdAt: string, createdBy: record, eventTypeNames: list, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record, url: string>, range: record<limit: int, offset: int, total: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/provisioning/webhooks" $qp)
@@ -3977,7 +3977,7 @@ export def "provisioning-webhooks create-tenant" [
   url: string # URL (must begin with the `HTTPS` scheme)
 ]: any -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/provisioning/webhooks")
   let req_body = {"eventTypeNames": $event_type_names, "isEnabled": $is_enabled, "name": $name, "secret": $secret, "triggerExampleEvent": $trigger_example_event, "url": $url} | compact
@@ -4005,7 +4005,7 @@ export def "provisioning-webhooks-event-types request-list-of-for-tenant" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<items: table<id: int, name: string, usableCustomerAdminWebhook: bool, usableNodeWebhook: bool, usablePushNotification: bool, usableTenantWebhook: bool>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/provisioning/webhooks/event_types")
   let accept_val = "application/json"
@@ -4032,7 +4032,7 @@ export def "provisioning-webhooks delete-tenant" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
   let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
@@ -4061,7 +4061,7 @@ export def "provisioning-webhooks request-tenant" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
   let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
@@ -4097,7 +4097,7 @@ export def "provisioning-webhooks update-tenant" [
   --url: string # URL (must begin with the `HTTPS` scheme)
 ]: any -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
   let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}"))
@@ -4128,7 +4128,7 @@ export def "provisioning-webhooks-reset-lifetime reset-tenant" [
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
   --x-sds-service-token: string # Service Authentication token
 ]: nothing -> record<createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, eventTypeNames: list<string>, expireAt: string, failStatus: int, id: int, isEnabled: bool, name: string, secret: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($webhook_id | is-empty) { error make --unspanned { msg: "path parameter 'webhook_id' must be non-empty" } }
   let full_url = (build-url $base ({webhook_id: (encode-path-segment $webhook_id)} | format pattern "/v4/provisioning/webhooks/{webhook_id}/reset_lifetime"))
@@ -4156,7 +4156,7 @@ export def "public-shares-downloads request-get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
 ]: nothing -> record<createdAt: string, creatorName: string, creatorUsername: string, expireAt: string, fileKey: record<iv: string, key: string, tag: string, version: string>, fileName: string, hasDownloadLimit: bool, isEncrypted: bool, isProtected: bool, limitReached: bool, mediaType: string, name: string, notes: string, privateKeyContainer: record<createdAt: string, createdBy: int, privateKey: string, version: string>, size: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}"))
@@ -4184,7 +4184,7 @@ export def "public-shares-downloads check-password" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --password: string # Download share password
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   let qp = [(serialize-qp "password" $password "scalar")] | flatten | str join "&"
@@ -4212,7 +4212,7 @@ export def "public-shares-downloads generate-url" [
   --password: string # Password (only for password-protected shares)
 ]: any -> record<downloadUrl: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/downloads/{access_key}"))
@@ -4244,7 +4244,7 @@ export def "public-shares-downloads download-file-via" [
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
   --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -4278,7 +4278,7 @@ export def "public-shares-downloads download-file-via-by-access-key-token" [
   --inline: oneof<nothing, bool> # Use Content-Disposition: `inline` instead of `attachment`
   --range: string # Range e.g. `bytes=0-999`
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -4309,7 +4309,7 @@ export def "public-shares-uploads request-get" [
   --x-sds-share-password: string # Upload share password. Should be base64-encoded. Plain X-Sds-Share-Passwords are *deprecated* and will be removed in the future
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
 ]: nothing -> record<createdAt: string, creatorName: string, creatorUsername: string, expireAt: string, isEncrypted: bool, isProtected: bool, name: string, notes: string, remainingSize: int, remainingSlots: int, showUploadedFiles: bool, uploadedFiles: table<createdAt: string, hash: string, name: string, size: int>, userUserPublicKeyList: record<items: list<record>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}"))
@@ -4343,7 +4343,7 @@ export def "public-shares-uploads create-channel" [
   --timestamp-modification: string # &#128640; Since v4.22.0 Time the content of a node was last modified on external file system (default: current server datetime in UTC format) (format: date-time)
 ]: any -> record<uploadId: string, uploadUrl: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   let full_url = (build-url $base ({access_key: (encode-path-segment $access_key)} | format pattern "/v4/public/shares/uploads/{access_key}"))
@@ -4371,7 +4371,7 @@ export def "public-shares-uploads cancel-file-via" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
@@ -4398,7 +4398,7 @@ export def "public-shares-uploads request-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<errorDetails: record<code: int, debugInfo: string, errorCode: int, message: string>, fileName: string, size: int, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
@@ -4430,7 +4430,7 @@ export def "public-shares-uploads upload-file-as-multipart-by-access-key-upload-
   file: string # File (format: binary)
 ]: any -> record<hash: string, size: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
@@ -4468,7 +4468,7 @@ export def "public-shares-uploads complete-file-via" [
   --items: list # List of user file keys — item shape: {fileKey: record, userId: int}
 ]: any -> record<createdAt: string, hash: string, name: string, size: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
@@ -4504,7 +4504,7 @@ export def "public-shares-uploads-s3 complete-file-via" [
   --user-file-key-list: list # List of user file keys — item shape: {fileKey: record, userId: int}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
@@ -4538,7 +4538,7 @@ export def "public-shares-uploads-s3-urls generate-presigned" [
   size: int # `Content-Length` header size for each presigned URL (in bytes) *MUST* be >= 5 MB except the last part. (format: int64)
 ]: any -> record<urls: table<partNumber: int, url: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_key | is-empty) { error make --unspanned { msg: "path parameter 'access_key' must be non-empty" } }
   if ($upload_id | is-empty) { error make --unspanned { msg: "path parameter 'upload_id' must be non-empty" } }
@@ -4567,7 +4567,7 @@ export def "public-software-third-party-dependencies request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<artifactId: string, description: string, groupId: string, id: string, licenses: list<string>, name: string, type: string, url: string, version: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/public/software/third_party_dependencies")
   let accept_val = "application/json"
@@ -4591,7 +4591,7 @@ export def "public-software-version request" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
 ]: nothing -> record<buildDate: string, isDracoonCloud: bool, restApiVersion: string, scmRevisionNumber: string, sdsServerVersion: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/public/software/version")
   let accept_val = "application/json"
@@ -4618,7 +4618,7 @@ export def "public-system-info request" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-enabled: oneof<nothing, bool> # Show only enabled authentication methods
 ]: nothing -> record<authMethods: table<isEnabled: bool, name: string, priority: int>, hideLoginInputFields: bool, languageDefault: string, s3EnforceDirectUpload: bool, s3Hosts: list<string>, useS3Storage: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_enabled" $is_enabled "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/public/system/info" $qp)
@@ -4643,7 +4643,7 @@ export def "public-system-info-auth-ad request-active-directory" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-global-available: oneof<nothing, bool> # Show only global available items
 ]: nothing -> record<items: table<alias: string, id: int, isGlobalAvailable: bool>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_global_available" $is_global_available "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/public/system/info/auth/ad" $qp)
@@ -4668,7 +4668,7 @@ export def "public-system-info-auth-openid request-open" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --is-global-available: oneof<nothing, bool> # Show only global available items
 ]: nothing -> record<items: table<id: int, isGlobalAvailable: bool, issuer: string, mappingClaim: string, name: string, userManagementUrl: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "is_global_available" $is_global_available "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v4/public/system/info/auth/openid" $qp)
@@ -4693,7 +4693,7 @@ export def "public-time request-system" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-sds-date-format: string@x-sds-date-format-completer # Date time format (cf. [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) & [leettime.de](http://leettime.de/))
 ]: nothing -> record<time: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/public/time")
   let accept_val = "application/json"
@@ -4718,7 +4718,7 @@ export def "resources-user-notifications-scopes request-subscription" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<items: table<id: int, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v4/resources/user/notifications/scopes")
   let accept_val = "application/json"
@@ -4743,7 +4743,7 @@ export def "resources-users-avatar request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<avatarUri: string, avatarUuid: string, isCustomAvatar: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($uuid | is-empty) { error make --unspanned { msg: "path parameter 'uuid' must be non-empty" } }
@@ -7672,7 +7672,7 @@ export def "uploads cancel-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
@@ -7701,7 +7701,7 @@ export def "uploads upload-file-by-as-multipart-by-token" [
   file: string # File (format: binary)
 ]: any -> record<hash: string, size: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))
@@ -7742,7 +7742,7 @@ export def "uploads complete-file" [
   --user-file-key-list: record # Mandatory for encrypted shares (DEPRECATED) — shape: {items?: list}
 ]: any -> record<authParentId: int, branchVersion: int, children: list<any>, classification: int, cntChildren: int, cntComments: int, cntDeletedVersions: int, cntDownloadShares: int, cntFiles: int, cntFolders: int, cntRooms: int, cntUploadShares: int, createdAt: string, createdBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>, encryptionInfo: record<dataSpaceKeyState: string, roomKeyState: string, userKeyState: string>, expireAt: string, fileType: string, hasActivitiesLog: bool, hash: string, id: int, inheritPermissions: bool, isBrowsable: bool, isEncrypted: bool, isFavorite: bool, mediaToken: string, mediaType: string, name: string, notes: string, parentId: int, parentPath: string, permissions: record<change: bool, create: bool, delete: bool, deleteRecycleBin: bool, manage: bool, manageDownloadShare: bool, manageUploadShare: bool, read: bool, readRecycleBin: bool, restoreRecycleBin: bool>, quota: int, recycleBinRetentionPeriod: int, referenceId: int, size: int, timestampCreation: string, timestampModification: string, type: string, updatedAt: string, updatedBy: record<avatarUuid: string, displayName: string, email: string, firstName: string, id: int, lastName: string, title: string, userName: string, userType: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
   let full_url = (build-url $base ({token_arg: (encode-path-segment $token_arg)} | format pattern "/v4/uploads/{token_arg}"))

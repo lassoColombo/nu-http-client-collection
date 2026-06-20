@@ -1585,7 +1585,7 @@ export def "email-history get" [
 #
 # GET /email/history/export?filename={filename}
 # operationId: Export History
-export def "email-history-export-filename-filename export" [
+export def "email-history-export-filenamefilename export" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1986,7 +1986,7 @@ export def "email-templates update" [
 #
 # GET /fax/history/export?filename={filename}
 # operationId: Export Fax History
-export def "fax-history-export-filename-filename export" [
+export def "fax-history-export-filenamefilename export" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,7 +2011,7 @@ export def "fax-history-export-filename-filename export" [
 #
 # GET /fax/history?date_from={date_from}&date_to={date_to}&q={q}&order_by={order_by}
 # operationId: Get Fax History
-export def "fax-history-date-from-date-from-date-to-date-to-q-q-order-by-order-by get-history" [
+export def "fax-history-date-fromdate-fromdate-todate-toqqorder-byorder-by get-history" [
   date_from: float
   date_to: float
   q: string
@@ -2627,7 +2627,7 @@ export def "lists-contacts update-specific" [
 #
 # GET /lists/{list_id}/export?filename={filename}
 # operationId: Export Contacts List
-export def "lists-export-filename-filename export-contacts" [
+export def "lists-export-filenamefilename export-contacts" [
   list_id: string
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2817,7 +2817,7 @@ export def "mms-cancel-all cancel" [
 #
 # GET /mms/history/export?filename={filename}
 # operationId: Export MMS History
-export def "mms-history-export-filename-filename export" [
+export def "mms-history-export-filenamefilename export" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2842,7 +2842,7 @@ export def "mms-history-export-filename-filename export" [
 #
 # GET /mms/history?q={q}&order_by={order_by}&date_from={date_from}&date_to={date_to}
 # operationId: Get MMS History
-export def "mms-history-q-q-order-by-order-by-date-from-date-from-date-to-date-to get-history" [
+export def "mms-history-qqorder-byorder-bydate-fromdate-fromdate-todate-to get-history" [
   q: string
   order_by: string
   date_from: string
@@ -3207,7 +3207,7 @@ export def "post-direct-mail-campaigns-send create-new" [
 #
 # GET /post/direct-mail/locations/search/{country}/?q={query}
 # operationId: Search Locations
-export def "post-direct-mail-locations-search-q-query list" [
+export def "post-direct-mail-locations-search-qquery list" [
   country: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3285,7 +3285,7 @@ export def "post-letters-history get" [
 #
 # GET /post/letters/history/export?filename={filename}
 # operationId: Export Post Letter History
-export def "post-letters-history-export-filename-filename export" [
+export def "post-letters-history-export-filenamefilename export" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3373,7 +3373,7 @@ export def "post-letters-send send" [
 #
 # GET /post/postcards/export?filename={filename}
 # operationId: Export Postcard History
-export def "post-postcards-export-filename-filename export-history" [
+export def "post-post-cards-export-filenamefilename export-postcard-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3398,7 +3398,7 @@ export def "post-postcards-export-filename-filename export-history" [
 #
 # GET /post/postcards/history
 # operationId: Get Postcard History
-export def "post-postcards-history get" [
+export def "post-post-cards-history get-postcard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3421,7 +3421,7 @@ export def "post-postcards-history get" [
 #
 # POST /post/postcards/price
 # operationId: Calculate Pricing
-export def "post-postcards-price create-calculate-pricing" [
+export def "post-post-cards-price create-calculate-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3449,7 +3449,7 @@ export def "post-postcards-price create-calculate-pricing" [
 #
 # POST /post/postcards/send
 # operationId: Send Postcard
-export def "post-postcards-send send" [
+export def "post-post-cards-send send-postcard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3700,7 +3700,7 @@ export def "recharge-credit-card update-get" [
 #
 # GET /recharge/packages?country={country}
 # operationId: List of Packages
-export def "recharge-packages-country-country list-of-packages" [
+export def "recharge-packages-countrycountry list-of-packages" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4111,7 +4111,7 @@ export def "sdk-download download" [
 #
 # GET /search/contacts-lists?q={q}
 # operationId: Search Contacts-Lists
-export def "search-contacts-lists-q-q list-lists" [
+export def "search-contacts-lists-qq list-lists" [
   q: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4221,7 +4221,7 @@ export def "sms-campaigns-send create-use-short-url" [
 #
 # GET /sms-campaigns/{campaign_id}/link-export?filename={filename}
 # operationId: Link Tracking Export
-export def "sms-campaigns-link-export-filename-filename export-tracking" [
+export def "sms-campaigns-link-export-filenamefilename export-tracking" [
   campaign_id: float
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4664,7 +4664,7 @@ export def "sms-email-sms update-to-allowed" [
 #
 # GET /sms/history/export?filename={filename}
 # operationId: Export SMS History
-export def "sms-history-export-filename-filename export" [
+export def "sms-history-export-filenamefilename export" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4689,7 +4689,7 @@ export def "sms-history-export-filename-filename export" [
 #
 # GET /sms/history?date_from={date_from}&date_to={date_to}
 # operationId: Get all History
-export def "sms-history-date-from-date-from-date-to-date-to get-list-history" [
+export def "sms-history-date-fromdate-fromdate-todate-to get-list-history" [
   date_from: string
   date_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5386,7 +5386,7 @@ export def "timezones get" [
 #
 # POST /uploads?convert={convert}
 # operationId: Upload a file
-export def "uploads-convert-convert upload-file" [
+export def "uploads-convertconvert upload-file" [
   convert: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5440,7 +5440,7 @@ export def "voice-cancel-all cancel-calls" [
 #
 # GET /voice/history/export?filename={filename}
 # operationId: Export Voice History
-export def "voice-history-export-filename-filename export" [
+export def "voice-history-export-filenamefilename export" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5465,7 +5465,7 @@ export def "voice-history-export-filename-filename export" [
 #
 # GET /voice/history?date_from={date_from}&date_to={date_to}
 # operationId: Get Voice History
-export def "voice-history-date-from-date-from-date-to-date-to get-history" [
+export def "voice-history-date-fromdate-fromdate-todate-to get-history" [
   date_from: string
   date_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5599,7 +5599,7 @@ export def "voice-receipts create" [
 #
 # PUT /voice/receipts-read?date_before={date_before}
 # operationId: Marked Voice Receipts as Read
-export def "voice-receipts-read-date-before-date-before get-marked-as" [
+export def "voice-receipts-read-date-beforedate-before get-marked-as" [
   date_before: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

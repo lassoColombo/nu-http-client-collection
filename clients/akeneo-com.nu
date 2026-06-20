@@ -473,7 +473,7 @@ export def "rest-asset-families-assets get" [
 # PATCH /api/rest/v1/asset-families/{asset_family_code}/assets/{code}
 # operationId: patch_asset__code_
 # --values shape: {attributeCode?: list}
-export def "rest-asset-families-assets update-by-asset-family-code-code" [
+export def "rest-asset-families-assets update-by-asset-family-code-1" [
   asset_family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1813,7 +1813,7 @@ export def "rest-attributes-options get" [
 # PATCH /api/rest/v1/attributes/{attribute_code}/options/{code}
 # operationId: patch_attributes__attribute_code__options__code_
 # --labels shape: {localeCode?: string}
-export def "rest-attributes-options update-by-attribute-code-code" [
+export def "rest-attributes-options update-by-attribute-code-1" [
   attribute_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2828,7 +2828,7 @@ export def "rest-families-variants get" [
 # operationId: patch_families__family_code__variants__code__
 # --labels shape: {localeCode?: string}
 # --variant_attribute_sets item shape: {attributes?: list<string>, axes: list<string>, level: int}
-export def "rest-families-variants update-by-family-code-code" [
+export def "rest-families-variants update-by-family-code-1" [
   family_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4419,7 +4419,7 @@ export def "rest-reference-entities-records get" [
 # PATCH /api/rest/v1/reference-entities/{reference_entity_code}/records/{code}
 # operationId: patch_reference_entity_records__code_
 # --values shape: {attributeCode?: list}
-export def "rest-reference-entities-records update-by-reference-entity-code-code" [
+export def "rest-reference-entities-records update-by-reference-entity-code-1" [
   reference_entity_code: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL

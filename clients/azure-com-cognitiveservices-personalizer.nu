@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-Personalizer/v1.0/swagger.json
 # Auth: --token flag or $env.PERSONALIZER_CLIENT_TOKEN
 
-const BASE_URL = "https://azure.local/personalizer/v1.0"
+const BASE_URL = "{Endpoint}/personalizer/v1.0"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local/personalizer/v1.0"] }
+def base-url-completer [] { ["{Endpoint}/personalizer/v1.0"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 

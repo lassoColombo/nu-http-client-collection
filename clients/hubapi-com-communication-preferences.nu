@@ -153,7 +153,7 @@ export def "communication-preferences-definitions get-page" [
 #
 # GET /communication-preferences/v3/status/email/{emailAddress}
 # operationId: get-/communication-preferences/v3/status/email/{emailAddress}_getEmailStatus
-export def "communication-preferences-status-email get-{email-address}" [
+export def "communication-preferences-status-email get-address" [
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

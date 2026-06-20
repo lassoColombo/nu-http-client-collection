@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br"] }
-def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
+def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken" "none"] }
 
 
 # List all available API commands with their parameters
@@ -142,7 +142,7 @@ export def "checkout-pub-gateway-callback create-process-order" [
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --cookie: string # VTEX Chekout cookie associated with a specific order. Use the `Vtex_CHKO_Auth` and the `CheckoutDataAccess` cookies returned by the [Place order](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorder) or [Place order from existing cart](https://developers.vtex.com/vtex-rest-api/reference/order-placement-1#placeorderfromexistingorderform) API requests, like a browser would.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_group | is-empty) { error make --unspanned { msg: "path parameter 'orderGroup' must be non-empty" } }
   let full_url = (build-url $base ({order_group: (encode-path-segment $order_group)} | format pattern "/api/checkout/pub/gatewayCallback/{order_group}"))
@@ -171,7 +171,7 @@ export def "checkout-pub-order-form create-new-cart" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forceNewCart" $force_new_cart "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForm" $qp)
@@ -201,7 +201,7 @@ export def "checkout-pub-order-form get-cart-information" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "refreshOutdatedData" $refresh_outdated_data "scalar")] | flatten | str join "&"
@@ -234,7 +234,7 @@ export def "checkout-pub-order-form-attachments-client-preferences-data create" 
   --optin-news-letter: oneof<nothing, bool> # Indicates whether the shopper opted in to receive the store's news letter. (default: false)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientPreferencesData"))
@@ -280,7 +280,7 @@ export def "checkout-pub-order-form-attachments-client-profile-data create" [
   --trade-name: string # Trade name, if the customer is a legal entity. (default: trade-name)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/clientProfileData"))
@@ -322,7 +322,7 @@ export def "checkout-pub-order-form-attachments-marketing-data create" [
   --utmi-part: string # utmi_part (internal utm) (default: utmi_part-exmaple)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/marketingData"))
@@ -358,7 +358,7 @@ export def "checkout-pub-order-form-attachments-merchant-context-data create" [
   sales_associate_data: record # Sales Associate information. — shape: {salesAssociateId?: string}
 ]: any -> record<salesAssociateId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/merchantContextData"))
@@ -394,7 +394,7 @@ export def "checkout-pub-order-form-attachments-payment-data create" [
   --payments: list # Array with information on each payment chosen by the shopper. — item shape: {group?: string, hasDefaultBillingAddress?: bool, installments?: int, installmentsInterestRate?: float, installmentsValue?: int, paymentSystem?: int, paymentSystemName?: string, referenceValue?: int, value?: int}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/paymentData"))
@@ -433,7 +433,7 @@ export def "checkout-pub-order-form-attachments-shipping-data create-address" [
   --selected-addresses: list # List of objects with addresses information. — item shape: {addressType?: string, city?: string, complement?: string, country?: string, geoCoordinates?: list<float>, neighborhood?: string, number?: string, postalCode?: string, receiverName?: string, reference?: string, state?: string, street?: string}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/attachments/shippingData"))
@@ -468,7 +468,7 @@ export def "checkout-pub-order-form-coupons create" [
   --text: string # Sending an existing coupon code in this field will return the corresponding discount in the purchase. Use the [cart simulation](https://developers.vtex.com/vtex-rest-api/reference/orderform#orderformsimulation) request to check which coupons might apply before placing the order. (default: freeshipping)
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/coupons"))
@@ -504,7 +504,7 @@ export def "checkout-pub-order-form-custom-data update-multiple-field-values" [
   --body: record
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -524,7 +524,7 @@ export def "checkout-pub-order-form-custom-data update-multiple-field-values" [
 #
 # DELETE /api/checkout/pub/orderForm/{orderFormId}/customData/{appId}/{appFieldName}
 # operationId: Removesinglecustomfieldvalue
-export def "checkout-pub-order-form-custom-data delete-removesinglecustomfieldvalue" [
+export def "checkout-pub-order-form-custom-data delete-singlecustomfieldvalue" [
   order_form_id: string
   app_id: string
   app_field_name: string
@@ -540,7 +540,7 @@ export def "checkout-pub-order-form-custom-data delete-removesinglecustomfieldva
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -575,7 +575,7 @@ export def "checkout-pub-order-form-custom-data update-single-field-value" [
   value: string # The value you want to set to the specified field.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -611,7 +611,7 @@ export def "checkout-pub-order-form-installments get-cart" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "paymentSystem" $payment_system "scalar")] | flatten | str join "&"
@@ -645,7 +645,7 @@ export def "checkout-pub-order-form-items create" [
   --order-items: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {id: string, index: int, price?: int, quantity: int, seller: string}
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
@@ -681,7 +681,7 @@ export def "checkout-pub-order-form-items-remove-all delete" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/items/removeAll"))
@@ -718,7 +718,7 @@ export def "checkout-pub-order-form-items-update update" [
   --order-items: list # Array containing the cart items. Each object inside this array corresponds to a different item. — item shape: {index: int, quantity: int}
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let qp = [(serialize-qp "allowedOutdatedData" $allowed_outdated_data "multi")] | flatten | str join "&"
@@ -791,7 +791,7 @@ export def "checkout-pub-order-form-messages-clear create-clearorder" [
   --body: record
 ]: any -> record<allowManualPrice: bool, availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, canEditData: bool, clientPreferencesData: record<locale: string, optinNewsLetter: bool>, clientProfileData: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: bool, profileErrorOnLoading: bool, stateInscription: string, tradeName: string>, commercialConditionData: record, customData: record, giftRegistryData: record, hooksData: record, ignoreProfileData: bool, invoiceData: record, isCheckedIn: bool, itemMetadata: record<items: list<record>>, items: table<additionalInfo: record, attachments: list, availability: string, bundleItems: list, detailUrl: string, ean: string, id: string, imageUrl: string, isGift: bool, listPrice: int, manualPrice: int, manualPriceAppliedBy: string, manufacturerCode: string, measurementUnit: string, modalType: string, name: string, parentAssemblyBinding: string, parentItemIndex: int, preSaleDate: string, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, productCategories: record, productCategoryIds: string, productId: string, productRefId: string, quantity: int, refId: string, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, skuName: string, tax: int, uniqueId: string, unitMultiplier: int>, itemsOrdination: record<ascending: bool, criteria: string>, loggedIn: bool, marketingData: record<coupon: string, utmCampaign: string, utmMedium: string, utmSource: string, utmiCampaign: string, utmiPage: string, utmiPart: string>, messages: list<any>, openTextField: string, orderFormId: string, paymentData: record<giftCards: list<record>, transactions: list<record>>, profileProvider: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<string>, teaser: list<string>>, salesChannel: string, selectableGifts: list<any>, sellers: table<id: string, logo: string, name: string>, shippingData: record<address: record<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string>, availableAddresses: list<record>, logisticsInfo: list<record>, selectedAddresses: list<record>>, storeId: string, storePreferencesData: record, subscriptionData: record, totalizers: list<any>, userProfileId: string, userType: string, value: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/messages/clear"))
@@ -826,7 +826,7 @@ export def "checkout-pub-order-form-profile update-ignore-data" [
   --ignore-profile-data: oneof<nothing, bool> # Indicates whether profile data should be ignored. (default: false)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/profile"))
@@ -866,7 +866,7 @@ export def "checkout-pub-order-form-transaction create-place-from-existing" [
   value: int # Total value of the order without separating cents. For example, $24.99 is represented `2499`. (default: 6800)
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/api/checkout/pub/orderForm/{order_form_id}/transaction"))
@@ -906,7 +906,7 @@ export def "checkout-pub-order-forms-simulation create-cart" [
   --postal-code: string # Postal code. (e.g. 12345-000)
 ]: any -> record<country: string, items: table<availability: string, id: string, listPrice: int, measurementUnit: string, offerings: list, parentAssemblyBinding: string, parentItemIndex: int, price: int, priceDefinition: record, priceTags: list, priceValidUntil: string, quantity: int, requestIndex: int, rewardValue: int, seller: string, sellerChain: list, sellingPrice: int, tax: int, unitMultiplier: int>, logisticsInfo: table<addressId: string, deliveryChannels: list, itemIndex: int, itemMetadata: record, messages: list, pickupPoints: list, purchaseConditions: record, quantity: int, selectedDeliveryChannel: string, selectedSla: string, shipsTo: list, slas: list, subscriptionData: record, totals: list>, marketingData: record, paymentData: record<availableAccounts: list<any>, availableAssociations: record, availableTokens: list<any>, giftCardMessages: list<any>, giftCards: list<any>, installmentOptions: list<any>, paymentSystems: list<record>, payments: list<any>>, postalCode: string, ratesAndBenefitsData: record<rateAndBenefitsIdentifiers: list<any>, teaser: list<any>>, selectableGifts: list<any>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "RnbBehavior" $rnb_behavior "scalar") (serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orderForms/simulation" $qp)
@@ -988,7 +988,7 @@ export def "checkout-pub-pickup-points list-ppoints-by-location" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "geoCoordinates" $geo_coordinates "multi") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "countryCode" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/pickup-points" $qp)
@@ -1018,7 +1018,7 @@ export def "checkout-pub-postal-code get-address" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($country_code | is-empty) { error make --unspanned { msg: "path parameter 'countryCode' must be non-empty" } }
   if ($postal_code | is-empty) { error make --unspanned { msg: "path parameter 'postalCode' must be non-empty" } }
@@ -1048,7 +1048,7 @@ export def "checkout-pub-profiles get-client-by-email" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<availableAccounts: list<string>, availableAddresses: table<addressId: string, addressType: string, city: string, complement: string, country: string, geoCoordinates: list, isDisposable: bool, neighborhood: string, number: string, receiverName: string, reference: string, state: string, street: string>, isComplete: bool, profileProvider: string, userProfile: record<corporateDocument: string, corporateName: string, corporatePhone: string, customerClass: string, document: string, documentType: string, email: string, firstName: string, isCorporate: bool, lastName: string, phone: string, profileCompleteOnLoading: string, profileErrorOnLoading: string, stateInscription: string, tradeName: string>, userProfileId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/profiles" $qp)
@@ -1080,7 +1080,7 @@ export def "checkout-pub-regions get-sellers" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<id: string, sellers: table<id: string, logo: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($region_id | is-empty) { error make --unspanned { msg: "path parameter 'regionId' must be non-empty" } }
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "geoCoordinates" $geo_coordinates "multi")] | flatten | str join "&"
@@ -1096,7 +1096,7 @@ export def "checkout-pub-regions get-sellers" [
 #
 # GET /api/checkout/pvt/configuration/orderForm
 # operationId: GetorderFormconfiguration
-export def "checkout-pvt-configuration-order-form get-getorder-formconfiguration" [
+export def "checkout-pvt-configuration-order-form get-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "checkout-pvt-configuration-order-form get-getorder-formconfiguration
 # --apps item shape: {fields?: list<string>, id?: string, major?: int}
 # --paymentConfiguration shape: {allowInstallmentsMerge?: bool, requiresAuthenticationForPreAuthorizedPaymentOption: bool}
 # --taxConfiguration shape: {appId?: string, authorizationHeader?: string, url?: string}
-export def "checkout-pvt-configuration-order-form create-updateorder-formconfiguration" [
+export def "checkout-pvt-configuration-order-form update-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1230,7 +1230,7 @@ export def "checkout-pvt-configuration-window-to-change-seller update" [
 #
 # GET /checkout/changeToAnonymousUser/{orderFormId}
 # operationId: Removeallpersonaldata
-export def "checkout-change-to-anonymous-user get-removeallpersonaldata" [
+export def "checkout-change-to-anonymous-user delete-allpersonaldata" [
   order_form_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1244,7 +1244,7 @@ export def "checkout-change-to-anonymous-user get-removeallpersonaldata" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   let full_url = (build-url $base ({order_form_id: (encode-path-segment $order_form_id)} | format pattern "/checkout/changeToAnonymousUser/{order_form_id}"))

@@ -109,7 +109,7 @@ def tz-completer [] { ["local" "utc"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts-lat-lat-lon-lon get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alerts-latlatlonlon get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # Returns severe weather alerts issued by meteorological agencies - Given a lat/lon.
 #
 # GET /alerts?lat={lat}&lon={lon}
-export def "alerts-lat-lat-lon-lon get" [
+export def "alerts-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -187,7 +187,7 @@ export def "bulk-files get" [
 # Returns current air quality conditions - Given City and/or State, Country.
 #
 # GET /current/airquality?city={city}&country={country}
-export def "current-airquality-city-city-country-country get" [
+export def "current-airquality-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -217,7 +217,7 @@ export def "current-airquality-city-city-country-country get" [
 # Returns current air quality conditions - Given a City ID.
 #
 # GET /current/airquality?city_id={city_id}
-export def "current-airquality-city-id-city-id get" [
+export def "current-airquality-city-idcity-id get" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +244,7 @@ export def "current-airquality-city-id-city-id get" [
 # Returns current air quality conditions - Given a lat/lon.
 #
 # GET /current/airquality?lat={lat}&lon={lon}
-export def "current-airquality-lat-lat-lon-lon get" [
+export def "current-airquality-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -273,7 +273,7 @@ export def "current-airquality-lat-lat-lon-lon get" [
 # Returns current air quality conditions - Given a Postal Code.
 #
 # GET /current/airquality?postal_code={postal_code}
-export def "current-airquality-postal-code-postal-code get" [
+export def "current-airquality-postal-codepostal-code get" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "current-airquality-postal-code-postal-code get" [
 # Returns a group of observations given a list of cities
 #
 # GET /current?cities={cities}
-export def "current-cities-cities get" [
+export def "current-citiescities get" [
   cities: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "current-cities-cities get" [
 # Returns a Current Observation - Given City and/or State, Country.
 #
 # GET /current?city={city}&country={country}
-export def "current-city-city-country-country get" [
+export def "current-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -365,7 +365,7 @@ export def "current-city-city-country-country get" [
 # Returns a current observation by city id.
 #
 # GET /current?city_id={city_id}
-export def "current-city-id-city-id get" [
+export def "current-city-idcity-id get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "current-city-id-city-id get" [
 # Returns a Current Observation - Given a lat/lon.
 #
 # GET /current?lat={lat}&lon={lon}
-export def "current-lat-lat-lon-lon get" [
+export def "current-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -429,7 +429,7 @@ export def "current-lat-lat-lon-lon get" [
 # Returns a group of observations given a list of points in the format (lat1, lon1), (lat2, lon2), (latN, lonN), ...
 #
 # GET /current?points={points}
-export def "current-points-points get" [
+export def "current-pointspoints get" [
   points: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "current-points-points get" [
 # Returns a current observation by postal code.
 #
 # GET /current?postal_code={postal_code}
-export def "current-postal-code-postal-code get" [
+export def "current-postal-codepostal-code get" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "current-postal-code-postal-code get" [
 # Returns a Current Observation. - Given a station ID.
 #
 # GET /current?station={station}
-export def "current-station-station get" [
+export def "current-stationstation get" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +520,7 @@ export def "current-station-station get" [
 # Returns a group of observations given a list of stations
 #
 # GET /current?stations={stations}
-export def "current-stations-stations get" [
+export def "current-stationsstations get" [
   stations: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,7 +549,7 @@ export def "current-stations-stations get" [
 # Returns 72 hour (hourly) Air Quality forecast - Given City and/or State, Country.
 #
 # GET /forecast/airquality?city={city}&country={country}
-export def "forecast-airquality-city-city-country-country get" [
+export def "forecast-airquality-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -580,7 +580,7 @@ export def "forecast-airquality-city-city-country-country get" [
 # Returns 72 hour (hourly) Air Quality forecast - Given a City ID.
 #
 # GET /forecast/airquality?city_id={city_id}
-export def "forecast-airquality-city-id-city-id get" [
+export def "forecast-airquality-city-idcity-id get" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -608,7 +608,7 @@ export def "forecast-airquality-city-id-city-id get" [
 # Returns 72 hour (hourly) Air Quality forecast - Given a lat/lon.
 #
 # GET /forecast/airquality?lat={lat}&lon={lon}
-export def "forecast-airquality-lat-lat-lon-lon get" [
+export def "forecast-airquality-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -638,7 +638,7 @@ export def "forecast-airquality-lat-lat-lon-lon get" [
 # Returns 72 hour (hourly) Air Quality forecast - Given a Postal Code.
 #
 # GET /forecast/airquality?postal_code={postal_code}
-export def "forecast-airquality-postal-code-postal-code get" [
+export def "forecast-airquality-postal-codepostal-code get" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -667,7 +667,7 @@ export def "forecast-airquality-postal-code-postal-code get" [
 # Returns a daily forecast - Given City and/or State, Country.
 #
 # GET /forecast/daily?city={city}&country={country}
-export def "forecast-daily-city-city-country-country get" [
+export def "forecast-daily-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -700,7 +700,7 @@ export def "forecast-daily-city-city-country-country get" [
 # Returns a daily forecast - Given a City ID.
 #
 # GET /forecast/daily?city_id={city_id}
-export def "forecast-daily-city-id-city-id get" [
+export def "forecast-daily-city-idcity-id get" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +730,7 @@ export def "forecast-daily-city-id-city-id get" [
 # Returns a daily forecast - Given Lat/Lon.
 #
 # GET /forecast/daily?lat={lat}&lon={lon}
-export def "forecast-daily-lat-lat-lon-lon get" [
+export def "forecast-daily-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -762,7 +762,7 @@ export def "forecast-daily-lat-lat-lon-lon get" [
 # Returns a daily forecast - Given a Postal Code.
 #
 # GET /forecast/daily?postal_code={postal_code}
-export def "forecast-daily-postal-code-postal-code get" [
+export def "forecast-daily-postal-codepostal-code get" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -793,7 +793,7 @@ export def "forecast-daily-postal-code-postal-code get" [
 # Returns Energy Forecast API response - Given a single lat/lon.
 #
 # GET /forecast/energy?lat={lat}&lon={lon}
-export def "forecast-energy-lat-lat-lon-lon get" [
+export def "forecast-energy-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -825,7 +825,7 @@ export def "forecast-energy-lat-lat-lon-lon get" [
 # Returns an hourly forecast - Given City and/or State, Country.
 #
 # GET /forecast/hourly?city={city}&country={country}
-export def "forecast-hourly-city-city-country-country get" [
+export def "forecast-hourly-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "forecast-hourly-city-city-country-country get" [
 # Returns an hourly forecast - Given a City ID.
 #
 # GET /forecast/hourly?city_id={city_id}
-export def "forecast-hourly-city-id-city-id get" [
+export def "forecast-hourly-city-idcity-id get" [
   city_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +888,7 @@ export def "forecast-hourly-city-id-city-id get" [
 # Returns an hourly forecast - Given a lat/lon.
 #
 # GET /forecast/hourly?lat={lat}&lon={lon}
-export def "forecast-hourly-lat-lat-lon-lon get" [
+export def "forecast-hourly-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +920,7 @@ export def "forecast-hourly-lat-lat-lon-lon get" [
 # Returns an hourly forecast - Given a Postal Code.
 #
 # GET /forecast/hourly?postal_code={postal_code}
-export def "forecast-hourly-postal-code-postal-code get" [
+export def "forecast-hourly-postal-codepostal-code get" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +951,7 @@ export def "forecast-hourly-postal-code-postal-code get" [
 # Returns 72 hours of historical quality conditions - Given City and/or State, Country.
 #
 # GET /history/airquality?city={city}&country={country}
-export def "history-airquality-city-city-country-country get" [
+export def "history-airquality-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -981,7 +981,7 @@ export def "history-airquality-city-city-country-country get" [
 # Returns 72 hours of historical air quality conditions - Given a City ID.
 #
 # GET /history/airquality?city_id={city_id}
-export def "history-airquality-city-id-city-id get" [
+export def "history-airquality-city-idcity-id get" [
   city_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "history-airquality-city-id-city-id get" [
 # Returns 72 hours of historical air quality conditions - Given a lat/lon.
 #
 # GET /history/airquality?lat={lat}&lon={lon}
-export def "history-airquality-lat-lat-lon-lon get" [
+export def "history-airquality-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1037,7 +1037,7 @@ export def "history-airquality-lat-lat-lon-lon get" [
 # Returns 72 hours of historical air quality conditions - Given a Postal Code.
 #
 # GET /history/airquality?postal_code={postal_code}
-export def "history-airquality-postal-code-postal-code get" [
+export def "history-airquality-postal-codepostal-code get" [
   postal_code: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,7 +1065,7 @@ export def "history-airquality-postal-code-postal-code get" [
 # Returns Historical Observations - Given City and/or State, Country.
 #
 # GET /history/daily?city={city}&country={country}
-export def "history-daily-city-city-country-country get" [
+export def "history-daily-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1099,7 +1099,7 @@ export def "history-daily-city-city-country-country get" [
 # Returns Historical Observations - Given a City ID
 #
 # GET /history/daily?city_id={city_id}
-export def "history-daily-city-id-city-id get" [
+export def "history-daily-city-idcity-id get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "history-daily-city-id-city-id get" [
 # Returns Historical Observations - Given a lat/lon.
 #
 # GET /history/daily?lat={lat}&lon={lon}
-export def "history-daily-lat-lat-lon-lon get" [
+export def "history-daily-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1163,7 +1163,7 @@ export def "history-daily-lat-lat-lon-lon get" [
 # Returns Historical Observations - Given a Postal Code
 #
 # GET /history/daily?postal_code={postal_code}
-export def "history-daily-postal-code-postal-code get" [
+export def "history-daily-postal-codepostal-code get" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1195,7 +1195,7 @@ export def "history-daily-postal-code-postal-code get" [
 # Returns Historical Observations - Given a station ID.
 #
 # GET /history/daily?station={station}
-export def "history-daily-station-station get" [
+export def "history-daily-stationstation get" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1226,7 +1226,7 @@ export def "history-daily-station-station get" [
 # Returns Energy API response - Given a single lat/lon.
 #
 # GET /history/energy?lat={lat}&lon={lon}
-export def "history-energy-lat-lat-lon-lon get" [
+export def "history-energy-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1260,7 +1260,7 @@ export def "history-energy-lat-lat-lon-lon get" [
 # Returns Historical Observations - Given City and/or State, Country.
 #
 # GET /history/hourly?city={city}&country={country}
-export def "history-hourly-city-city-country-country get" [
+export def "history-hourly-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1295,7 +1295,7 @@ export def "history-hourly-city-city-country-country get" [
 # Returns Historical Observations - Given a City ID
 #
 # GET /history/hourly?city_id={city_id}
-export def "history-hourly-city-id-city-id get" [
+export def "history-hourly-city-idcity-id get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,7 +1327,7 @@ export def "history-hourly-city-id-city-id get" [
 # Returns Historical Observations - Given a lat/lon.
 #
 # GET /history/hourly?lat={lat}&lon={lon}
-export def "history-hourly-lat-lat-lon-lon get" [
+export def "history-hourly-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1361,7 +1361,7 @@ export def "history-hourly-lat-lat-lon-lon get" [
 # Returns Historical Observations - Given a Postal Code
 #
 # GET /history/hourly?postal_code={postal_code}
-export def "history-hourly-postal-code-postal-code get" [
+export def "history-hourly-postal-codepostal-code get" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1394,7 +1394,7 @@ export def "history-hourly-postal-code-postal-code get" [
 # Returns Historical Observations - Given a station ID.
 #
 # GET /history/hourly?station={station}
-export def "history-hourly-station-station get" [
+export def "history-hourly-stationstation get" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1426,7 +1426,7 @@ export def "history-hourly-station-station get" [
 # Returns Historical Observations - Given City and/or State, Country.
 #
 # GET /history/subhourly?city={city}&country={country}
-export def "history-subhourly-city-city-country-country get" [
+export def "history-subhourly-citycitycountrycountry get" [
   city: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1461,7 +1461,7 @@ export def "history-subhourly-city-city-country-country get" [
 # Returns Historical Observations - Given a City ID
 #
 # GET /history/subhourly?city_id={city_id}
-export def "history-subhourly-city-id-city-id get" [
+export def "history-subhourly-city-idcity-id get" [
   city_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1493,7 +1493,7 @@ export def "history-subhourly-city-id-city-id get" [
 # Returns Historical Observations - Given a lat/lon.
 #
 # GET /history/subhourly?lat={lat}&lon={lon}
-export def "history-subhourly-lat-lat-lon-lon get" [
+export def "history-subhourly-latlatlonlon get" [
   lat: float
   lon: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -1527,7 +1527,7 @@ export def "history-subhourly-lat-lat-lon-lon get" [
 # Returns Historical Observations - Given a Postal Code
 #
 # GET /history/subhourly?postal_code={postal_code}
-export def "history-subhourly-postal-code-postal-code get" [
+export def "history-subhourly-postal-codepostal-code get" [
   postal_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1560,7 +1560,7 @@ export def "history-subhourly-postal-code-postal-code get" [
 # Returns Historical Observations - Given a station ID.
 #
 # GET /history/subhourly?station={station}
-export def "history-subhourly-station-station get" [
+export def "history-subhourly-stationstation get" [
   station: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

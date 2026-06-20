@@ -1,6 +1,6 @@
 # Auto-generated client for U.S. EPA Enforcement and Compliance History Online (ECHO) - Clean Water Act (CWA) Rest Services v2019.10.15
 # Source: https://api.apis.guru/v2/specs/epa.gov/cwa/2019.10.15/swagger.json
-# Auth: --token flag or $env.U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE__ECHO____CLEAN_WATER_ACT__CWA__REST_SERVICES_TOKEN
+# Auth: --token flag or $env.U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE_ECHO_CLEAN_WATER_ACT_CWA_REST_SERVICES_TOKEN
 
 const BASE_URL = "https://echodata.epa.gov/echo"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://echodata.epa.gov/echo"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE__ECHO____CLEAN_WATER_ACT__CWA__REST_SERVICES_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o U_S_EPA_ENFORCEMENT_AND_COMPLIANCE_HISTORY_ONLINE_ECHO_CLEAN_WATER_ACT_CWA_REST_SERVICES_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

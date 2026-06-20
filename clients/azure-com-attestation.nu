@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/attestation/2018-09-01-preview/swagger.json
 # Auth: --token flag or $env.ATTESTATIONCLIENT_TOKEN
 
-const BASE_URL = "https://azure.local"
+const BASE_URL = "{tenantBaseUrl}"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local"] }
+def base-url-completer [] { ["{tenantBaseUrl}"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -262,7 +262,7 @@ export def "operations-policy-current update" [
 #
 # POST /operations/policy/updatepolicy
 # operationId: Policy_PrepareToSet
-export def "operations-policy-updatepolicy update-prepare-to" [
+export def "operations-policy-update-policy update-prepare-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

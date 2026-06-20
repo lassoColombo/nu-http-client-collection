@@ -181,7 +181,7 @@ export def "pricing-migration get-pricingv2-status" [
 #
 # GET /pricing/pipeline/catalog
 # operationId: getallpricetablesandrules
-export def "pricing-pipeline-catalog get-getallpricetablesandrules" [
+export def "pricing-pipeline-catalog get-allpricetablesandrules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "pricing-pipeline-catalog get-getallpricetablesandrules" [
 #
 # GET /pricing/pipeline/catalog/{priceTableId}
 # operationId: Getrulesforapricetable
-export def "pricing-pipeline-catalog get-getrulesforapricetable" [
+export def "pricing-pipeline-catalog get-rulesforapricetable" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "pricing-prices-fixed get" [
 #
 # DELETE /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: Deletefixedpricesonapricetableortradepolicy
-export def "pricing-prices-fixed delete-deletefixedpricesonapricetableortradepolicy" [
+export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -496,7 +496,7 @@ export def "pricing-prices-fixed get-pricesonapricetable" [
 #
 # POST /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: createorupdatefixedpricesonpricetableortradepolicy
-export def "pricing-prices-fixed create-createorupdatefixedpricesonpricetableortradepolicy" [
+export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,7 +533,7 @@ export def "pricing-prices-fixed create-createorupdatefixedpricesonpricetableort
 #
 # GET /pricing/tables
 # operationId: Listpricetables
-export def "pricing-tables get-listpricetables" [
+export def "pricing-tables list-pricetables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

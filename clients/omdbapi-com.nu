@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://www.omdbapi.com" "https://www.omdbapi.com"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 # Completers for enum parameters
 def type-completer [] { ["episode" "movie" "series"] }
@@ -153,7 +153,7 @@ export def "api get-om-db-list" [
   --page: int # Page number to return. (format: int32, default: 1)
   --callback: string # JSONP callback name.
 ]: nothing -> record<Actors: string, Awards: string, BoxOffice: string, Country: string, DVD: string, Director: string, Genre: string, Language: string, Metascore: string, Plot: string, Poster: string, Production: string, Rated: string, Released: string, Response: string, Runtime: string, Search: table<Poster: string, Title: string, Type: string, Year: string, imdbID: string>, Title: string, Type: string, Website: string, Writer: string, Year: string, imdbID: string, imdbRating: string, imdbVotes: string, tomatoConsensus: string, tomatoFresh: string, tomatoImage: string, tomatoMeter: string, tomatoRating: string, tomatoReviews: string, tomatoRotten: string, tomatoURL: string, tomatoUserMeter: string, tomatoUserRating: string, tomatoUserReviews: string, totalResults: string, totalSeasons: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "t" $t "scalar") (serialize-qp "i" $i "scalar") (serialize-qp "s" $s "scalar") (serialize-qp "y" $y "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "plot" $plot "scalar") (serialize-qp "tomatoes" $tomatoes "scalar") (serialize-qp "r" $r "scalar") (serialize-qp "v" $v "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/" $qp)

@@ -369,7 +369,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners
 # operationId: AvailabilityGroupListeners_ListByGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners list" [
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners list" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners delete" [
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners delete" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -433,7 +433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners get" [
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners get" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string
@@ -467,7 +467,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machin
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.SqlVirtualMachine/sqlVirtualMachineGroups/{sqlVirtualMachineGroupName}/availabilityGroupListeners/{availabilityGroupListenerName}
 # operationId: AvailabilityGroupListeners_CreateOrUpdate
 # --properties shape: {availabilityGroupName?: string, createDefaultAvailabilityGroupIfNotExist?: bool, loadBalancerConfigurations?: list, port?: int}
-export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-listeners create-or-update" [
+export def "subscriptions-resource-groups-providers-microsoft-sql-virtual-machine-sql-virtual-machine-groups-availability-group-list-eners create-or-update" [
   subscription_id: string
   resource_group_name: string
   sql_virtual_machine_group_name: string

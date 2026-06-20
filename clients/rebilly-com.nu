@@ -2442,7 +2442,7 @@ export def "files-download get" [
 #
 # GET /files/{id}/download{extension}
 # operationId: GetFileDownloadExtension
-export def "files-download-extension get-download" [
+export def "files-downloadextension get-download" [
   id: string
   extension: string
   --base-url(-b): string@base-url-completer # API base URL

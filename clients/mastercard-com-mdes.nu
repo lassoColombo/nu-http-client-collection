@@ -498,7 +498,7 @@ export def "transactions create" [
 #
 # POST /updatetokenassurance
 # --UpdateTokenAssuranceRequest shape: {AuditInfo: any, CommentText?: string, TokenUniqueReference: string}
-export def "updatetokenassurance create" [
+export def "update-tokenassurance create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

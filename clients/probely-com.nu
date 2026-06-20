@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.probely.com"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def environment-completer [] { ["production" "testing"] }
@@ -173,7 +173,7 @@ export def "auth-obtain create" [
   username: string # e.g. example@probely.com
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/obtain/")
   let req_body = {"password": $password, "username": $username} | compact
@@ -199,7 +199,7 @@ export def "auth-refresh create" [
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/refresh/")
   let req_body = {"token": $body_token} | compact
@@ -225,7 +225,7 @@ export def "auth-revoke create" [
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/revoke/")
   let req_body = {"token": $body_token} | compact
@@ -251,7 +251,7 @@ export def "auth-verify create" [
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/verify/")
   let req_body = {"token": $body_token} | compact
@@ -449,7 +449,7 @@ export def "check create" [
   --body-token: string # Reset token received in the user email (e.g. KJUUCY2VIVEHO5KJGVHQ====-PJZXGNKSGNQVSODFPJGQ====-GYZDKOI=-8065bfbf8a0192774f3f/)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check/")
   let req_body = {"token": $body_token} | compact
@@ -476,7 +476,7 @@ export def "enterprise-auth-obtain create" [
   username: string # e.g. example@probely.com
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enterprise/auth/obtain/")
   let req_body = {"password": $password, "username": $username} | compact
@@ -502,7 +502,7 @@ export def "enterprise-auth-refresh create" [
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enterprise/auth/refresh/")
   let req_body = {"token": $body_token} | compact
@@ -528,7 +528,7 @@ export def "enterprise-auth-revoke create" [
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enterprise/auth/revoke/")
   let req_body = {"token": $body_token} | compact
@@ -554,7 +554,7 @@ export def "enterprise-auth-verify create" [
   --body-token: string # Authentication token (e.g. eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiJKR3ZRSTkzSTJhc0oiLCJ0ZW5hbnQiOiJwcm9iZWx5IiwidXNlcm5hbWUiOiJxd2VAZGVmbnVsbC5ldSJ9.7KtUn-Oy8aevOCv2lAnDroAJojLXmm7m2A4CX5cjwAk)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/enterprise/auth/verify/")
   let req_body = {"token": $body_token} | compact
@@ -1151,7 +1151,7 @@ export def "plans get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/plans/")
   let accept_val = "application/json"
@@ -1230,7 +1230,7 @@ export def "reset create" [
   email: string # e.g. example@probely.com
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reset/")
   let req_body = {"email": $email} | compact
@@ -1258,7 +1258,7 @@ export def "setpassword create" [
   --body-token: string # Reset token received in the user email (e.g. KJUUCY2VIVEHO5KJGVHQ====-PJZXGNKSGNQVSODFPJGQ====-GYZDKOI=-8065bfbf8a0192774f3f/)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setpassword/")
   let req_body = {"confpassword": $confpassword, "password": $password, "token": $body_token} | compact
@@ -1870,7 +1870,7 @@ export def "targets-assets get" [
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --cookies item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
-export def "targets-assets update-by-target-id-id" [
+export def "targets-assets update-by-target-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1908,7 +1908,7 @@ export def "targets-assets update-by-target-id-id" [
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --cookies item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
-export def "targets-assets update-by-target-id-id-1" [
+export def "targets-assets update-by-target-id-1" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2235,7 +2235,7 @@ export def "targets-findings get" [
 # --reporter shape: {email?: string, id?: string, name?: string}
 # --requests item shape: {request?: string, response?: string}
 # --target shape: {desc?: string, name?: string, url?: string}
-export def "targets-findings update-by-target-id-id" [
+export def "targets-findings update-by-target-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2275,7 +2275,7 @@ export def "targets-findings update-by-target-id-id" [
 # --reporter shape: {email?: string, id?: string, name?: string}
 # --requests item shape: {request?: string, response?: string}
 # --target shape: {desc?: string, name?: string, url?: string}
-export def "targets-findings update-by-target-id-id-1" [
+export def "targets-findings update-by-target-id-1" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2335,7 +2335,7 @@ export def "targets-findings-integrations-jira-cloud get" [
 # Update Jira Cloud finding configuration
 #
 # PATCH /targets/{target_id}/findings/{id}/integrations/jira-cloud/
-export def "targets-findings-integrations-jira-cloud update-by-target-id-id" [
+export def "targets-findings-integrations-jira-cloud update-by-target-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2366,7 +2366,7 @@ export def "targets-findings-integrations-jira-cloud update-by-target-id-id" [
 # Update Jira Cloud finding configuration
 #
 # PUT /targets/{target_id}/findings/{id}/integrations/jira-cloud/
-export def "targets-findings-integrations-jira-cloud update-by-target-id-id-1" [
+export def "targets-findings-integrations-jira-cloud update-by-target-id-1" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2423,7 +2423,7 @@ export def "targets-findings-integrations-jira-server get" [
 # Update Jira Server finding configuration
 #
 # PATCH /targets/{target_id}/findings/{id}/integrations/jira-server/
-export def "targets-findings-integrations-jira-server update-by-target-id-id" [
+export def "targets-findings-integrations-jira-server update-by-target-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2454,7 +2454,7 @@ export def "targets-findings-integrations-jira-server update-by-target-id-id" [
 # Update Jira Server finding configuration
 #
 # PUT /targets/{target_id}/findings/{id}/integrations/jira-server/
-export def "targets-findings-integrations-jira-server update-by-target-id-id-1" [
+export def "targets-findings-integrations-jira-server update-by-target-id-1" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3402,7 +3402,7 @@ export def "targets-scheduledscans get" [
 # Partial update
 #
 # PATCH /targets/{target_id}/scheduledscans/{id}/
-export def "targets-scheduledscans update-by-target-id-id" [
+export def "targets-scheduledscans update-by-target-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3433,7 +3433,7 @@ export def "targets-scheduledscans update-by-target-id-id" [
 # Update a scheduled scan
 #
 # PUT /targets/{target_id}/scheduledscans/{id}/
-export def "targets-scheduledscans update-by-target-id-id-1" [
+export def "targets-scheduledscans update-by-target-id-1" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3771,7 +3771,7 @@ export def "targets-webhooks get" [
 # PATCH /targets/{target_id}/webhooks/{id}/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "targets-webhooks update-by-target-id-id" [
+export def "targets-webhooks update-by-target-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3806,7 +3806,7 @@ export def "targets-webhooks update-by-target-id-id" [
 # PUT /targets/{target_id}/webhooks/{id}/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "targets-webhooks update-by-target-id-id-1" [
+export def "targets-webhooks update-by-target-id-1" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

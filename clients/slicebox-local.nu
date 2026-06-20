@@ -420,7 +420,7 @@ export def "boxes-connect create" [
 #
 # POST /boxes/createconnection
 # --defaultProfile shape: {options?: list}
-export def "boxes-createconnection create" [
+export def "boxes-create-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2726,7 +2726,7 @@ export def "seriestypes-rules create" [
 # get the status of the internal process of updating series types for series following a change of series types, rules or attributes.
 #
 # GET /seriestypes/rules/updatestatus
-export def "seriestypes-rules-updatestatus get" [
+export def "seriestypes-rules-update-status get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -124,7 +124,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.box.com/2.0" "https://account.box.com/api/oauth2" "https://upload.box.com/api/2.0" "https://api.box.com" "https://dl.boxcloud.com/2.0"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def response-type-completer [] { ["code"] }
@@ -227,7 +227,7 @@ export def "authorize get" [
   --state: string # A custom string of your choice. Box will pass the same string to the redirect URL when authentication is complete. This parameter can be used to identify a user on redirect, as well as protect against hijacked sessions and other exploits. (e.g. my_state)
   --scope: string # A comma-separated list of application scopes you'd like to authenticate the user for. This defaults to all the scopes configured for the application in its configuration page. (e.g. admin_readwrite)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://account.box.com/api/oauth2")
   let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authorize" $qp)
@@ -876,7 +876,7 @@ export def "events get" [
 #
 # OPTIONS /events
 # operationId: options_events
-export def "events options-options" [
+export def "events options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "file-version-retentions get" [
 #
 # OPTIONS /files/content
 # operationId: options_files_content
-export def "files-content options-options" [
+export def "files-content options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4726,7 +4726,7 @@ export def "oauth2-revoke create" [
   --body-token: string # The access token to revoke. (format: token, e.g. n22JPxrh18m4Y0wIZPIqYZK7VRrsMTWW)
 ]: any -> record<error: string, error_description: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://api.box.com")
   let full_url = (build-url $base "/oauth2/revoke")
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "token": $body_token} | compact
@@ -4768,7 +4768,7 @@ export def "oauth2-token create" [
   --subject-token-type: string@subject-token-type-completer # The type of `subject_token` passed in. Used in combination with `urn:ietf:params:oauth:grant-type:token-exchange` as the `grant_type`. (e.g. urn:ietf:params:oauth:token-type:access_token)
 ]: any -> record<access_token: string, expires_in: int, issued_token_type: string, refresh_token: string, restricted_to: table<object: record, scope: string>, token_type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://api.box.com")
   let full_url = (build-url $base "/oauth2/token")
   let req_body = {"actor_token": $actor_token, "actor_token_type": $actor_token_type, "assertion": $assertion, "box_shared_link": $box_shared_link, "box_subject_id": $box_subject_id, "box_subject_type": $box_subject_type, "client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "refresh_token": $refresh_token, "resource": $resource, "scope": $scope, "subject_token": $subject_token, "subject_token_type": $subject_token_type} | compact
@@ -4799,7 +4799,7 @@ export def "oauth2-token refresh" [
   refresh_token: string # The refresh token to refresh. (format: token, e.g. c3FIOG9vSGV4VHo4QzAyg5T1JvNnJoZ3ExaVNyQWw6WjRsanRKZG5lQk9qUE1BVQ)
 ]: any -> record<access_token: string, expires_in: int, issued_token_type: string, refresh_token: string, restricted_to: table<object: record, scope: string>, token_type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://api.box.com")
   let full_url = (build-url $base "/oauth2/token")
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "grant_type": $grant_type, "refresh_token": $refresh_token} | compact
@@ -7699,7 +7699,7 @@ export def "zip-downloads-content get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
 ]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://dl.boxcloud.com/2.0")
   if ($zip_download_id | is-empty) { error make --unspanned { msg: "path parameter 'zip_download_id' must be non-empty" } }
   let full_url = (build-url $base ({zip_download_id: (encode-path-segment $zip_download_id)} | format pattern "/zip_downloads/{zip_download_id}/content"))

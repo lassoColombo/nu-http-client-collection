@@ -293,7 +293,7 @@ export def "subscriptions-resource-groups-providers-microsoft-azure-stack-regist
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/Microsoft.AzureStack/registrations/{registrationName}/getactivationkey
 # operationId: Registrations_GetActivationKey
-export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-getactivationkey get-activation-key" [
+export def "subscriptions-resource-groups-providers-microsoft-azure-stack-registrations-get-activationkey get-activation-key" [
   subscription_id: string
   resource_group: string
   registration_name: string

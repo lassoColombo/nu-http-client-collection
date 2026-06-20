@@ -456,7 +456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/getssotoken
 # operationId: ApiManagementService_GetSsoToken
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-getssotoken get-sso-token" [
+export def "subscriptions-resource-groups-providers-microsoft-api-management-service-get-ssotoken get-sso-token" [
   subscription_id: string
   resource_group_name: string
   service_name: string

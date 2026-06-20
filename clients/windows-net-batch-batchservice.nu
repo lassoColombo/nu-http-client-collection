@@ -2905,7 +2905,7 @@ export def "pools-nodes-users update-compute" [
 #
 # POST /pools/{poolId}/removenodes
 # operationId: Pool_RemoveNodes
-export def "pools-removenodes delete-nodes" [
+export def "pools-remove-nodes delete" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3033,7 +3033,7 @@ export def "pools-stopresize stop-resize" [
 # --certificateReferences item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list<string>}
 # --metadata item shape: {name: string, value: string}
 # --startTask shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
-export def "pools-updateproperties update-properties" [
+export def "pools-update-properties update" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

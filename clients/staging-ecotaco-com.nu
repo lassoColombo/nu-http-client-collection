@@ -780,7 +780,7 @@ export def "rides-reserve create" [
 #
 # GET /rides?page={page}&per_page={per_page}
 # operationId: Get all user rides
-export def "rides-page-page-per-page-per-page get-list-user-rides" [
+export def "rides-pagepageper-pageper-page get-list-user-rides" [
   page: float
   per_page: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -811,7 +811,7 @@ export def "rides-page-page-per-page-per-page get-list-user-rides" [
 #
 # POST /rides?page={page}&per_page={per_page}
 # operationId: Create a ride
-export def "rides-page-page-per-page-per-page create-ride" [
+export def "rides-pagepageper-pageper-page create-ride" [
   page: any
   per_page: any
   --base-url(-b): string@base-url-completer # API base URL

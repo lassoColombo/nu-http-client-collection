@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://unify.apideck.com"] }
-def auth-scheme-completer [] { ["bearer" "x-apideck-app-id"] }
+def auth-scheme-completer [] { ["bearer" "x-apideck-app-id" "none"] }
 
 
 # List all available API commands with their parameters
@@ -143,7 +143,7 @@ export def "vault-authorize get-connections" [
   --redirect-uri: string # URL to redirect back to after authorization. When left empty the default configured redirect uri will be used. (e.g. http://example.com/integrations)
   --scope: list<string> # One or more OAuth scopes to request from the connector. OAuth scopes control the set of resources and operations that are allowed after authorization. Refer to the connector's documentation for the available scopes. (e.g. [openid, leads:write, profile:read])
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application_id' must be non-empty" } }
@@ -171,7 +171,7 @@ export def "vault-callback get-connections" [
   --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
   --code: string # An authorization code from the connector which Apideck Vault will later exchange for an access token. (e.g. g0ZGZmNjVmOWI)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "scalar") (serialize-qp "code" $code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/vault/callback" $qp)
@@ -736,7 +736,7 @@ export def "vault-revoke delete-connections" [
   --state: string # An opaque value the applications adds to the initial request that the authorization server includes when redirecting the back to the application. This value must be used by the application to prevent CSRF attacks. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb25zdW1lcl9pZCI6InRlc3RfdXNlcl9pZCIsInVuaWZpZWRfYXBpIjoiZGVmYXVsdCIsInNlcnZpY2VfaWQiOiJ0ZWFtbGVhZGVyIiwiYXBwbGljYXRpb25faWQiOiIxMTExIiwiaWF0IjoxNjIyMTI2Nzg3fQ.97_pn1UAXc7mctXBdr15czUNO1jjdQ9sJUOIE_Myzbk)
   --redirect-uri: string # URL to redirect back to after authorization. When left empty the default configured redirect uri will be used. (e.g. http://example.com/integrations)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'application_id' must be non-empty" } }

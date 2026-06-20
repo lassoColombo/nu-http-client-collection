@@ -98,7 +98,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.sinao.app/v1" "https://api.sinao.dev/v1" "https://api.sinao.test/v1"] }
-def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "bearer" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def type-completer [] { ["invoice" "none" "purchase" "quote" "relationship" "transaction"] }
@@ -165,7 +165,7 @@ export def "apps list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<admin: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: any>, policies: list<record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp)
@@ -190,7 +190,7 @@ export def "apps create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-name: string # Organization name. Minimum 3 characters with 1 alpha
 ]: nothing -> record<admin: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: any>, policies: table<app: any, policy_profile: record, user: record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "organization_name" $organization_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/apps" $qp)
@@ -269,7 +269,7 @@ export def "apps-access-invite-register create" [
   --lastname: string # Last name of user before account creation / account link
   --cgu: oneof<nothing, bool> # User has valided CGU ?
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($access_token | is-empty) { error make --unspanned { msg: "path parameter 'accessToken' must be non-empty" } }
   let qp = [(serialize-qp "password" $password "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "cgu" $cgu "scalar")] | flatten | str join "&"
@@ -295,7 +295,7 @@ export def "apps get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<admin: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: any>, policies: table<app: any, policy_profile: record, user: record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}"))
@@ -324,7 +324,7 @@ export def "apps-access list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -354,7 +354,7 @@ export def "apps-access-invite list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<app: record<admin: record, config: list, hostname_alias: string, id: int, last_access_at: string, last_user: record, organization: record, policies: list, subscription: record, url: string>, id: int, profile: record<description: string, homepage: string, name: string, restricted: bool, rights: list, visible: int>, recipient_user: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, sender_user: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, used_at: string, validity: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -386,7 +386,7 @@ export def "apps-access-invite create" [
   --civility: string # Last name of user before account creation / account link
   --password: string # Password for new user
 ]: nothing -> record<app: record<admin: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: any>, policies: list<record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string>, id: int, profile: record<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int>, recipient_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, sender_user: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, used_at: string, validity: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "policy_profile_id" $policy_profile_id "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "civility" $civility "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
@@ -400,7 +400,7 @@ export def "apps-access-invite create" [
 #
 # DELETE /apps/{appId}/access/invite/{id}
 # operationId: app.policies.invitations.delete
-export def "apps-access-invite delete-by-app-id-id" [
+export def "apps-access-invite delete-by-app-id" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -413,7 +413,7 @@ export def "apps-access-invite delete-by-app-id-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -439,7 +439,7 @@ export def "apps-access-profiles list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/access/profiles"))
@@ -465,7 +465,7 @@ export def "apps-access delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -492,7 +492,7 @@ export def "apps-access get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -520,7 +520,7 @@ export def "apps-access update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --policy-profile-id: int
 ]: nothing -> record<description: string, homepage: string, name: string, restricted: bool, rights: list<string>, visible: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -552,7 +552,7 @@ export def "apps-accountcategories list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<description: string, id: int, name: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -581,7 +581,7 @@ export def "apps-accountcategories create" [
   --description: string
   --type: string
 ]: nothing -> record<description: string, id: int, name: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -608,7 +608,7 @@ export def "apps-accountcategories delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -635,7 +635,7 @@ export def "apps-accountcategories get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<description: string, id: int, name: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -665,7 +665,7 @@ export def "apps-accountcategories update" [
   --description: string
   --type: string
 ]: nothing -> record<description: string, id: int, name: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -697,7 +697,7 @@ export def "apps-accounting-entries list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -728,7 +728,7 @@ export def "apps-accounts list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -762,7 +762,7 @@ export def "apps-accounts create" [
   --is-sales: oneof<nothing, bool>
   --is-purchase: oneof<nothing, bool>
 ]: nothing -> record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "journalcode" $journalcode "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "keywords" $keywords "scalar") (serialize-qp "accounting_number" $accounting_number "scalar") (serialize-qp "is_cashflow" $is_cashflow "scalar") (serialize-qp "is_sales" $is_sales "scalar") (serialize-qp "is_purchase" $is_purchase "scalar")] | flatten | str join "&"
@@ -789,7 +789,7 @@ export def "apps-accounts-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of accounts. Without ID for insert
 ]: nothing -> record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -816,7 +816,7 @@ export def "apps-accounts delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -843,7 +843,7 @@ export def "apps-accounts get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -878,7 +878,7 @@ export def "apps-accounts update" [
   --is-sales: oneof<nothing, bool>
   --is-purchase: oneof<nothing, bool>
 ]: nothing -> record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -909,7 +909,7 @@ export def "apps-apikeys list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -937,7 +937,7 @@ export def "apps-apikeys create" [
   --name: string # Key name
   --api-partner-id: int # Partner ID for official connexion (nullable)
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "api_partner_id" $api_partner_id "scalar")] | flatten | str join "&"
@@ -964,7 +964,7 @@ export def "apps-apikeys delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -994,7 +994,7 @@ export def "apps-apipartners list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -1025,7 +1025,7 @@ export def "apps-attachments list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<attachable_id: string, attachable_type: string, file_url: string, id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -1054,7 +1054,7 @@ export def "apps-attachments create" [
   --attachable-id: int # Object id
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "attachable_id" $attachable_id "scalar") (serialize-qp "file" $file "scalar")] | flatten | str join "&"
@@ -1080,7 +1080,7 @@ export def "apps-attachments generate-sap-attestations" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/attachments"))
@@ -1107,7 +1107,7 @@ export def "apps-attachments-download download" [
   --ids: string # Array of attachments id
   --type: string@type-completer-1 # Type of attachment
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -1135,7 +1135,7 @@ export def "apps-attachments-sap-download download" [
   --ids: string # Array of attachments id
   --type: string@type-completer-1 # Type of attachment
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -1162,7 +1162,7 @@ export def "apps-attachments delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1189,7 +1189,7 @@ export def "apps-attachments get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1217,7 +1217,7 @@ export def "apps-attachments-pdf get-redirect-to-public-url" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --random: int # random number to force fresh pdf
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1249,7 +1249,7 @@ export def "apps-bankdetails list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<bic: string, iban: string, id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -1278,7 +1278,7 @@ export def "apps-bankdetails create" [
   --iban: string
   --bic: string
 ]: nothing -> record<bic: string, iban: string, id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar")] | flatten | str join "&"
@@ -1305,7 +1305,7 @@ export def "apps-bankdetails delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1332,7 +1332,7 @@ export def "apps-bankdetails get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bic: string, iban: string, id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1362,7 +1362,7 @@ export def "apps-bankdetails update" [
   --iban: string
   --bic: string
 ]: nothing -> record<bic: string, iban: string, id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1390,7 +1390,7 @@ export def "apps-banks delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --item-id: int
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "item_id" $item_id "scalar")] | flatten | str join "&"
@@ -1416,7 +1416,7 @@ export def "apps-banks list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/"))
@@ -1441,7 +1441,7 @@ export def "apps-banks-connect get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/banks/connect"))
@@ -1468,7 +1468,7 @@ export def "apps-banks-synchronize create" [
   --id: int # Optional item id to refresh. If set, triggers a refresh at Bankin before synchronizing transactions
   --is-incremential: oneof<nothing, bool> # The value 'false' triggers a non-incremental syncronization of the maximum possible duration. The value 'true' updates the transactions updated by Bankin since a certain date
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "is_incremential" $is_incremential "scalar")] | flatten | str join "&"
@@ -1495,7 +1495,7 @@ export def "apps-banks-funnel-edit get-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1522,7 +1522,7 @@ export def "apps-banks-funnel-sync sync-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1549,7 +1549,7 @@ export def "apps-banks-funnel-validate validate-url" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1577,7 +1577,7 @@ export def "apps-banks-select-accounts create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bank-account-ids: list<int> # List of enables accounts (nullable)
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1609,7 +1609,7 @@ export def "apps-cashflowsources list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -1641,7 +1641,7 @@ export def "apps-cashflowsources create" [
   --account-type: string@account-type-completer
   --parent-cashflow-source-id: int
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "identifiant" $identifiant "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "balance_amount" $balance_amount "scalar") (serialize-qp "account_type" $account_type "scalar") (serialize-qp "parent_cashflow_source_id" $parent_cashflow_source_id "scalar")] | flatten | str join "&"
@@ -1668,7 +1668,7 @@ export def "apps-cashflowsources delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1695,7 +1695,7 @@ export def "apps-cashflowsources get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1728,7 +1728,7 @@ export def "apps-cashflowsources update" [
   --account-type: string@account-type-completer
   --parent-cashflow-source-id: int
 ]: nothing -> record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1756,7 +1756,7 @@ export def "apps-contacts-merge create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --contacts: list # nullable
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "contacts" $contacts "multi")] | flatten | str join "&"
@@ -1785,7 +1785,7 @@ export def "apps-email-batch create" [
   --messages: list
   --need-copy-bcc: oneof<nothing, bool> # default: false
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "messages" $messages "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
@@ -1819,7 +1819,7 @@ export def "apps-email-document send" [
   --documents: list
   --need-copy-bcc: oneof<nothing, bool> # default: false
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "recipients" $recipients "multi") (serialize-qp "recipients_cc" $recipients_cc "multi") (serialize-qp "recipients_bcc" $recipients_bcc "multi") (serialize-qp "title" $title "scalar") (serialize-qp "body" $body "scalar") (serialize-qp "documents" $documents "multi") (serialize-qp "need_copy_bcc" $need_copy_bcc "scalar")] | flatten | str join "&"
@@ -1846,7 +1846,7 @@ export def "apps-establishments delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1873,7 +1873,7 @@ export def "apps-establishments get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<emails: list<string>, id: int, name: string, nic: string, phones: list<string>, place: record<administrative_area_level1: string, administrative_area_level2: string, administrative_area_level3: string, country: string, countryiso2: string, formatted_address: string, id: int, latitude: int, locality: string, longitude: int, postal_code: string, route: string, route2: string, street_number: string, sublocality: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1905,7 +1905,7 @@ export def "apps-establishments update" [
   --nic: string # Establishment number (french NIC) (nullable)
   --place: record
 ]: nothing -> record<emails: list<string>, id: int, name: string, nic: string, phones: list<string>, place: record<administrative_area_level1: string, administrative_area_level2: string, administrative_area_level3: string, country: string, countryiso2: string, formatted_address: string, id: int, latitude: int, locality: string, longitude: int, postal_code: string, route: string, route2: string, street_number: string, sublocality: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1937,7 +1937,7 @@ export def "apps-exports list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<created_at: string, entries_count: int, id: int, period_end: string, period_start: string, status: string, total_credit: int, total_debit: int, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -1964,7 +1964,7 @@ export def "apps-exports create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --until: string # format: date-time
 ]: nothing -> record<created_at: string, entries_count: int, id: int, period_end: string, period_start: string, status: string, total_credit: int, total_debit: int, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "until" $until "scalar")] | flatten | str join "&"
@@ -1990,7 +1990,7 @@ export def "apps-exports-acd-compta get-uuid" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<uuid: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/acd_compta"))
@@ -2019,7 +2019,7 @@ export def "apps-exports-acd-compta update-uuid" [
   --qp-base: string # Your ACD account number (3XXXX)
   --cnx: string # your CNX by ACD Compta
 ]: nothing -> record<uuid: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "login" $login "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "base" $qp_base "scalar") (serialize-qp "cnx" $cnx "scalar")] | flatten | str join "&"
@@ -2051,7 +2051,7 @@ export def "apps-exports-download download" [
   --since: string # Automatically find export entities since a date (format: date-time)
   --since-last: oneof<nothing, bool> # Automatically find the export entities since the last export downloaded
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "export_entities_ids" $export_entities_ids "multi") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "since" $since "scalar") (serialize-qp "since_last" $since_last "scalar")] | flatten | str join "&"
@@ -2077,7 +2077,7 @@ export def "apps-exports-months list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<created_at: string, entries_count: int, id: int, period_end: string, period_start: string, status: string, total_credit: int, total_debit: int, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/exports/months"))
@@ -2103,7 +2103,7 @@ export def "apps-exports delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2130,7 +2130,7 @@ export def "apps-exports get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, entries_count: int, id: int, period_end: string, period_start: string, status: string, total_credit: int, total_debit: int, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2161,7 +2161,7 @@ export def "apps-invoices list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list, author: record, balance: record, bank_detail: record, columns: record, contact_infos: record, content: list, currency: string, customer: any, discount: record, downpayment_request: record, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list, note: string, number: string, reference: string, tags: list, third_account: record, title: string, totals: record, validated_at: string, vat_exemption: record, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list, author: record, balance: record, bank_detail: record, columns: record, contact_infos: record, content: list, currency: string, customer: any, discount: int, downpayment_request: record, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list, note: string, number: string, reference: string, tags: list, third_account: record, title: string, totals: record, validated_at: string, vat_exemption: record, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -2207,7 +2207,7 @@ export def "apps-invoices create" [
   --payment-methods: string # Accepted methods of payment for this invoice. Methods comma separated (default: virement bancaire, chèque)
   --number-from-other-software: string # Invoices imported from another software are not counted in the numbering and are not locked
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayments" $downpayments "multi") (serialize-qp "downpayment_cash" $downpayment_cash "scalar") (serialize-qp "avoid_of" $avoid_of "scalar") (serialize-qp "delivered_at" $delivered_at "scalar") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "payment_methods" $payment_methods "scalar") (serialize-qp "number_from_other_software" $number_from_other_software "scalar")] | flatten | str join "&"
@@ -2234,7 +2234,7 @@ export def "apps-invoices-batch delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # List of invoices ID
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -2261,7 +2261,7 @@ export def "apps-invoices-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of invoices. With ID for update, without for insert
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -2289,7 +2289,7 @@ export def "apps-invoices-download download" [
   --ids: list<int> # Array of invoices id
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
@@ -2316,7 +2316,7 @@ export def "apps-invoices-fresh create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # Array of invoices id
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -2343,7 +2343,7 @@ export def "apps-invoices-nextnumber get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --written-at: string # Write date (format: date-time)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "written_at" $written_at "scalar")] | flatten | str join "&"
@@ -2371,7 +2371,7 @@ export def "apps-invoices-statistics get" [
   --search: string # A string to search for in objects.
   --filters: list # List of filters to apply to the query.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
@@ -2398,7 +2398,7 @@ export def "apps-invoices delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2425,7 +2425,7 @@ export def "apps-invoices get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2471,7 +2471,7 @@ export def "apps-invoices update" [
   --payment-period: int # Days count before considere this invoice as late (nullable, default: 30)
   --payment-methods: string # Accepted methods of payment for this invoice. Methods comma separated (default: virement bancaire, chèque)
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2500,7 +2500,7 @@ export def "apps-invoices-attach delete-detach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: int # File to detach
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2529,7 +2529,7 @@ export def "apps-invoices-attach attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2557,7 +2557,7 @@ export def "apps-invoices-avoid create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2584,7 +2584,7 @@ export def "apps-invoices-duplicate create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2612,7 +2612,7 @@ export def "apps-invoices-finalize finalize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --force-date: oneof<nothing, bool> # Automatically updates the date if earlier than the last invoice
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2641,7 +2641,7 @@ export def "apps-invoices-pdf get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2672,7 +2672,7 @@ export def "apps-invoices-preview-jpg get" [
   --disable-cache: oneof<nothing, bool> # Force the regeneration of the preview (nullable)
   --base64: oneof<nothing, bool> # Get the image in base64 (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2701,7 +2701,7 @@ export def "apps-invoices-tag untag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Tag to delete
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2730,7 +2730,7 @@ export def "apps-invoices-tag tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Tag to add
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2745,7 +2745,7 @@ export def "apps-invoices-tag tag" [
 #
 # POST /apps/{appId}/invoices/{id}/updatestatus
 # operationId: app.documents.sales.invoices.updatestatus
-export def "apps-invoices-updatestatus create" [
+export def "apps-invoices-update-status update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2759,7 +2759,7 @@ export def "apps-invoices-updatestatus create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer # Status to update
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2786,7 +2786,7 @@ export def "apps-logs-autoreconcile delete-clear" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/"))
@@ -2816,7 +2816,7 @@ export def "apps-logs-autoreconcile list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -2842,7 +2842,7 @@ export def "apps-logs-autoreconcile start" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/logs/autoreconcile/"))
@@ -2867,7 +2867,7 @@ export def "apps-organization get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: record<admin: record, config: list, hostname_alias: string, id: int, last_access_at: string, last_user: record, organization: any, policies: list, subscription: record, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/organization"))
@@ -2914,7 +2914,7 @@ export def "apps-organization update" [
   --sap-date-registration: string # NOVA agreement/registration date (nullable)
   --capital: int
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string, app: record<admin: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, config: list<any>, hostname_alias: string, id: int, last_access_at: string, last_user: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, organization: any, policies: list<record>, subscription: record<access_level: string, id: int, payment_card: string, payment_failed_count: int, period_ending_date: string, period_remaining_days: int, period_starting_date: string, plan_color: string, plan_name: string, status: string, stripe_customer_id: string, stripe_plan_id: string, stripe_subscription_id: string>, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "trade_directory_registration" $trade_directory_registration "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "industry" $industry "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "sap_number_registration" $sap_number_registration "scalar") (serialize-qp "sap_activities" $sap_activities "scalar") (serialize-qp "sap_date_registration" $sap_date_registration "scalar") (serialize-qp "capital" $capital "scalar")] | flatten | str join "&"
@@ -2944,7 +2944,7 @@ export def "apps-organizations list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -2989,7 +2989,7 @@ export def "apps-organizations create" [
   --capital: int
   --metadata: list # nullable
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "billing_name" $billing_name "scalar") (serialize-qp "logo" $logo "scalar") (serialize-qp "legal_form" $legal_form "scalar") (serialize-qp "country_iso2" $country_iso2 "scalar") (serialize-qp "founding_date" $founding_date "scalar") (serialize-qp "founding_location" $founding_location "scalar") (serialize-qp "dissolution_date" $dissolution_date "scalar") (serialize-qp "vat_system" $vat_system "scalar") (serialize-qp "closeaccounting_period" $closeaccounting_period "scalar") (serialize-qp "national_id" $national_id "scalar") (serialize-qp "vat_id" $vat_id "scalar") (serialize-qp "code_naf" $code_naf "scalar") (serialize-qp "number_of_employees" $number_of_employees "scalar") (serialize-qp "slogan" $slogan "scalar") (serialize-qp "rcs" $rcs "scalar") (serialize-qp "greffe" $greffe "scalar") (serialize-qp "capital" $capital "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
@@ -3016,7 +3016,7 @@ export def "apps-organizations-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of invoices. With ID for update, without for insert
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -3043,7 +3043,7 @@ export def "apps-organizations delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3070,7 +3070,7 @@ export def "apps-organizations get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3116,7 +3116,7 @@ export def "apps-organizations update" [
   --capital: int
   --metadata: list # nullable
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3144,7 +3144,7 @@ export def "apps-organizations-restore get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3175,7 +3175,7 @@ export def "apps-payments list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<amount: int, date: string, document: any, document_type: string, id: int, source: string, transaction: record<amount: int, author: record, cashflow_source: record, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list, method: int, received_at: string, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -3201,7 +3201,7 @@ export def "apps-payments-recipe-book get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/payments/recipe_book"))
@@ -3227,7 +3227,7 @@ export def "apps-payments delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3254,7 +3254,7 @@ export def "apps-payments get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: int, date: string, document: any, document_type: string, id: int, source: string, transaction: record<amount: int, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3284,7 +3284,7 @@ export def "apps-persons list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -3315,7 +3315,7 @@ export def "apps-persons create" [
   --picture: string
   --metadata: list # nullable
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "picture" $picture "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
@@ -3342,7 +3342,7 @@ export def "apps-persons-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of persons. With ID for update, without for insert
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -3369,7 +3369,7 @@ export def "apps-persons delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3396,7 +3396,7 @@ export def "apps-persons get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3428,7 +3428,7 @@ export def "apps-persons update" [
   --picture: string
   --metadata: list # nullable
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3456,7 +3456,7 @@ export def "apps-persons-restore get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3482,7 +3482,7 @@ export def "apps-ping ping" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/ping"))
@@ -3512,7 +3512,7 @@ export def "apps-productcategory list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<id: int, image: any, name: string, parent: any, products: record<accounting_number: string, amount_accurately: int, category: any, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list, name: string, quantity_name: string, reference: string, tags: list, unity: string, vat_percent: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -3541,7 +3541,7 @@ export def "apps-productcategory create" [
   --image: string
   --parent-category-id: int
 ]: nothing -> record<id: int, image: any, name: string, parent: any, products: record<accounting_number: string, amount_accurately: int, category: any, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "parent_category_id" $parent_category_id "scalar")] | flatten | str join "&"
@@ -3568,7 +3568,7 @@ export def "apps-productcategory delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3595,7 +3595,7 @@ export def "apps-productcategory get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, image: any, name: string, parent: any, products: record<accounting_number: string, amount_accurately: int, category: any, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3625,7 +3625,7 @@ export def "apps-productcategory update" [
   --image: string
   --parent-category-id: int
 ]: nothing -> record<id: int, image: any, name: string, parent: any, products: record<accounting_number: string, amount_accurately: int, category: any, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3657,7 +3657,7 @@ export def "apps-products list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -3697,7 +3697,7 @@ export def "apps-products create" [
   --category-id: int
   --metadata: list # nullable
 ]: nothing -> record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_accurately" $amount_accurately "scalar") (serialize-qp "vat_percent" $vat_percent "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "lifetime" $lifetime "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "quantity_name" $quantity_name "scalar") (serialize-qp "reference" $reference "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
@@ -3724,7 +3724,7 @@ export def "apps-products-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of products. With ID for update, without for insert
 ]: nothing -> record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -3751,7 +3751,7 @@ export def "apps-products delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3778,7 +3778,7 @@ export def "apps-products get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3819,7 +3819,7 @@ export def "apps-products update" [
   --category-id: int
   --metadata: list # nullable
 ]: nothing -> record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3848,7 +3848,7 @@ export def "apps-products-attach delete-detach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: int # File to detach
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3877,7 +3877,7 @@ export def "apps-products-attach attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3909,7 +3909,7 @@ export def "apps-productstocks list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list, name: string, quantity_name: string, reference: string, tags: list, unity: string, vat_percent: int>, product_stocks_movements: list<record>, purchase: record<account: record, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record, supplier_name: string, tags: list, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: list<record>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -3944,7 +3944,7 @@ export def "apps-productstocks create" [
   --cost-amount: int
   --use-duration: int # Use duration in seconds
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "purchase_id" $purchase_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "bar_code" $bar_code "scalar") (serialize-qp "location" $location "scalar") (serialize-qp "entered_at" $entered_at "scalar") (serialize-qp "expired_at" $expired_at "scalar") (serialize-qp "cost_amount" $cost_amount "scalar") (serialize-qp "use_duration" $use_duration "scalar")] | flatten | str join "&"
@@ -3971,7 +3971,7 @@ export def "apps-productstocks delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3998,7 +3998,7 @@ export def "apps-productstocks get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4032,7 +4032,7 @@ export def "apps-productstocks update" [
   --cost-amount: int
   --use-duration: int # Use duration in seconds
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4062,7 +4062,7 @@ export def "apps-productstocks-destruct create" [
   --quantity: int # Quantity to destruct
   --comment: string
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4094,7 +4094,7 @@ export def "apps-productstocks-rental-back create" [
   --use-duration: int # Usage duration in seconds (default: 0)
   --comment: string
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4125,7 +4125,7 @@ export def "apps-productstocks-rental-exit create" [
   --future-return-date: string # format: date-time
   --comment: string
 ]: nothing -> record<bar_code: int, cost_amount: int, entered_at: int, expired_at: int, id: int, initial_quantity: int, location: int, product: record<accounting_number: string, amount_accurately: int, category: record<id: int, image: any, name: string, parent: any, products: any>, currency: string, description: string, id: int, image: any, intangible: bool, lifetime: int, metadata: list<any>, name: string, quantity_name: string, reference: string, tags: list<string>, unity: string, vat_percent: int>, product_stocks_movements: table<description: string, future_return_date: string, id: int, invoice: record, moved_at: string, product_stock: any, quantity: int, type: string, use_duration: int>, purchase: record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string>, quantity_in: int, quantity_out: int, sales_lines: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: any, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, use_duration: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4158,7 +4158,7 @@ export def "apps-purchases list" [
   --order: list # List in order of priority of the variables by which to order the result.
   --expand: list<string>
 ]: nothing -> table<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi") (serialize-qp "expand" $expand "multi")] | flatten | str join "&"
@@ -4202,7 +4202,7 @@ export def "apps-purchases create" [
   --payment-swift: string # nullable
   --payment-iban: string # nullable
 ]: nothing -> record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "invoice" $invoice "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "supplier_organization_id" $supplier_organization_id "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "supplier_name" $supplier_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "amount_tax" $amount_tax "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "vat_detail" $vat_detail "multi") (serialize-qp "billed_at" $billed_at "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "tags" $tags "multi") (serialize-qp "vat_repayment" $vat_repayment "scalar") (serialize-qp "payment_deadline_at" $payment_deadline_at "scalar") (serialize-qp "payment_account_number" $payment_account_number "scalar") (serialize-qp "payment_routing_number" $payment_routing_number "scalar") (serialize-qp "payment_swift" $payment_swift "scalar") (serialize-qp "payment_iban" $payment_iban "scalar")] | flatten | str join "&"
@@ -4229,7 +4229,7 @@ export def "apps-purchases-batch delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # List of purchases ID
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -4256,7 +4256,7 @@ export def "apps-purchases-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of purchases. With ID for update, without for insert
 ]: nothing -> record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -4283,7 +4283,7 @@ export def "apps-purchases-download download" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # Array of purchases id
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -4311,7 +4311,7 @@ export def "apps-purchases-statistics get" [
   --search: string # A string to search for in objects.
   --filters: list # List of filters to apply to the query.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
@@ -4338,7 +4338,7 @@ export def "apps-purchases delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4365,7 +4365,7 @@ export def "apps-purchases get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4410,7 +4410,7 @@ export def "apps-purchases update" [
   --payment-iban: string # nullable
   --purchase-lines: list
 ]: nothing -> record<account: record<accounting_number: string, description: string, editable: bool, id: int, is_associate: bool, is_cashflow: bool, is_purchase: bool, is_sales: bool, is_various: bool, journalcode: string, keywords: string, name: string, need_charge: bool, need_employee: bool, need_invoice: bool, technical_name: string>, accounted_at: string, amount: int, amount_net_foreign_currency: int, amount_tax: int, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, billed_at: string, comment: string, completed_at: string, foreign_currency: string, id: int, is_late: bool, md5: string, paid_at: string, payment_account_number: string, payment_deadline_at: string, payment_iban: string, payment_routing_number: string, payment_swift: string, picture: string, status: string, supplier: record<billing_name: string, capital: int, closeaccounting_period: string, code_naf: string, country_iso2: string, dissolution_date: string, establishments: list<record>, founding_date: string, founding_location: string, greffe: string, id: int, legal_form: string, logo: string, name: string, national_id: string, number_of_employees: string, rcs: string, slogan: string, tax_id: string, vat_id: string, vat_system: string>, supplier_name: string, tags: list<string>, title: string, vat_detail: record, vat_repayment: string, will_be_late_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4439,7 +4439,7 @@ export def "apps-purchases-attach delete-detach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: int # File to detach
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4468,7 +4468,7 @@ export def "apps-purchases-attach attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4496,7 +4496,7 @@ export def "apps-purchases-original get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4523,7 +4523,7 @@ export def "apps-purchases-preview-jpg get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4551,7 +4551,7 @@ export def "apps-purchases-tag untag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Tag to delete
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4580,7 +4580,7 @@ export def "apps-purchases-tag tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Tag to add
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4608,7 +4608,7 @@ export def "apps-purchases-thumbnail-jpg get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4622,7 +4622,7 @@ export def "apps-purchases-thumbnail-jpg get" [
 #
 # POST /apps/{appId}/purchases/{id}/updatestatus
 # operationId: app.documents.purchases.purchases.updatestatus
-export def "apps-purchases-updatestatus create" [
+export def "apps-purchases-update-status update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4636,7 +4636,7 @@ export def "apps-purchases-updatestatus create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-1 # Status to update
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4668,7 +4668,7 @@ export def "apps-quotes list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -4710,7 +4710,7 @@ export def "apps-quotes create" [
   --commercialvalidity-deadline: string # nullable, format: date-time
   --number-from-other-software: string # Invoices imported from another software are not counted in the numbering and are not locked
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "third_account" $third_account "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "reference" $reference "scalar") (serialize-qp "discount" $discount "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "downpayment_request" $downpayment_request "multi") (serialize-qp "commercialvalidity_deadline" $commercialvalidity_deadline "scalar") (serialize-qp "number_from_other_software" $number_from_other_software "scalar")] | flatten | str join "&"
@@ -4737,7 +4737,7 @@ export def "apps-quotes-batch delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # List of quotes ID
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -4764,7 +4764,7 @@ export def "apps-quotes-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of quotes. With ID for update, without for insert
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -4792,7 +4792,7 @@ export def "apps-quotes-download download" [
   --ids: list<int> # Array of quotes id
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "template" $template "scalar")] | flatten | str join "&"
@@ -4819,7 +4819,7 @@ export def "apps-quotes-fresh create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # Array of quotes id
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -4846,7 +4846,7 @@ export def "apps-quotes-invoice create-by-app-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # Array of quotes id
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -4873,7 +4873,7 @@ export def "apps-quotes-nextnumber get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --written-at: string # Write date (format: date-time)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "written_at" $written_at "scalar")] | flatten | str join "&"
@@ -4901,7 +4901,7 @@ export def "apps-quotes-statistics get" [
   --search: string # A string to search for in objects.
   --filters: list # List of filters to apply to the query.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi")] | flatten | str join "&"
@@ -4928,7 +4928,7 @@ export def "apps-quotes delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4955,7 +4955,7 @@ export def "apps-quotes get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4997,7 +4997,7 @@ export def "apps-quotes update" [
   --downpayment-request: record
   --commercialvalidity-deadline: string # nullable, format: date-time
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5026,7 +5026,7 @@ export def "apps-quotes-attach delete-detach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: int # File to detach
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5055,7 +5055,7 @@ export def "apps-quotes-attach attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5084,7 +5084,7 @@ export def "apps-quotes-downpayment create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --percent: int # Percentage of downpayment in cents (100 = 1%)
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5112,7 +5112,7 @@ export def "apps-quotes-duplicate create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5139,7 +5139,7 @@ export def "apps-quotes-finalize finalize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5153,7 +5153,7 @@ export def "apps-quotes-finalize finalize" [
 #
 # POST /apps/{appId}/quotes/{id}/invoice
 # operationId: app.documents.sales.quotes.invoice
-export def "apps-quotes-invoice create-by-app-id-id" [
+export def "apps-quotes-invoice create-by-app-id-1" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5166,7 +5166,7 @@ export def "apps-quotes-invoice create-by-app-id-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5194,7 +5194,7 @@ export def "apps-quotes-pdf get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5223,7 +5223,7 @@ export def "apps-quotes-preview-jpg get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --template: string@template-completer # Template name to generate document (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5252,7 +5252,7 @@ export def "apps-quotes-situation-invoice create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --progress: int # Percentage of progress in cents (100 = 1%)
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5281,7 +5281,7 @@ export def "apps-quotes-tag untag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Tag to delete
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5310,7 +5310,7 @@ export def "apps-quotes-tag tag" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tag: string # Tag to add
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5325,7 +5325,7 @@ export def "apps-quotes-tag tag" [
 #
 # POST /apps/{appId}/quotes/{id}/updatestatus
 # operationId: app.documents.sales.quotes.updatestatus
-export def "apps-quotes-updatestatus create" [
+export def "apps-quotes-update-status update" [
   app_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5339,7 +5339,7 @@ export def "apps-quotes-updatestatus create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --status: string@status-completer-2 # Status to update
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5397,7 +5397,7 @@ export def "apps-reconcile delete-unreconcile" [
   --type: string@type-completer-4 # Object to unpay with this payment
   --id: int # Transaction, sales invoice or purchase invoice id to unreconcile
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -5429,7 +5429,7 @@ export def "apps-reconcile create" [
   --paid-at: string # Payment date for cashdesk or waiting entries (format: date-time)
   --rule: record # Create an auto-reconciliation rule
 ]: nothing -> record<amount: int, date: string, document: any, document_type: string, id: int, source: string, transaction: record<amount: int, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "replace_all" $replace_all "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "movements" $movements "multi") (serialize-qp "paid_at" $paid_at "scalar") (serialize-qp "rule" $rule "multi")] | flatten | str join "&"
@@ -5487,7 +5487,7 @@ export def "apps-recurringinvoices list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list<record>, saving_status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -5534,7 +5534,7 @@ export def "apps-recurringinvoices create" [
   --details: string # nullable
   --orders-plan: list # nullable
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: table<end_at: string, model: int>, saving_status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "contact_infos" $contact_infos "multi") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi") (serialize-qp "currency" $currency "scalar") (serialize-qp "legal_notice" $legal_notice "scalar") (serialize-qp "bank_details_id" $bank_details_id "scalar") (serialize-qp "vat_exemption" $vat_exemption "multi") (serialize-qp "tags" $tags "multi") (serialize-qp "metadata" $metadata "multi") (serialize-qp "payment_period" $payment_period "scalar") (serialize-qp "next_invoice_at" $next_invoice_at "scalar") (serialize-qp "end_at" $end_at "scalar") (serialize-qp "frequency_count" $frequency_count "scalar") (serialize-qp "frequency_duration" $frequency_duration "scalar") (serialize-qp "discount" $discount "scalar") (serialize-qp "discount_mode" $discount_mode "scalar") (serialize-qp "discount_start_at" $discount_start_at "scalar") (serialize-qp "discount_end_at" $discount_end_at "scalar") (serialize-qp "details" $details "scalar") (serialize-qp "orders_plan" $orders_plan "multi")] | flatten | str join "&"
@@ -5561,7 +5561,7 @@ export def "apps-recurringinvoices-batch delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int> # List of RecurringInvoice ID
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -5588,7 +5588,7 @@ export def "apps-recurringinvoices-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of RecurringInvoice. With ID for update, without for insert
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: table<end_at: string, model: int>, saving_status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -5615,7 +5615,7 @@ export def "apps-recurringinvoices-periods get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Date of the invoice (nullable, format: date-time)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"
@@ -5642,7 +5642,7 @@ export def "apps-recurringinvoices delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5669,7 +5669,7 @@ export def "apps-recurringinvoices get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: table<end_at: string, model: int>, saving_status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5717,7 +5717,7 @@ export def "apps-recurringinvoices update" [
   --details: string # nullable
   --orders-plan: list # nullable
 ]: nothing -> record<attachments: list<string>, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, currency: string, customer: any, discount: int, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record<by_account: list, by_vat: list, total: int>, taxes: record<total: int, vat: record>>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: table<end_at: string, model: int>, saving_status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5746,7 +5746,7 @@ export def "apps-recurringinvoices-plan get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --until: string # Until date to generate plan (format: date-time)
 ]: nothing -> table<attachments: list<string>, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, balance: record<completed: bool, due: int, meaning: string, paid: int, remaining: int>, bank_detail: record<bic: string, iban: string, id: int, name: string>, columns: record<amount: string, designation: string, discount: string, due: string, info_total_quantity: string, quantity: string, quantity_name: string, subtotal: string, vat_percent: string>, contact_infos: record<address: string, address2: string, details: string, id: int, location: string, name: string, type: string>, content: list<record>, currency: string, customer: any, discount: record<amount: int, name: string, percent: int, value: int>, downpayment_request: record<amount: int, percent: int>, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list<any>, note: string, number: string, reference: string, tags: list<any>, third_account: record<address: string, id: int, location: string, name: string, type: string>, title: string, totals: record<due: int, subtotal: record, taxes: record>, validated_at: string, vat_exemption: record<article: string, exempted: bool, reason: string>, written_at: string, avoid_of: any, delivered_at: string, downpayments: list<any>, invoice_of: record<attachments: list, author: record, balance: record, bank_detail: record, columns: record, contact_infos: record, content: list, currency: string, customer: any, discount: record, downpayment_request: record, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list, note: string, number: string, reference: string, tags: list, third_account: record, title: string, totals: record, validated_at: string, vat_exemption: record, written_at: string, commercialvalidity_deadline: string, status: string>, paid_at: string, payment_methods: string, payment_period: int, related_recurring_invoice: record<attachments: list, author: record, balance: record, bank_detail: record, columns: record, contact_infos: record, content: list, currency: string, customer: any, discount: int, downpayment_request: record, email_sent_at: string, id: int, imported_at: string, legal_notice: string, metadata: list, note: string, number: string, reference: string, tags: list, third_account: record, title: string, totals: record, validated_at: string, vat_exemption: record, written_at: string, discount_end_at: string, discount_mode: string, discount_start_at: string, end_at: string, frequency_count: int, frequency_duration: string, next_invoice_at: string, orders_plan: list, saving_status: string>, sepa_direct_debit_exported_at: string, status: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5777,7 +5777,7 @@ export def "apps-relationships list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<accounting_infos: record<balance_initial_amount: int, customer_id: string, reference: string, supplier_id: string>, id: int, importance_level: int, is_customer: bool, is_notifying: bool, is_prospect: bool, is_supplier: bool, metadata: list<any>, note: string, rating: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -5804,7 +5804,7 @@ export def "apps-relationships get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accounting_infos: record<balance_initial_amount: int, customer_id: string, reference: string, supplier_id: string>, id: int, importance_level: int, is_customer: bool, is_notifying: bool, is_prospect: bool, is_supplier: bool, metadata: list<any>, note: string, rating: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5844,7 +5844,7 @@ export def "apps-relationships update" [
   --details: string # nullable
   --metadata: list # nullable
 ]: nothing -> record<accounting_infos: record<balance_initial_amount: int, customer_id: string, reference: string, supplier_id: string>, id: int, importance_level: int, is_customer: bool, is_notifying: bool, is_prospect: bool, is_supplier: bool, metadata: list<any>, note: string, rating: int> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5873,7 +5873,7 @@ export def "apps-relationships-attach delete-detach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: int # File to detach
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5902,7 +5902,7 @@ export def "apps-relationships-attach attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5929,7 +5929,7 @@ export def "apps-reset reset" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/reset"))
@@ -5959,7 +5959,7 @@ export def "apps-rules list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<conditions: list<list>, id: int, on_event: string, parameter: string, priority: int, value: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -5990,7 +5990,7 @@ export def "apps-rules create" [
   --value: string # e.g. 64
   --priority: int
 ]: nothing -> record<conditions: list<list<string>>, id: int, on_event: string, parameter: string, priority: int, value: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "conditions" $conditions "multi") (serialize-qp "on_event" $on_event "scalar") (serialize-qp "parameter" $parameter "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "priority" $priority "scalar")] | flatten | str join "&"
@@ -6017,7 +6017,7 @@ export def "apps-rules-execute-on create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --model: string # e.g. transaction
 ]: nothing -> record<conditions: list<list<string>>, id: int, on_event: string, parameter: string, priority: int, value: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "model" $model "scalar")] | flatten | str join "&"
@@ -6044,7 +6044,7 @@ export def "apps-rules delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6071,7 +6071,7 @@ export def "apps-rules get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<conditions: list<list<string>>, id: int, on_event: string, parameter: string, priority: int, value: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6103,7 +6103,7 @@ export def "apps-rules update" [
   --value: string # e.g. 64
   --priority: int
 ]: nothing -> record<conditions: list<list<string>>, id: int, on_event: string, parameter: string, priority: int, value: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6135,7 +6135,7 @@ export def "apps-salesdocumentmodels list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<id: int, json: list<record>, name: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -6165,7 +6165,7 @@ export def "apps-salesdocumentmodels create" [
   --content: list
   --columns: record # List columns to display
 ]: nothing -> record<id: int, json: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, name: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "title" $title "scalar") (serialize-qp "content" $content "multi") (serialize-qp "columns" $columns "multi")] | flatten | str join "&"
@@ -6192,7 +6192,7 @@ export def "apps-salesdocumentmodels delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6219,7 +6219,7 @@ export def "apps-salesdocumentmodels get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: int, json: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, name: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6250,7 +6250,7 @@ export def "apps-salesdocumentmodels update" [
   --content: list
   --columns: record # List columns to display
 ]: nothing -> record<id: int, json: table<account: record, action: string, amount: int, amount_accurately: int, amount_with_taxes: bool, detail: string, discount: record, document: any, id: int, metadata: list, product: record, quantity: float, stock: record, style: record, total_quantity: string, totals: record, unity: string, vat_percent: int>, name: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6282,7 +6282,7 @@ export def "apps-sepamandates list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, bic: string, created_at: string, customer: any, customer_name: string, electronic_signature: string, iban: string, id: int, is_first: int, last_debit_amount: int, last_debit_at: string, last_debit_id: int, logs_sepa_direct_debits: string, mandate_id: int, old_mandate_id: int, signed_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -6318,7 +6318,7 @@ export def "apps-sepamandates create" [
   --bic: string
   --is-first: oneof<nothing, bool>
 ]: nothing -> record<author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, bic: string, created_at: string, customer: any, customer_name: string, electronic_signature: string, iban: string, id: int, is_first: int, last_debit_amount: int, last_debit_at: string, last_debit_id: int, logs_sepa_direct_debits: string, mandate_id: int, old_mandate_id: int, signed_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "customer_organization_id" $customer_organization_id "scalar") (serialize-qp "customer_person_id" $customer_person_id "scalar") (serialize-qp "old_mandate_id" $old_mandate_id "scalar") (serialize-qp "mandate_id" $mandate_id "scalar") (serialize-qp "signed_at" $signed_at "scalar") (serialize-qp "electronic_signature" $electronic_signature "scalar") (serialize-qp "customer_name" $customer_name "scalar") (serialize-qp "iban" $iban "scalar") (serialize-qp "bic" $bic "scalar") (serialize-qp "is_first" $is_first "scalar")] | flatten | str join "&"
@@ -6345,7 +6345,7 @@ export def "apps-sepamandates-credittransfer get-preview" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<int>
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -6377,7 +6377,7 @@ export def "apps-sepamandates-credittransfer download" [
   --debtor-bic: string
   --btch-bookg: int
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "ids" $ids "multi") (serialize-qp "amounts" $amounts "multi") (serialize-qp "debtor_name" $debtor_name "scalar") (serialize-qp "debtor_iban" $debtor_iban "scalar") (serialize-qp "debtor_bic" $debtor_bic "scalar") (serialize-qp "btchBookg" $btch_bookg "scalar")] | flatten | str join "&"
@@ -6404,7 +6404,7 @@ export def "apps-sepamandates-directdebit get-preview" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --invoices-ids: list<int>
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi")] | flatten | str join "&"
@@ -6437,7 +6437,7 @@ export def "apps-sepamandates-directdebit download" [
   --creditor-ics: string
   --date: string # format: date-time
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi") (serialize-qp "amounts" $amounts "multi") (serialize-qp "creditor_name" $creditor_name "scalar") (serialize-qp "creditor_iban" $creditor_iban "scalar") (serialize-qp "creditor_bic" $creditor_bic "scalar") (serialize-qp "creditor_ics" $creditor_ics "scalar") (serialize-qp "date" $date "scalar")] | flatten | str join "&"
@@ -6464,7 +6464,7 @@ export def "apps-sepamandates delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6491,7 +6491,7 @@ export def "apps-sepamandates get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, bic: string, created_at: string, customer: any, customer_name: string, electronic_signature: string, iban: string, id: int, is_first: int, last_debit_amount: int, last_debit_at: string, last_debit_id: int, logs_sepa_direct_debits: string, mandate_id: int, old_mandate_id: int, signed_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6528,7 +6528,7 @@ export def "apps-sepamandates update" [
   --bic: string
   --is-first: oneof<nothing, bool>
 ]: nothing -> record<author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, bic: string, created_at: string, customer: any, customer_name: string, electronic_signature: string, iban: string, id: int, is_first: int, last_debit_amount: int, last_debit_at: string, last_debit_id: int, logs_sepa_direct_debits: string, mandate_id: int, old_mandate_id: int, signed_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6631,7 +6631,7 @@ export def "apps-settings get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "key" $key "scalar")] | flatten | str join "&"
@@ -6660,7 +6660,7 @@ export def "apps-settings update" [
   --key: string
   --value: string # Value can be a primitive or a file
 ]: nothing -> record<code: int, message: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "settings" $settings "multi") (serialize-qp "key" $key "scalar") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
@@ -6691,7 +6691,7 @@ export def "apps-signature create" [
   --lastname: string
   --phone: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "documentId" $document_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "phone" $phone "scalar")] | flatten | str join "&"
@@ -6732,7 +6732,7 @@ export def "apps-statistics-charts get" [
   --filters: record
   --show-details: oneof<nothing, bool> # Recovers the details of the calculations
 ]: nothing -> list<record> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -6761,7 +6761,7 @@ export def "apps-statistics-timetable-purchases get" [
   --detailed: oneof<nothing, bool> # default: false
   --groups: list # default: [ [-730, -30], [-30, -1], [-1, 7], [7, 15], [15, 30], [30, 730] ]
 ]: nothing -> table<balance: int, count: int, data: list<record>, interval: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "groups" $groups "multi")] | flatten | str join "&"
@@ -6789,7 +6789,7 @@ export def "apps-statistics-timetable-sales get" [
   --detailed: oneof<nothing, bool> # default: false
   --groups: list # default: [ [-730, -30], [-30, -1], [-1, 7], [7, 15], [15, 30], [30, 730] ]
 ]: nothing -> table<balance: int, count: int, data: list<record>, interval: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "groups" $groups "multi")] | flatten | str join "&"
@@ -6819,7 +6819,7 @@ export def "apps-statistics-vat get" [
   --period: string@period-completer-1
   --end-at: string # format: date-time
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "detailed" $detailed "scalar") (serialize-qp "start_at" $start_at "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "end_at" $end_at "scalar")] | flatten | str join "&"
@@ -6845,7 +6845,7 @@ export def "apps-subscription-anchordate create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/anchordate"))
@@ -6870,7 +6870,7 @@ export def "apps-subscription-checkout-add-source create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/checkout_add_source"))
@@ -6896,7 +6896,7 @@ export def "apps-subscription-coupon create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --code: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
@@ -6922,7 +6922,7 @@ export def "apps-subscription-extend-trial create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/extend_trial"))
@@ -6948,7 +6948,7 @@ export def "apps-subscription-extra enable" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($stripe_plan | is-empty) { error make --unspanned { msg: "path parameter 'stripe_plan' must be non-empty" } }
@@ -6974,7 +6974,7 @@ export def "apps-subscription-pay-all list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/pay_all"))
@@ -6999,7 +6999,7 @@ export def "apps-subscription-plan delete-end" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plan"))
@@ -7024,7 +7024,7 @@ export def "apps-subscription-plan get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<extras: list<string>, plans: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plan"))
@@ -7049,7 +7049,7 @@ export def "apps-subscription-plans list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<extras: list<string>, plans: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/subscription/plans"))
@@ -7076,7 +7076,7 @@ export def "apps-subscription-plans get-upcoming" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stripe-coupon: string # Stripe coupon id to simulate invoice (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($stripe_plan | is-empty) { error make --unspanned { msg: "path parameter 'stripe_plan' must be non-empty" } }
@@ -7106,7 +7106,7 @@ export def "apps-subscription-plans create-pay" [
   --stripe-source: string # Stripe source to pay (nullable)
   --stripe-coupon: string # Stripe coupon id to apply (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($stripe_plan | is-empty) { error make --unspanned { msg: "path parameter 'stripe_plan' must be non-empty" } }
@@ -7135,7 +7135,7 @@ export def "apps-subscription-plans-checkout get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stripe-coupon: string # Stripe coupon id to simulate invoice (nullable)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($stripe_plan | is-empty) { error make --unspanned { msg: "path parameter 'stripe_plan' must be non-empty" } }
@@ -7163,7 +7163,7 @@ export def "apps-subscription-source delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stripe-source: string # Stripe source to pay
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
@@ -7190,7 +7190,7 @@ export def "apps-subscription-source create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stripe-source: string # Stripe source to pay
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
@@ -7217,7 +7217,7 @@ export def "apps-subscription-source-default update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stripe-source: string # Stripe source to set as default source
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "stripe_source" $stripe_source "scalar")] | flatten | str join "&"
@@ -7244,7 +7244,7 @@ export def "apps-tags get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --object: string@object-completer-1
 ]: nothing -> list<record> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "object" $object "scalar")] | flatten | str join "&"
@@ -7270,7 +7270,7 @@ export def "apps-templates list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates"))
@@ -7295,7 +7295,7 @@ export def "apps-templates create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates"))
@@ -7321,7 +7321,7 @@ export def "apps-templates-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of templates. With ID for update, without for insert
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -7347,7 +7347,7 @@ export def "apps-templates-default get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/templates/default"))
@@ -7373,7 +7373,7 @@ export def "apps-templates get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7400,7 +7400,7 @@ export def "apps-templates update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7431,7 +7431,7 @@ export def "apps-transactions list" [
   --filters: list # List of filters to apply to the query.
   --order: list # List in order of priority of the variables by which to order the result.
 ]: nothing -> table<amount: int, author: record<civility: string, establishments: list, firstname: string, id: int, image: string, lastname: string, metadata: list, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "filters" $filters "multi") (serialize-qp "order" $order "multi")] | flatten | str join "&"
@@ -7467,7 +7467,7 @@ export def "apps-transactions create" [
   --label: string
   --details: string
 ]: nothing -> record<amount: int, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "contact_organization_id" $contact_organization_id "scalar") (serialize-qp "contact_person_id" $contact_person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "cashflow_source_id" $cashflow_source_id "scalar") (serialize-qp "contact_name" $contact_name "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "method" $method "scalar") (serialize-qp "received_at" $received_at "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "details" $details "scalar")] | flatten | str join "&"
@@ -7494,7 +7494,7 @@ export def "apps-transactions-batch create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --data: list # List of transactions. With ID for update, without for insert
 ]: nothing -> record<amount: int, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "data" $data "multi")] | flatten | str join "&"
@@ -7521,7 +7521,7 @@ export def "apps-transactions delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7548,7 +7548,7 @@ export def "apps-transactions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<amount: int, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7585,7 +7585,7 @@ export def "apps-transactions update" [
   --label: string
   --details: string
 ]: nothing -> record<amount: int, author: record<civility: string, establishments: list<record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string>, cashflow_source: record<account_type: string, balance_amount: int, created_at: string, disabled: int, id: int, identifiant: string, name: string, parent_cashflow_source: any, status: string, type: string, updated_at: string>, contact: any, created_at: string, deleted_at: string, details: int, id: int, label: int, lettered_at: string, metadata: list<any>, method: int, received_at: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7614,7 +7614,7 @@ export def "apps-transactions-attach delete-detach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: int # File to detach
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7643,7 +7643,7 @@ export def "apps-transactions-attach attach" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file: string # File to attach (format: binary)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7672,7 +7672,7 @@ export def "apps-urssaf-auth create" [
   --client-id: string
   --client-secret: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "client_secret" $client_secret "scalar")] | flatten | str join "&"
@@ -7699,7 +7699,7 @@ export def "apps-urssaf-payment get-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --invoices-ids: list<int>
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "invoices_ids" $invoices_ids "multi")] | flatten | str join "&"
@@ -7725,7 +7725,7 @@ export def "apps-urssaf-payment send" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/payment"))
@@ -7752,7 +7752,7 @@ export def "apps-urssaf-preview get" [
   --type: string@type-completer-5
   --ids: list<int>
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -7778,7 +7778,7 @@ export def "apps-urssaf-register-customer create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
   let full_url = (build-url $base ({app_id: (encode-path-segment $app_id)} | format pattern "/apps/{app_id}/urssaf/register_customer"))
@@ -7804,7 +7804,7 @@ export def "changepassword create" [
   --forgotten-password-token: string
   --password: string # Password for account
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "forgotten_password_token" $forgotten_password_token "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/changepassword" $qp)
@@ -7854,7 +7854,7 @@ export def "logout create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/logout")
   let accept_val = "application/json"
@@ -7877,7 +7877,7 @@ export def "me get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
   let accept_val = "application/json"
@@ -7907,7 +7907,7 @@ export def "me update" [
   --image: string # format: binary
   --metadata: list # nullable
 ]: nothing -> record<civility: string, establishments: table<emails: list, id: int, name: string, nic: string, phones: list, place: record>, firstname: string, id: int, image: string, lastname: string, metadata: list<any>, created_at: string, email: string, last_access_at: string, password: string, password_is_undefined: bool, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "civility" $civility "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "image" $image "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/me" $qp)
@@ -7954,7 +7954,7 @@ export def "refresh get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<access_token: string, expires_in: int, token_type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/refresh")
   let accept_val = "application/json"
@@ -7983,7 +7983,7 @@ export def "register create" [
   --lastname: string
   --metadata: list # nullable
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "cgu" $cgu "scalar") (serialize-qp "firstname" $firstname "scalar") (serialize-qp "lastname" $lastname "scalar") (serialize-qp "metadata" $metadata "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/register" $qp)
@@ -8008,7 +8008,7 @@ export def "sendpassword create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string # Email for login (format: email)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sendpassword" $qp)

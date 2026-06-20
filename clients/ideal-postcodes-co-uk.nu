@@ -836,7 +836,7 @@ export def "places-place get-resolve" [
 #
 # GET /postcodes/{postcode}
 # operationId: Postcodes
-export def "postcodes get" [
+export def "post-codes create" [
   postcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

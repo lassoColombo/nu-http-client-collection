@@ -450,7 +450,7 @@ export def "api delete" [
 # HEAD /{Bucket}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketHEAD.html
 # operationId: HeadBucket
-export def "api head-head" [
+export def "api head" [
   bucket: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1875,7 +1875,7 @@ export def "api get-object" [
 # HEAD /{Bucket}/{Key}
 # Docs: http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTObjectHEAD.html
 # operationId: HeadObject
-export def "api head-head-object" [
+export def "api head-object" [
   bucket: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL

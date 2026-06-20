@@ -131,7 +131,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataentities get-listdataentities" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dataentities list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/dataentities
 # operationId: Listdataentities
-export def "dataentities get-listdataentities" [
+export def "dataentities list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "dataentities get-listdataentities" [
 #
 # GET /api/dataentities/{acronym}
 # operationId: Getdataentitystructure
-export def "dataentities get-getdataentitystructure" [
+export def "dataentities get-dataentitystructure" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +211,7 @@ export def "dataentities get-getdataentitystructure" [
 #
 # PATCH /api/dataentities/{acronym}/documents
 # operationId: Createorupdatepartialdocument
-export def "dataentities-documents update-createorupdatepartialdocument" [
+export def "dataentities-documents create-orupdatepartialdocument" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "dataentities-documents update-createorupdatepartialdocument" [
 #
 # POST /api/dataentities/{acronym}/documents
 # operationId: Createnewdocument
-export def "dataentities-documents create-createnewdocument" [
+export def "dataentities-documents create-newdocument" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -275,7 +275,7 @@ export def "dataentities-documents create-createnewdocument" [
 #
 # PUT /api/dataentities/{acronym}/documents
 # operationId: Createorupdateentiredocument
-export def "dataentities-documents update-createorupdateentiredocument" [
+export def "dataentities-documents create-orupdateentiredocument" [
   acronym: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "dataentities-documents update-createorupdateentiredocument" [
 #
 # DELETE /api/dataentities/{acronym}/documents/{id}
 # operationId: Deletedocument
-export def "dataentities-documents delete-deletedocument" [
+export def "dataentities-documents delete" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -338,7 +338,7 @@ export def "dataentities-documents delete-deletedocument" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}
 # operationId: Getdocument
-export def "dataentities-documents get-getdocument" [
+export def "dataentities-documents get" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -369,7 +369,7 @@ export def "dataentities-documents get-getdocument" [
 #
 # PATCH /api/dataentities/{acronym}/documents/{id}
 # operationId: Updatepartialdocument
-export def "dataentities-documents update-updatepartialdocument" [
+export def "dataentities-documents update-partialdocument" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -403,7 +403,7 @@ export def "dataentities-documents update-updatepartialdocument" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}
 # operationId: Updateentiredocument
-export def "dataentities-documents update-updateentiredocument" [
+export def "dataentities-documents update-entiredocument" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -471,7 +471,7 @@ export def "dataentities-documents-clusters validate-documentby" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}/score
 # operationId: Putscores
-export def "dataentities-documents-score update-putscores" [
+export def "dataentities-documents-score update" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +505,7 @@ export def "dataentities-documents-score update-putscores" [
 #
 # DELETE /api/dataentities/{acronym}/documents/{id}/score/{field-name}
 # operationId: Deletescorebyfield
-export def "dataentities-documents-score delete-deletescorebyfield" [
+export def "dataentities-documents-score delete-scorebyfield" [
   acronym: string
   id: string
   field_name: string
@@ -541,7 +541,7 @@ export def "dataentities-documents-score delete-deletescorebyfield" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}/score/{field-name}
 # operationId: Putscorebyfield
-export def "dataentities-documents-score update-putscorebyfield" [
+export def "dataentities-documents-score update-scorebyfield" [
   acronym: string
   id: string
   field_name: string
@@ -579,7 +579,7 @@ export def "dataentities-documents-score update-putscorebyfield" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}/versions
 # operationId: Listversions
-export def "dataentities-documents-versions get-listversions" [
+export def "dataentities-documents-versions list" [
   acronym: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,7 +610,7 @@ export def "dataentities-documents-versions get-listversions" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}/versions/{versionId}
 # operationId: Getversion
-export def "dataentities-documents-versions get-getversion" [
+export def "dataentities-documents-versions get" [
   acronym: string
   id: string
   version_id: string
@@ -643,7 +643,7 @@ export def "dataentities-documents-versions get-getversion" [
 #
 # PUT /api/dataentities/{acronym}/documents/{id}/versions/{versionId}
 # operationId: Putversion
-export def "dataentities-documents-versions update-putversion" [
+export def "dataentities-documents-versions update" [
   acronym: string
   id: string
   version_id: string
@@ -711,7 +711,7 @@ export def "dataentities-documents-attachments create-saveattachment" [
 #
 # GET /api/dataentities/{acronym}/documents/{id}/{field}/attachments/{file-name}
 # operationId: Retrieveattachment
-export def "dataentities-documents-attachments get-retrieveattachment" [
+export def "dataentities-documents-attachments get" [
   acronym: string
   id: string
   field: string

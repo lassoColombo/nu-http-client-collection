@@ -574,7 +574,7 @@ export def "v1-bundle-products-options-add create-management-save" [
 #
 # GET /V1/bundle-products/options/types
 # operationId: bundleProductOptionTypeListV1GetItemsGet
-export def "v1-bundle-products-options-types list-get-items-get" [
+export def "v1-bundle-products-options-types list-get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8824,7 +8824,7 @@ export def "v1-products create-catalog-repository-save" [
 #
 # GET /V1/products-render-info
 # operationId: catalogProductRenderListV1GetListGet
-export def "v1-products-render-info list-catalog-get-get" [
+export def "v1-products-render-info list-catalog-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9267,7 +9267,7 @@ export def "v1-products-attributes create-catalog-repository-save" [
 #
 # GET /V1/products/attributes/types
 # operationId: catalogProductAttributeTypesListV1GetItemsGet
-export def "v1-products-attributes-types list-catalog-get-items-get" [
+export def "v1-products-attributes-types list-catalog-get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9653,7 +9653,7 @@ export def "v1-products-downloadable-links delete-repository" [
 #
 # GET /V1/products/links/types
 # operationId: catalogProductLinkTypeListV1GetItemsGet
-export def "v1-products-links-types list-catalog-get-items-get" [
+export def "v1-products-links-types list-catalog-get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9677,7 +9677,7 @@ export def "v1-products-links-types list-catalog-get-items-get" [
 #
 # GET /V1/products/links/{type}/attributes
 # operationId: catalogProductLinkTypeListV1GetItemAttributesGet
-export def "v1-products-links-attributes list-catalog-get-item-get" [
+export def "v1-products-links-attributes list-catalog-get-item" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9758,7 +9758,7 @@ export def "v1-products-options create-catalog-custom-repository-save" [
 #
 # GET /V1/products/options/types
 # operationId: catalogProductCustomOptionTypeListV1GetItemsGet
-export def "v1-products-options-types list-catalog-custom-get-items-get" [
+export def "v1-products-options-types list-catalog-custom-get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10014,7 +10014,7 @@ export def "v1-products-tier-prices-information get-catalog-storage-create" [
 #
 # GET /V1/products/types
 # operationId: catalogProductTypeListV1GetProductTypesGet
-export def "v1-products-types list-catalog-get-get" [
+export def "v1-products-types list-catalog-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -1,6 +1,6 @@
 # Auto-generated client for Tamil Nadu State Board (Tamil Nadu Directorate of Government Examinations), Tamil Nadu v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/dgecerttn/3.0.0/openapi.json
-# Auth: --token flag or $env.TAMIL_NADU_STATE_BOARD_TAMIL_NADU_DIRECTORATE_OF_GOVERNMENT_EXAMINATIONS___TAMIL_NADU_TOKEN
+# Auth: --token flag or $env.TAMIL_NADU_STATE_BOARD_TAMIL_NADU_DIRECTORATE_OF_GOVERNMENT_EXAMINATIONS_TAMIL_NADU_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/dgecerttn/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/dgecerttn/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TAMIL_NADU_STATE_BOARD_TAMIL_NADU_DIRECTORATE_OF_GOVERNMENT_EXAMINATIONS___TAMIL_NADU_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o TAMIL_NADU_STATE_BOARD_TAMIL_NADU_DIRECTORATE_OF_GOVERNMENT_EXAMINATIONS_TAMIL_NADU_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

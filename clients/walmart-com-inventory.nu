@@ -230,7 +230,7 @@ export def "fulfillment-inventory get-wfs" [
 #
 # GET /v3/inventories
 # operationId: getMultiNodeInventoryForAllSkuAndAllShipNodes
-export def "inventories get-multi-node-inventory-for-list-sku-and-list-ship-nodes" [
+export def "inventories get-multi-node-inventory-for-list-sku-and-ship-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -1,6 +1,6 @@
 # Auto-generated client for Zapier Natural Language Actions (NLA) API - Beta v1.0.0
 # Source: https://api.apis.guru/v2/specs/zapier.com/nla/1.0.0/openapi.json
-# Auth: --token flag or $env.ZAPIER_NATURAL_LANGUAGE_ACTIONS_NLA__API___BETA_TOKEN
+# Auth: --token flag or $env.ZAPIER_NATURAL_LANGUAGE_ACTIONS_NLA_API_BETA_TOKEN
 
 const BASE_URL = "https://nla.zapier.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://nla.zapier.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ZAPIER_NATURAL_LANGUAGE_ACTIONS_NLA__API___BETA_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ZAPIER_NATURAL_LANGUAGE_ACTIONS_NLA_API_BETA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

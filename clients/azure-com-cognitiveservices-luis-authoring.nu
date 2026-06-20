@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/cognitiveservices-LUIS-Authoring/3.0-preview/swagger.json
 # Auth: --token flag or $env.LUIS_AUTHORING_CLIENT_TOKEN
 
-const BASE_URL = "https://azure.local"
+const BASE_URL = "{Endpoint}/luis/authoring/v3.0-preview"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local"] }
+def base-url-completer [] { ["{Endpoint}/luis/authoring/v3.0-preview"] }
 def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 
 # Completers for enum parameters
@@ -3668,7 +3668,7 @@ export def "apps-versions-intents-suggest list-model-suggestions" [
 #
 # GET /apps/{appId}/versions/{versionId}/listprebuilts
 # operationId: Model_ListPrebuiltEntities
-export def "apps-versions-listprebuilts list-model-prebuilt-entities" [
+export def "apps-versions-list-prebuilts list-model-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL

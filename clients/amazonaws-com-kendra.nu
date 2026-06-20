@@ -730,7 +730,7 @@ export def "api create-index" [
 #
 # POST /
 # operationId: CreateQuerySuggestionsBlockList
-export def "api create-list-suggestions-block-list" [
+export def "api create-list-suggestions-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "api delete-principal-mapping" [
 #
 # POST /
 # operationId: DeleteQuerySuggestionsBlockList
-export def "api delete-list-suggestions-block-list" [
+export def "api delete-list-suggestions-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1387,7 +1387,7 @@ export def "api get-principal-mapping" [
 #
 # POST /
 # operationId: DescribeQuerySuggestionsBlockList
-export def "api get-list-suggestions-block-list" [
+export def "api get-list-suggestions-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2704,7 +2704,7 @@ export def "api update-index" [
 #
 # POST /
 # operationId: UpdateQuerySuggestionsBlockList
-export def "api update-list-suggestions-block-list" [
+export def "api update-list-suggestions-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

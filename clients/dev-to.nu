@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://dev.to/api"] }
-def auth-scheme-completer [] { ["api-key"] }
+def auth-scheme-completer [] { ["api-key" "none"] }
 
 # Completers for enum parameters
 def state-completer [] { ["all" "fresh" "rising"] }
@@ -182,7 +182,7 @@ export def "articles list" [
   --top: int # Using this parameter will allow the client to return the most popular articles in the last `N` days. `top` indicates the number of days since publication of the articles returned. This param can be used in conjuction with `tag`. (format: int32, e.g. 2)
   --collection-id: int # Adding this will allow the client to return the list of articles belonging to the requested collection, ordered by ascending publication date. (format: int32, e.g. 99)
 ]: nothing -> table<canonical_url: string, cover_image: string, created_at: string, crossposted_at: string, description: string, edited_at: string, flare_tag: record<bg_color_hex: string, name: string, text_color_hex: string>, id: int, last_comment_at: string, organization: record<name: string, profile_image: string, profile_image_90: string, slug: string, username: string>, path: string, positive_reactions_count: int, public_reactions_count: int, published_at: string, published_timestamp: string, readable_publish_date: string, reading_time_minutes: int, slug: string, social_image: string, tag_list: list<string>, tags: string, title: string, type_of: string, url: string, user: record<github_username: string, name: string, profile_image: string, profile_image_90: string, twitter_username: string, username: string, website_url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "tag" $tag "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "tags_exclude" $tags_exclude "scalar") (serialize-qp "username" $username "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "top" $top "scalar") (serialize-qp "collection_id" $collection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/articles" $qp)
@@ -236,7 +236,7 @@ export def "articles-latest get" [
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 30)
 ]: nothing -> table<canonical_url: string, cover_image: string, created_at: string, crossposted_at: string, description: string, edited_at: string, flare_tag: record<bg_color_hex: string, name: string, text_color_hex: string>, id: int, last_comment_at: string, organization: record<name: string, profile_image: string, profile_image_90: string, slug: string, username: string>, path: string, positive_reactions_count: int, public_reactions_count: int, published_at: string, published_timestamp: string, readable_publish_date: string, reading_time_minutes: int, slug: string, social_image: string, tag_list: list<string>, tags: string, title: string, type_of: string, url: string, user: record<github_username: string, name: string, profile_image: string, profile_image_90: string, twitter_username: string, username: string, website_url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/articles/latest" $qp)
@@ -365,7 +365,7 @@ export def "articles get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/articles/{id}"))
@@ -448,7 +448,7 @@ export def "articles get-by-path" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   if ($slug | is-empty) { error make --unspanned { msg: "path parameter 'slug' must be non-empty" } }
@@ -475,7 +475,7 @@ export def "comments get-by-article" [
   --a-id: string # Article identifier. (e.g. 321)
   --p-id: string # Podcast Episode identifier. (e.g. 321)
 ]: nothing -> table<created_at: string, id_code: string, image_url: string, type_of: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "a_id" $a_id "scalar") (serialize-qp "p_id" $p_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/comments" $qp)
@@ -500,7 +500,7 @@ export def "comments get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/comments/{id}"))
@@ -716,7 +716,7 @@ export def "organizations get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let full_url = (build-url $base ({username: (encode-path-segment $username)} | format pattern "/api/organizations/{username}"))
@@ -743,7 +743,7 @@ export def "organizations-articles get-org" [
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 30)
 ]: nothing -> table<canonical_url: string, cover_image: string, created_at: string, crossposted_at: string, description: string, edited_at: string, flare_tag: record<bg_color_hex: string, name: string, text_color_hex: string>, id: int, last_comment_at: string, organization: record<name: string, profile_image: string, profile_image_90: string, slug: string, username: string>, path: string, positive_reactions_count: int, public_reactions_count: int, published_at: string, published_timestamp: string, readable_publish_date: string, reading_time_minutes: int, slug: string, social_image: string, tag_list: list<string>, tags: string, title: string, type_of: string, url: string, user: record<github_username: string, name: string, profile_image: string, profile_image_90: string, twitter_username: string, username: string, website_url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -771,7 +771,7 @@ export def "organizations-users get-org" [
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 30)
 ]: nothing -> table<github_username: string, id: int, joined_at: string, location: string, name: string, profile_image: string, summary: string, twitter_username: string, type_of: string, username: string, website_url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -795,7 +795,7 @@ export def "pages list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<body_json: string, body_markdown: string, description: string, is_top_level_path: bool, slug: string, social_image: record, template: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/pages")
   let accept_val = "application/json"
@@ -874,7 +874,7 @@ export def "pages get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<body_json: string, body_markdown: string, description: string, is_top_level_path: bool, slug: string, social_image: record, template: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/pages/{id}"))
@@ -936,7 +936,7 @@ export def "podcast-episodes get" [
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 30)
   --username: string # Using this parameter will retrieve episodes belonging to a specific podcast. (e.g. codenewbie)
 ]: nothing -> table<class_name: string, id: int, image_url: string, path: string, podcast: record<image_url: string, slug: string, title: string>, title: string, type_of: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "username" $username "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/podcast_episodes" $qp)
@@ -1065,7 +1065,7 @@ export def "tags get" [
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 10)
 ]: nothing -> table<bg_color_hex: string, id: int, name: string, text_color_hex: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/tags" $qp)
@@ -1189,7 +1189,7 @@ export def "videos get" [
   --page: int # Pagination page (format: int32, default: 1)
   --per-page: int # Page size (the number of items to return per page). The default maximum value can be overridden by "API_PER_PAGE_MAX" environment variable. (format: int32, default: 24)
 ]: nothing -> table<cloudinary_video_url: string, id: int, path: string, title: string, type_of: string, user: record<name: string>, user_id: int, video_duration_in_minutes: string, video_source_url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/videos" $qp)

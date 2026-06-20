@@ -124,7 +124,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.illumidesk.com"] }
-def auth-scheme-completer [] { ["jwt"] }
+def auth-scheme-completer [] { ["jwt" "none"] }
 
 # Completers for enum parameters
 def accept-completer [] { ["application/json" "text/html"] }
@@ -178,7 +178,7 @@ export def "auth-jwt-token-auth create" [
   username: string # User name.
 ]: any -> record<token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt-token-auth/")
   let req_body = {"password": $password, "username": $username} | compact
@@ -206,7 +206,7 @@ export def "auth-jwt-token-refresh refresh" [
   --body-token: string # Refreshed token.
 ]: any -> record<token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt-token-refresh/")
   let req_body = {"token": $body_token} | compact
@@ -234,7 +234,7 @@ export def "auth-jwt-token-verify verify" [
   --body-token: string # JSON Web Token (JWT).
 ]: any -> record<token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt-token-verify/")
   let req_body = {"token": $body_token} | compact
@@ -293,7 +293,7 @@ export def "auth-register create" [
   username: string # Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.
 ]: any -> record<email: string, first_name: string, id: string, last_name: string, profile: record<avatar: string, bio: string, company: string, location: string, timezone: string, url: string>, username: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/register/")
   let req_body = {"email": $email, "first_name": $first_name, "last_name": $last_name, "password": $password, "profile": $profile, "username": $username} | compact

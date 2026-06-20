@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.clever-cloud.com/v2"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 # Completers for enum parameters
 def order-completer [] { ["asc" "desc"] }
@@ -7923,7 +7923,7 @@ export def "addon-providers-config-provider-addons get" [
   --body: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationProviderId' must be non-empty" } }
   let full_url = (build-url $base ({configuration_provider_id: (encode-path-segment $configuration_provider_id)} | format pattern "/v4/addon-providers/config-provider/addons/{configuration_provider_id}"))
@@ -7952,7 +7952,7 @@ export def "addon-providers-config-provider-addons-env get" [
   --body: string
 ]: any -> list<any> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationProviderId' must be non-empty" } }
   let full_url = (build-url $base ({configuration_provider_id: (encode-path-segment $configuration_provider_id)} | format pattern "/v4/addon-providers/config-provider/addons/{configuration_provider_id}/env"))
@@ -7981,7 +7981,7 @@ export def "addon-providers-config-provider-addons-env update" [
   --body: list
 ]: any -> list<any> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($configuration_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'configurationProviderId' must be non-empty" } }
   let full_url = (build-url $base ({configuration_provider_id: (encode-path-segment $configuration_provider_id)} | format pattern "/v4/addon-providers/config-provider/addons/{configuration_provider_id}/env"))
@@ -8010,7 +8010,7 @@ export def "networkgroups-organisations-networkgroups list-network-groups" [
   --body: any
 ]: any -> list<any> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   let full_url = (build-url $base ({owner_id: (encode-path-segment $owner_id)} | format pattern "/v4/networkgroups/organisations/{owner_id}/networkgroups"))
@@ -8039,7 +8039,7 @@ export def "networkgroups-organisations-networkgroups create-network-group" [
   --body: record
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   let full_url = (build-url $base ({owner_id: (encode-path-segment $owner_id)} | format pattern "/v4/networkgroups/organisations/{owner_id}/networkgroups"))
@@ -8069,7 +8069,7 @@ export def "networkgroups-organisations-networkgroups delete-network-group" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8100,7 +8100,7 @@ export def "networkgroups-organisations-networkgroups get-network-group" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8131,7 +8131,7 @@ export def "networkgroups-organisations-networkgroups-external-peers create-netw
   --body: record
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8163,7 +8163,7 @@ export def "networkgroups-organisations-networkgroups-external-peers delete-netw
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8195,7 +8195,7 @@ export def "networkgroups-organisations-networkgroups-members list-network-group
   --body: any
 ]: any -> table<job: string, member: record<avatar: string, email: string, id: string, name: string>, role: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8228,7 +8228,7 @@ export def "networkgroups-organisations-networkgroups-members create-network-gro
   role: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8260,7 +8260,7 @@ export def "networkgroups-organisations-networkgroups-members delete-network-gro
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8293,7 +8293,7 @@ export def "networkgroups-organisations-networkgroups-members get-network-group"
   --body: any
 ]: any -> record<job: string, member: record<avatar: string, email: string, id: string, name: string>, role: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8325,7 +8325,7 @@ export def "networkgroups-organisations-networkgroups-peers list-network-group" 
   --body: any
 ]: any -> list<any> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8357,7 +8357,7 @@ export def "networkgroups-organisations-networkgroups-peers delete-network-group
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8390,7 +8390,7 @@ export def "networkgroups-organisations-networkgroups-peers get-network-group" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8423,7 +8423,7 @@ export def "networkgroups-organisations-networkgroups-peers-wireguard-configurat
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8456,7 +8456,7 @@ export def "networkgroups-organisations-networkgroups-peers-wireguard-configurat
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }
@@ -8488,7 +8488,7 @@ export def "networkgroups-organisations-networkgroups-stream get-network-group" 
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_id | is-empty) { error make --unspanned { msg: "path parameter 'ownerId' must be non-empty" } }
   if ($network_group_id | is-empty) { error make --unspanned { msg: "path parameter 'networkGroupId' must be non-empty" } }

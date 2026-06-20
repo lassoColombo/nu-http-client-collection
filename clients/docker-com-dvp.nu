@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://hub.docker.com/api/publisher/analytics/v1" "https://docker.com/1.33" "https://hub.docker.com"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 
 # List all available API commands with their parameters
@@ -306,7 +306,7 @@ export def "users-2fa-login create-users2-fa" [
   login_2fa_token: string # The intermediate 2FA token returned from `/v2/users/login` API. (e.g. eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c)
 ]: any -> record<token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://hub.docker.com")
   let full_url = (build-url $base "/v2/users/2fa-login")
   let req_body = {"code": $code, "login_2fa_token": $login_2fa_token} | compact
@@ -334,7 +334,7 @@ export def "users-login create" [
   username: string # The username of the Docker Hub account to authenticate with. (e.g. myusername)
 ]: any -> record<token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://hub.docker.com")
   let full_url = (build-url $base "/v2/users/login")
   let req_body = {"password": $password, "username": $username} | compact

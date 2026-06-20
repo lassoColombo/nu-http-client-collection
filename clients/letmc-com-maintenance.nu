@@ -107,7 +107,7 @@ def accept-completer [] { ["application/json" "application/xml" "text/json" "tex
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "maintenance-maintenance-createmaintenancejob create-controller-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "maintenance-maintenance-create-maintenancejob create-controller-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # POST /v3/maintenance/{shortName}/maintenance/{branchID}/createmaintenancejob
 # operationId: MaintenanceController_CreateMaintenanceJob
 # --Documents item shape: {MimeType?: string, URL?: string}
-export def "maintenance-maintenance-createmaintenancejob create-controller-job" [
+export def "maintenance-maintenance-create-maintenancejob create-controller-job" [
   short_name: string
   branch_id: string
   --base-url(-b): string@base-url-completer # API base URL

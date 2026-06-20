@@ -696,7 +696,7 @@ export def "api create-load-balancer" [
 #
 # GET /
 # operationId: GET_CreateLoadBalancerListeners
-export def "api get-create-load-balancer-listeners" [
+export def "api get-create-load-balancer-list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -733,7 +733,7 @@ export def "api get-create-load-balancer-listeners" [
 #
 # POST /
 # operationId: POST_CreateLoadBalancerListeners
-export def "api create-load-balancer-listeners" [
+export def "api create-load-balancer-list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "api create-delete-load-balancer" [
 #
 # GET /
 # operationId: GET_DeleteLoadBalancerListeners
-export def "api get-delete-load-balancer-listeners" [
+export def "api get-delete-load-balancer-list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "api get-delete-load-balancer-listeners" [
 #
 # POST /
 # operationId: POST_DeleteLoadBalancerListeners
-export def "api create-delete-load-balancer-listeners" [
+export def "api create-delete-load-balancer-list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

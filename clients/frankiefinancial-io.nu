@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.demo.frankiefinancial.io/compliance/v1.2"] }
-def auth-scheme-completer [] { ["api_key"] }
+def auth-scheme-completer [] { ["api_key" "none"] }
 
 # Completers for enum parameters
 def result-level-completer [] { ["full" "summary"] }
@@ -1803,7 +1803,7 @@ export def "ruok check-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --asking-nicely: oneof<nothing, bool> # If set to true, the request is being made politely.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "askingNicely" $asking_nicely "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ruok" $qp)
@@ -1840,7 +1840,7 @@ export def "your-configured-path notify-result" [
   --username: string # The portal username that initiated the operation that led to this notification. If applicable and available.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($request_id | is-empty) { error make --unspanned { msg: "path parameter 'requestId' must be non-empty" } }
   let full_url = (build-url $base ({request_id: (encode-path-segment $request_id)} | format pattern "/your/configured/path/{request_id}"))

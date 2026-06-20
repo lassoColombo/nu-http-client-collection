@@ -212,7 +212,7 @@ export def "orders-released get" [
 #
 # GET /v3/orders/released{nextCursor}
 # operationId: getNextCursorReleasedOrders
-export def "orders-released-next-cursor get-next-cursor-released" [
+export def "orders-releasednext-cursor get-next-released" [
   next_cursor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "orders-shipping create" [
 #
 # GET /v3/orders{nextCursor}
 # operationId: getAllOrdersNext
-export def "orders-next-cursor get-list-orders-next" [
+export def "ordersnext-cursor get-list-orders-next" [
   next_cursor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

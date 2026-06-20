@@ -124,7 +124,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.lumminary.com/v1"] }
-def auth-scheme-completer [] { ["jwt"] }
+def auth-scheme-completer [] { ["jwt" "none"] }
 
 
 # List all available API commands with their parameters
@@ -170,7 +170,7 @@ export def "auth-jwt create" [
   role: string # The role for which authentication will be made. Value : role_product
 ]: any -> record<access_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/jwt")
   let req_body = {"username": $username, "password": $password, "role": $role} | compact

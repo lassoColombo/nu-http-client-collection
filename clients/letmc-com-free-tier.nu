@@ -1,6 +1,6 @@
 # Auto-generated client for LetMC Api V2, Free (Tier 1) vv2-free-tier
 # Source: https://api.apis.guru/v2/specs/letmc.com/free-tier/v2-free-tier/swagger.json
-# Auth: --token flag or $env.LETMC_API_V2_FREE__TIER_1_TOKEN
+# Auth: --token flag or $env.LETMC_API_V2_FREE_TIER_1_TOKEN
 
 const BASE_URL = "https://live-api.letmc.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://live-api.letmc.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LETMC_API_V2_FREE__TIER_1_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LETMC_API_V2_FREE_TIER_1_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

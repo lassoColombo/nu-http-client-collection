@@ -104,7 +104,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "almaws-task-lists-printouts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "almaws-task-lists-printouts list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /almaws/v1/task-lists/printouts
 # operationId: get/almaws/v1/task-lists/printouts
-export def "almaws-task-lists-printouts get" [
+export def "almaws-task-lists-printouts list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "almaws-task-lists-printouts create" [
 #
 # GET /almaws/v1/task-lists/printouts/{printout_id}
 # operationId: get/almaws/v1/task-lists/printouts/{printout_id}
-export def "almaws-task-lists-printouts get-{printout-id}" [
+export def "almaws-task-lists-printouts get" [
   printout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +215,7 @@ export def "almaws-task-lists-printouts get-{printout-id}" [
 #
 # POST /almaws/v1/task-lists/printouts/{printout_id}
 # operationId: post/almaws/v1/task-lists/printouts/{printout_id}
-export def "almaws-task-lists-printouts create-{printout-id}" [
+export def "almaws-task-lists-printouts create-by-printout-id" [
   printout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

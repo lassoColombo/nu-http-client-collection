@@ -926,7 +926,7 @@ export def "invoice-delete delete" [
 # Delete an existing invoice category
 #
 # POST /api/invoice/deletecategory
-export def "invoice-deletecategory create" [
+export def "invoice-delete-category create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1253,7 +1253,7 @@ export def "invoice-update update" [
 # Update an existing invoice category
 #
 # POST /api/invoice/updatecategory
-export def "invoice-updatecategory create" [
+export def "invoice-update-category create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

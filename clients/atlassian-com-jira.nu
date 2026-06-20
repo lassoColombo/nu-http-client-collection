@@ -13014,7 +13014,7 @@ export def "rest-3-workflowscheme update-workflow-scheme" [
 #
 # POST /rest/api/3/workflowscheme/{id}/createdraft
 # operationId: createWorkflowSchemeDraftFromParent
-export def "rest-3-workflowscheme-createdraft create-workflow-scheme-draft-from-parent" [
+export def "rest-3-workflowscheme-create-draft create-workflow-scheme-from-parent" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

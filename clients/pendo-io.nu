@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api.feedback.eu.pendo.io"] }
-def auth-scheme-completer [] { ["query-auth-token" "auth-token"] }
+def auth-scheme-completer [] { ["query-auth-token" "auth-token" "none"] }
 
 # Completers for enum parameters
 def order-dir-completer [] { ["asc" "desc"] }
@@ -482,7 +482,7 @@ export def "health-check-ping get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "auth-token"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health-check/ping")
   let accept_val = "application/json"

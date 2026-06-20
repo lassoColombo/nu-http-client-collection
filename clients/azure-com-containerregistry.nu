@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/containerregistry/2019-08-15-preview/swagger.json
 # Auth: --token flag or $env.AZURE_CONTAINER_REGISTRY_TOKEN
 
-const BASE_URL = "https://azure.local"
+const BASE_URL = "{url}"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -97,8 +97,8 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local"] }
-def auth-scheme-completer [] { ["basic" "bearer" "basic-credentials"] }
+def base-url-completer [] { ["{url}"] }
+def auth-scheme-completer [] { ["basic" "bearer" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def grant-type-completer [] { ["access_token" "access_token_refresh_token" "refresh_token"] }
@@ -464,7 +464,7 @@ export def "oauth2-exchange refresh-tokens-get" [
   --access-token: string # AAD access token, mandatory when grant_type is access_token_refresh_token or access_token.
 ]: any -> record<refresh_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/exchange")
   let req_body = {"grant_type": $grant_type, "service": $service, "tenant": $tenant, "refresh_token": $refresh_token, "access_token": $access_token} | compact
@@ -521,7 +521,7 @@ export def "oauth2-token get-access" [
   refresh_token: string # Must be a valid ACR refresh token
 ]: any -> record<access_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token")
   let req_body = {"grant_type": $grant_type, "service": $service, "scope": $scope, "refresh_token": $refresh_token} | compact

@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://api-sandbox.cloud.wowza.com/api/v1"] }
-def auth-scheme-completer [] { ["wsc-access-key" "wsc-api-key"] }
+def auth-scheme-completer [] { ["wsc-access-key" "wsc-api-key" "none"] }
 
 # Completers for enum parameters
 def interval-completer [] { ["#d" "#h" "#m" "#s" "day" "hour" "minute" "month" "second"] }
@@ -142,7 +142,7 @@ export def "specs get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<basePath: string, consumes: list<string>, definitions: record, externalDocs: record, host: string, info: record, paths: record, produces: list<string>, schemes: list<string>, security: list<record>, securityDefinitions: record, swagger: string, tags: list<record>, x_tagGroups: list<record>> {
-  let auth = (build-auth $token ($auth_scheme | default "wsc-api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v1/specs")
   let accept_val = "application/json"

@@ -1091,7 +1091,7 @@ export def "amazonclouddirectory-2017-01-11-directory-enable enable" [
 #
 # POST /amazonclouddirectory/2017-01-11/schema/getappliedschema
 # operationId: GetAppliedSchemaVersion
-export def "amazonclouddirectory-2017-01-11-schema-getappliedschema get-applied-version" [
+export def "amazonclouddirectory-2017-01-11-schema-get-appliedschema version-applied" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

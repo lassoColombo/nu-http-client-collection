@@ -939,7 +939,7 @@ export def "catalog-pvt-collection-products get-productsfromacollection" [
 #
 # POST /api/catalog/pvt/collection/{collectionId}/stockkeepingunit/importexclude
 # operationId: POST-Removeproductsbyimportfile
-export def "catalog-pvt-collection-stockkeepingunit-importexclude create-removeproductsbyimportfile" [
+export def "catalog-pvt-collection-stockkeepingunit-importexclude create-delete-productsbyimportfile" [
   collection_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

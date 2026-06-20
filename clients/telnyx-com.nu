@@ -124,7 +124,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.telnyx.com/v2"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def status-completer [] { ["disabled" "enabled" "standby"] }
@@ -8502,7 +8502,7 @@ export def "rooms-actions-refresh-client-token refresh" [
   --token-ttl-secs: int # The time to live in seconds of the Client Token, after that time the Client Token is invalid and can't be used to join a Room. (default: 600, e.g. 600)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($room_id | is-empty) { error make --unspanned { msg: "path parameter 'room_id' must be non-empty" } }
   let full_url = (build-url $base ({room_id: (encode-path-segment $room_id)} | format pattern "/rooms/{room_id}/actions/refresh_client_token"))

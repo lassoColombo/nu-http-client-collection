@@ -378,7 +378,7 @@ export def "vlm-account-stores get" [
 #
 # GET /api/vlm/appkeys
 # operationId: Getappkeysfromaccount
-export def "vlm-appkeys get-getappkeysfromaccount" [
+export def "vlm-appkeys get-appkeysfromaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "vlm-appkeys get-getappkeysfromaccount" [
 #
 # POST /api/vlm/appkeys
 # operationId: Createnewappkey
-export def "vlm-appkeys create-createnewappkey" [
+export def "vlm-appkeys create-newappkey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "vlm-appkeys create-createnewappkey" [
 #
 # PUT /api/vlm/appkeys/{id}
 # operationId: Updateappkey
-export def "vlm-appkeys update-updateappkey" [
+export def "vlm-appkeys update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -252,7 +252,7 @@ export def "associateresourcesharepermission create-associate-resource-share-per
 # POST /createpermission
 # operationId: CreatePermission
 # --tags item shape: {key?: any, value?: any}
-export def "createpermission create-permission" [
+export def "create-permission create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "createpermission create-permission" [
 #
 # POST /createpermissionversion
 # operationId: CreatePermissionVersion
-export def "createpermissionversion create-permission-version" [
+export def "create-permissionversion version-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "createpermissionversion create-permission-version" [
 # POST /createresourceshare
 # operationId: CreateResourceShare
 # --tags item shape: {key?: any, value?: any}
-export def "createresourceshare create-resource-share" [
+export def "create-resourceshare create-resource-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "createresourceshare create-resource-share" [
 #
 # DELETE /deletepermission
 # operationId: DeletePermission
-export def "deletepermission delete-permission" [
+export def "delete-permission delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "deletepermission delete-permission" [
 #
 # DELETE /deletepermissionversion
 # operationId: DeletePermissionVersion
-export def "deletepermissionversion delete-permission-version" [
+export def "delete-permissionversion version-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "deletepermissionversion delete-permission-version" [
 #
 # DELETE /deleteresourceshare
 # operationId: DeleteResourceShare
-export def "deleteresourceshare delete-resource-share" [
+export def "delete-resourceshare delete-resource-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "enablesharingwithawsorganization enable-sharing-with-aws-organizatio
 #
 # POST /getpermission
 # operationId: GetPermission
-export def "getpermission get-permission" [
+export def "get-permission get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -625,7 +625,7 @@ export def "getpermission get-permission" [
 #
 # POST /getresourcepolicies
 # operationId: GetResourcePolicies
-export def "getresourcepolicies get-resource-policies" [
+export def "get-resourcepolicies get-resource-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "getresourcepolicies get-resource-policies" [
 #
 # POST /getresourceshareassociations
 # operationId: GetResourceShareAssociations
-export def "getresourceshareassociations get-resource-share-associations" [
+export def "get-resourceshareassociations get-resource-share-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "getresourceshareassociations get-resource-share-associations" [
 #
 # POST /getresourceshareinvitations
 # operationId: GetResourceShareInvitations
-export def "getresourceshareinvitations get-resource-share-invitations" [
+export def "get-resourceshareinvitations get-resource-share-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "getresourceshareinvitations get-resource-share-invitations" [
 # POST /getresourceshares
 # operationId: GetResourceShares
 # --tagFilters item shape: {tagKey?: any, tagValues?: any}
-export def "getresourceshares get-resource-shares" [
+export def "get-resourceshares get-resource-shares" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "getresourceshares get-resource-shares" [
 #
 # POST /listpendinginvitationresources
 # operationId: ListPendingInvitationResources
-export def "listpendinginvitationresources list-pending-invitation-resources" [
+export def "list-pendinginvitationresources list-pending-invitation-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "listpendinginvitationresources list-pending-invitation-resources" [
 #
 # POST /listpermissionassociations
 # operationId: ListPermissionAssociations
-export def "listpermissionassociations list-permission-associations" [
+export def "list-permissionassociations list-permission-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -890,7 +890,7 @@ export def "listpermissionassociations list-permission-associations" [
 #
 # POST /listpermissionversions
 # operationId: ListPermissionVersions
-export def "listpermissionversions list-permission-versions" [
+export def "list-permissionversions list-permission-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "listpermissionversions list-permission-versions" [
 #
 # POST /listpermissions
 # operationId: ListPermissions
-export def "listpermissions list-permissions" [
+export def "list-permissions list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -973,7 +973,7 @@ export def "listpermissions list-permissions" [
 #
 # POST /listprincipals
 # operationId: ListPrincipals
-export def "listprincipals list-principals" [
+export def "list-principals list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "listprincipals list-principals" [
 #
 # POST /listreplacepermissionassociationswork
 # operationId: ListReplacePermissionAssociationsWork
-export def "listreplacepermissionassociationswork list-update-permission-associations-work" [
+export def "list-replacepermissionassociationswork update-permission-associations-work" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "listreplacepermissionassociationswork list-update-permission-associa
 #
 # POST /listresourcesharepermissions
 # operationId: ListResourceSharePermissions
-export def "listresourcesharepermissions list-resource-share-permissions" [
+export def "list-resourcesharepermissions list-resource-share-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,7 +1101,7 @@ export def "listresourcesharepermissions list-resource-share-permissions" [
 #
 # POST /listresourcetypes
 # operationId: ListResourceTypes
-export def "listresourcetypes list-resource-types" [
+export def "list-resourcetypes list-resource-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "listresourcetypes list-resource-types" [
 #
 # POST /listresources
 # operationId: ListResources
-export def "listresources list-resources" [
+export def "list-resources list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1451,7 +1451,7 @@ export def "untagresource untag-resource" [
 #
 # POST /updateresourceshare
 # operationId: UpdateResourceShare
-export def "updateresourceshare update-resource-share" [
+export def "update-resourceshare update-resource-share" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

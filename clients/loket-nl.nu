@@ -474,7 +474,7 @@ export def "providers get-by-user" [
 #
 # DELETE /providers/applicationsets/{applicationSetId}
 # operationId: DeleteProviderApplicationSetByApplicationSetId
-export def "providers-applicationsets delete-application-update-by-application-update" [
+export def "providers-applicationsets delete-application-update-by-application" [
   application_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5401,7 +5401,7 @@ export def "providers-employers-employees-employments-leaverequests update-leave
 #
 # GET /providers/employers/employees/employments/leaverequests/{leaveRequestId}
 # operationId: GetLeaveRequestByLeaveRequestId
-export def "providers-employers-employees-employments-leaverequests get-leave-request-by-leave-request" [
+export def "providers-employers-employees-employments-leaverequests get-leave-request-by-leave" [
   leave_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5438,7 +5438,7 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
 # --leaveRequestStatus shape: {key?: int}
 # --leaveType shape: {key?: int}
 # --unitType shape: {key?: int}
-export def "providers-employers-employees-employments-leaverequests update-leave-request-by-leave-request" [
+export def "providers-employers-employees-employments-leaverequests update-leave-request-by-leave" [
   leave_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7459,7 +7459,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions get-
 # POST /providers/employers/employees/employments/{employmentId}/benefitsanddeductions
 # operationId: PostbenefitsAndDeductionsByEmploymentId
 # --payrollComponent shape: {key?: int}
-export def "providers-employers-employees-employments-benefitsanddeductions create-postbenefits-and-deductions" [
+export def "providers-employers-employees-employments-benefitsanddeductions create-benefits-and-deductions" [
   employment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15792,7 +15792,7 @@ export def "providers-employers-users-downloadrequests create-download-request-b
 #
 # DELETE /providers/employers/users/downloadrequests/{downloadRequestId}
 # operationId: DeleteDownloadRequestByDownloadRequestId
-export def "providers-employers-users-downloadrequests delete-download-request-by-download-request" [
+export def "providers-employers-users-downloadrequests delete-download-request-by" [
   download_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15822,7 +15822,7 @@ export def "providers-employers-users-downloadrequests delete-download-request-b
 #
 # GET /providers/employers/users/downloadrequests/{downloadRequestId}
 # operationId: GetDownloadRequestByDownloadRequestId
-export def "providers-employers-users-downloadrequests get-download-request-by-download-request" [
+export def "providers-employers-users-downloadrequests get-download-request-by" [
   download_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16452,7 +16452,7 @@ export def "providers-employers-workflowtriggermappings delete-fiscal-properties
 #
 # GET /providers/employers/workflowtriggermappings/{workflowTriggerMappingId}
 # operationId: GetWorkflowTriggerMappingByWorkflowTriggerMappingId
-export def "providers-employers-workflowtriggermappings get-workflow-trigger-mapping-by-workflow-trigger-mapping" [
+export def "providers-employers-workflowtriggermappings get-workflow-trigger-mapping-by-workflow-mapping" [
   workflow_trigger_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16483,7 +16483,7 @@ export def "providers-employers-workflowtriggermappings get-workflow-trigger-map
 # operationId: PutWorkflowTriggerByWorkflowTriggerId
 # --trigger shape: {id?: string}
 # --workflowTemplate shape: {id?: string}
-export def "providers-employers-workflowtriggermappings update-workflow-trigger-by-workflow-trigger" [
+export def "providers-employers-workflowtriggermappings update-workflow-trigger-by-workflow" [
   workflow_trigger_mapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20806,7 +20806,7 @@ export def "providers-leave-policies-yearsofservicebasedleave get-years-of-servi
 #
 # GET /providers/notificationsets/{notificationSetId}
 # operationId: GetNotificationSetByNotificationSetId
-export def "providers-notificationsets get-notification-update-by-notification-update" [
+export def "providers-notificationsets get-notification-update-by-notification" [
   notification_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21758,7 +21758,7 @@ export def "user-photo create-by-token" [
 #
 # DELETE /users/applicationsets/{applicationSetId}
 # operationId: DeleteUserApplicationSetByApplicationSetId
-export def "users-applicationsets delete-application-update-by-application-update" [
+export def "users-applicationsets delete-application-update-by-application" [
   application_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

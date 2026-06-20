@@ -156,7 +156,7 @@ export def "automation-actions-callbacks-complete create-batch" [
 #
 # POST /automation/v4/actions/callbacks/{callbackId}/complete
 # operationId: post-/automation/v4/actions/callbacks/{callbackId}/complete_complete
-export def "automation-actions-callbacks-complete create-{callback-id}" [
+export def "automation-actions-callbacks-complete create" [
   callback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "automation-actions-callbacks-complete create-{callback-id}" [
 #
 # GET /automation/v4/actions/{appId}
 # operationId: get-/automation/v4/actions/{appId}_getPage
-export def "automation-actions get-{app-id}-page" [
+export def "automation-actions get-app-page" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "automation-actions get-{app-id}-page" [
 # --functions item shape: {functionSource: string, functionType: "PRE_ACTION_EXECUTION"|"PRE_FETCH_OPTIONS"|"POST_FETCH_OPTIONS", id?: string}
 # --inputFields item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
 # --objectRequestOptions shape: {properties: list<string>}
-export def "automation-actions create-{app-id}" [
+export def "automation-actions create-app" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -254,7 +254,7 @@ export def "automation-actions create-{app-id}" [
 #
 # DELETE /automation/v4/actions/{appId}/{definitionId}
 # operationId: delete-/automation/v4/actions/{appId}/{definitionId}_archive
-export def "automation-actions delete-{app-id}-{definition-id}-archive" [
+export def "automation-actions delete-app-definition-archive" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -281,7 +281,7 @@ export def "automation-actions delete-{app-id}-{definition-id}-archive" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}_getById
-export def "automation-actions get-{app-id}-{definition-id}" [
+export def "automation-actions get-app-definition" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -312,7 +312,7 @@ export def "automation-actions get-{app-id}-{definition-id}" [
 # operationId: patch-/automation/v4/actions/{appId}/{definitionId}_update
 # --inputFields item shape: {isRequired: bool, supportedValueTypes?: list<string>, typeDefinition: record}
 # --objectRequestOptions shape: {properties: list<string>}
-export def "automation-actions update-{app-id}-{definition-id}" [
+export def "automation-actions update-app-definition" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -349,7 +349,7 @@ export def "automation-actions update-{app-id}-{definition-id}" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/functions
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/functions_getPage
-export def "automation-actions-functions get-{app-id}-{definition-id}-page" [
+export def "automation-actions-functions get-app-definition-page" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -376,7 +376,7 @@ export def "automation-actions-functions get-{app-id}-{definition-id}-page" [
 #
 # DELETE /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}
 # operationId: delete-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}_archiveByFunctionType
-export def "automation-actions-functions delete-{app-id}-{definition-id}-{function-type}-archive-by-type" [
+export def "automation-actions-functions delete-app-definition-type-archive-by-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -405,7 +405,7 @@ export def "automation-actions-functions delete-{app-id}-{definition-id}-{functi
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}_getByFunctionType
-export def "automation-actions-functions get-{app-id}-{definition-id}-{function-type}-by-type" [
+export def "automation-actions-functions get-app-definition-type-by-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -434,7 +434,7 @@ export def "automation-actions-functions get-{app-id}-{definition-id}-{function-
 #
 # PUT /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}
 # operationId: put-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}_createOrReplaceByFunctionType
-export def "automation-actions-functions update-{app-id}-{definition-id}-{function-type}-create-or-by-type" [
+export def "automation-actions-functions update-app-definition-type-create-or-by-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -467,7 +467,7 @@ export def "automation-actions-functions update-{app-id}-{definition-id}-{functi
 #
 # DELETE /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}
 # operationId: delete-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}_archive
-export def "automation-actions-functions delete-{app-id}-{definition-id}-{function-type}-{function-id}-archive" [
+export def "automation-actions-functions delete-app-definition-type-archive" [
   app_id: int
   definition_id: string
   function_type: string
@@ -498,7 +498,7 @@ export def "automation-actions-functions delete-{app-id}-{definition-id}-{functi
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}_getById
-export def "automation-actions-functions get-{app-id}-{definition-id}-{function-type}-{function-id}" [
+export def "automation-actions-functions get-app-definition-type" [
   app_id: int
   definition_id: string
   function_type: string
@@ -529,7 +529,7 @@ export def "automation-actions-functions get-{app-id}-{definition-id}-{function-
 #
 # PUT /automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}
 # operationId: put-/automation/v4/actions/{appId}/{definitionId}/functions/{functionType}/{functionId}_createOrReplace
-export def "automation-actions-functions update-{app-id}-{definition-id}-{function-type}-{function-id}-create-or" [
+export def "automation-actions-functions update-app-definition-type-create-or" [
   app_id: int
   definition_id: string
   function_type: string
@@ -564,7 +564,7 @@ export def "automation-actions-functions update-{app-id}-{definition-id}-{functi
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/revisions
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/revisions_getPage
-export def "automation-actions-revisions get-{app-id}-{definition-id}-page" [
+export def "automation-actions-revisions get-app-definition-page" [
   app_id: int
   definition_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -594,7 +594,7 @@ export def "automation-actions-revisions get-{app-id}-{definition-id}-page" [
 #
 # GET /automation/v4/actions/{appId}/{definitionId}/revisions/{revisionId}
 # operationId: get-/automation/v4/actions/{appId}/{definitionId}/revisions/{revisionId}_getById
-export def "automation-actions-revisions get-{app-id}-{definition-id}-{revision-id}" [
+export def "automation-actions-revisions get-app-definition" [
   app_id: int
   definition_id: string
   revision_id: string

@@ -491,7 +491,7 @@ export def "orders get" [
 #
 # HEAD /orders/v3/{marketplaceTechnicalCode}/{accountId}/{beezUPOrderId}
 # operationId: HeadOrderV3
-export def "orders head-head" [
+export def "orders head" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string
@@ -6429,7 +6429,7 @@ export def "user-marketplaces-orders get" [
 # DEPRECATED
 # operationId: HeadOrder
 @deprecated
-export def "user-marketplaces-orders head-head" [
+export def "user-marketplaces-orders head" [
   marketplace_technical_code: string
   account_id: int
   beez_up_order_id: string

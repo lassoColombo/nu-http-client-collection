@@ -803,7 +803,7 @@ export def "data-exporter-configs create" [
 #
 # DELETE /api/data-exporter-configs/_bulk
 # operationId: deletebulkDataExporterConfig
-export def "data-exporter-configs-bulk delete-deletebulk" [
+export def "data-exporter-configs-bulk delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

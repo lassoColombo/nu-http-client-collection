@@ -183,7 +183,7 @@ export def "settings-organizations list" [
 # Retrived the last modified for all settings of the system. Must have admin access.
 #
 # HEAD /settings/organizations
-export def "settings-organizations head-head" [
+export def "settings-organizations head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -224,7 +224,7 @@ export def "rnb-pvt-archive-calculator-configuration archive-promotion" [
 #
 # GET /api/rnb/pvt/archive/coupon/{couponCode}
 # operationId: Getarchivedbycouponcode
-export def "rnb-pvt-archive-coupon get-getarchivedbycouponcode" [
+export def "rnb-pvt-archive-coupon get-archivedbycouponcode" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "rnb-pvt-calculatorconfiguration get-calculator-configuration" [
 #
 # GET /api/rnb/pvt/campaignConfiguration
 # operationId: Getcampaignaudiences
-export def "rnb-pvt-campaign-configuration get-getcampaignaudiences" [
+export def "rnb-pvt-campaign-configuration get-campaignaudiences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "rnb-pvt-campaign-configuration create-setcampaignconfiguration" [
 #
 # GET /api/rnb/pvt/campaignConfiguration/{campaignId}
 # operationId: Getcampaignconfiguration
-export def "rnb-pvt-campaign-configuration get-getcampaignconfiguration" [
+export def "rnb-pvt-campaign-configuration get-campaignconfiguration" [
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +621,7 @@ export def "rnb-pvt-campaign-configuration get-getcampaignconfiguration" [
 #
 # GET /api/rnb/pvt/coupon
 # operationId: Getall
-export def "rnb-pvt-coupon get-getall" [
+export def "rnb-pvt-coupon get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "rnb-pvt-coupon create" [
 #
 # GET /api/rnb/pvt/coupon/usage/{couponCode}
 # operationId: Getusage
-export def "rnb-pvt-coupon-usage get-getusage" [
+export def "rnb-pvt-coupon-usage get" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -751,7 +751,7 @@ export def "rnb-pvt-coupon-usage get-getusage" [
 #
 # GET /api/rnb/pvt/coupon/{couponCode}
 # operationId: Getbycouponcode
-export def "rnb-pvt-coupon get-getbycouponcode" [
+export def "rnb-pvt-coupon get-bycouponcode" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1051,7 +1051,7 @@ export def "price-sheet create-saveprice" [
 #
 # GET /price-sheet/all/{page}/{pageSize}
 # operationId: Getallpaged
-export def "price-sheet-all get-getallpaged" [
+export def "price-sheet-all get-allpaged" [
   page: string
   page_size: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1124,7 +1124,7 @@ export def "price-sheet-context create-pricebycontext" [
 #
 # DELETE /price-sheet/{skuId}
 # operationId: DeletebyskuId
-export def "price-sheet delete-deletebysku" [
+export def "price-sheet delete-bysku" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

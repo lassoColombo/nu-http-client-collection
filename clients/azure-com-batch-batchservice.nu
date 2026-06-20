@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/batch-BatchService/2019-08-01.10.0/swagger.json
 # Auth: --token flag or $env.BATCHSERVICE_TOKEN
 
-const BASE_URL = "https://azure.local"
+const BASE_URL = "{batchUrl}"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local"] }
+def base-url-completer [] { ["{batchUrl}"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -2877,7 +2877,7 @@ export def "pools-nodes-users update-compute" [
 #
 # POST /pools/{poolId}/removenodes
 # operationId: Pool_RemoveNodes
-export def "pools-removenodes delete-nodes" [
+export def "pools-remove-nodes delete" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3005,7 +3005,7 @@ export def "pools-stopresize stop-resize" [
 # --certificateReferences item shape: {storeLocation?: "currentuser"|"localmachine", storeName?: string, thumbprint: string, thumbprintAlgorithm: string, visibility?: list<string>}
 # --metadata item shape: {name: string, value: string}
 # --startTask shape: {commandLine: string, containerSettings?: any, environmentSettings?: list, maxTaskRetryCount?: int, resourceFiles?: list, userIdentity?: any, waitForSuccess?: bool}
-export def "pools-updateproperties update-properties" [
+export def "pools-update-properties update" [
   pool_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

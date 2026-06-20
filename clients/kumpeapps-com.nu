@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://restapi.kumpeapps.com/v5" "https://restapi.preprod.kumpeapps.com/v5"] }
-def auth-scheme-completer [] { ["x-auth"] }
+def auth-scheme-completer [] { ["x-auth" "none"] }
 
 # Completers for enum parameters
 def transaction-type-completer [] { ["Add" "Subtract"] }
@@ -154,7 +154,7 @@ export def "appkey update" [
   --app-key: string # compromised app key
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp)
@@ -183,7 +183,7 @@ export def "appkey create" [
   --password: string # Password assigned to your app (format: password)
   --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP
 ]: nothing -> record<app_key: string, success: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/appkey" $qp)
@@ -236,7 +236,7 @@ export def "authentication-appkey update-auth" [
   --app-key: string # compromised app key
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "app_key" $app_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp)
@@ -263,7 +263,7 @@ export def "authentication-appkey create-auth" [
   --password: string # Password assigned to your app (format: password)
   --supports-yubikey: oneof<nothing, bool> # App supports YubiKey OTP
 ]: nothing -> record<app_key: string, success: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "username" $username "scalar") (serialize-qp "password" $password "scalar") (serialize-qp "supportsYubikey" $supports_yubikey "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/appkey" $qp)
@@ -343,7 +343,7 @@ export def "authentication-authkey update-auth" [
   --auth-key: string # auth key to mark as compromised (format: password)
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authentication/authkey" $qp)
@@ -477,7 +477,7 @@ export def "authkey update" [
   --auth-key: string # auth key to mark as compromised (format: password)
   --comments: string # Comments (like how was this compromised)
 ]: nothing -> record<success: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-auth"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "auth_key" $auth_key "scalar") (serialize-qp "comments" $comments "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/authkey" $qp)

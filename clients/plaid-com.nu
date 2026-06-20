@@ -98,7 +98,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://production.plaid.com" "https://development.plaid.com" "https://sandbox.plaid.com"] }
-def auth-scheme-completer [] { ["plaid-client-id" "plaid-version" "plaid-secret"] }
+def auth-scheme-completer [] { ["plaid-client-id" "plaid-version" "plaid-secret" "none"] }
 
 # Completers for enum parameters
 def report-type-completer [] { ["VERIFICATION_OF_EMPLOYMENT"] }
@@ -1066,7 +1066,7 @@ export def "categories-get get" [
   --body: record
 ]: any -> record<categories: table<category_id: string, group: string, hierarchy: list>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/categories/get")
   let req_body = $body

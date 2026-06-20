@@ -3355,7 +3355,7 @@ export def "api create-list-verified-email-addresses" [
 #
 # GET /
 # operationId: GET_PutConfigurationSetDeliveryOptions
-export def "api get-update-configuration-update-delivery-options" [
+export def "api get-update-configuration-delivery-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3392,7 +3392,7 @@ export def "api get-update-configuration-update-delivery-options" [
 #
 # POST /
 # operationId: POST_PutConfigurationSetDeliveryOptions
-export def "api create-update-configuration-update-delivery-options" [
+export def "api create-update-configuration-delivery-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4076,7 +4076,7 @@ export def "api create-send-templated-email" [
 #
 # GET /
 # operationId: GET_SetActiveReceiptRuleSet
-export def "api get-update-active-receipt-rule-update" [
+export def "api get-update-active-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4112,7 +4112,7 @@ export def "api get-update-active-receipt-rule-update" [
 #
 # POST /
 # operationId: POST_SetActiveReceiptRuleSet
-export def "api create-update-active-receipt-rule-update" [
+export def "api create-update-active-receipt-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4762,7 +4762,7 @@ export def "api create-update-account-sending-enabled" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetEventDestination
-export def "api get-update-configuration-update-event-destination" [
+export def "api get-update-configuration-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4799,7 +4799,7 @@ export def "api get-update-configuration-update-event-destination" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetEventDestination
-export def "api create-update-configuration-update-event-destination" [
+export def "api create-update-configuration-event-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4838,7 +4838,7 @@ export def "api create-update-configuration-update-event-destination" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetReputationMetricsEnabled
-export def "api get-update-configuration-update-reputation-metrics-enabled" [
+export def "api get-update-configuration-reputation-metrics-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4875,7 +4875,7 @@ export def "api get-update-configuration-update-reputation-metrics-enabled" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetReputationMetricsEnabled
-export def "api create-update-configuration-update-reputation-metrics-enabled" [
+export def "api create-update-configuration-reputation-metrics-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4914,7 +4914,7 @@ export def "api create-update-configuration-update-reputation-metrics-enabled" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetSendingEnabled
-export def "api get-update-configuration-update-sending-enabled" [
+export def "api get-update-configuration-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4951,7 +4951,7 @@ export def "api get-update-configuration-update-sending-enabled" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetSendingEnabled
-export def "api create-update-configuration-update-sending-enabled" [
+export def "api create-update-configuration-sending-enabled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4990,7 +4990,7 @@ export def "api create-update-configuration-update-sending-enabled" [
 #
 # GET /
 # operationId: GET_UpdateConfigurationSetTrackingOptions
-export def "api get-update-configuration-update-tracking-options" [
+export def "api get-update-configuration-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5027,7 +5027,7 @@ export def "api get-update-configuration-update-tracking-options" [
 #
 # POST /
 # operationId: POST_UpdateConfigurationSetTrackingOptions
-export def "api create-update-configuration-update-tracking-options" [
+export def "api create-update-configuration-tracking-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://idealspot-geodata.p.rapidapi.com/api/v1"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 
 # List all available API commands with their parameters
@@ -138,7 +138,7 @@ export def "data-insights get-available" [
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data/insights")
   let accept_val = "application/json; charset=utf-8"
@@ -166,7 +166,7 @@ export def "data-insights get-list-parameters" [
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'insight_id:' must be non-empty" } }
   let full_url = (build-url $base ({insight_id: (encode-path-segment $insight_id)} | format pattern "/data/insights/{insight_id}"))
@@ -197,7 +197,7 @@ export def "data-insights-query list-insightat-location" [
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'insight_id:' must be non-empty" } }
   let qp = [(serialize-qp "version" $version "scalar") (serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
@@ -227,7 +227,7 @@ export def "geometries-geometry get" [
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geometries/geometry" $qp)
@@ -257,7 +257,7 @@ export def "geometries-regions-intersecting get-administrative-regionsusing-lat-
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }
@@ -287,7 +287,7 @@ export def "traffic-counts get-vehicle-countsfor-road" [
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/traffic/counts/{segment_id}"))
@@ -318,7 +318,7 @@ export def "traffic-roads-nearest get-segments" [
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
   if ($longitude | is-empty) { error make --unspanned { msg: "path parameter 'longitude' must be non-empty" } }

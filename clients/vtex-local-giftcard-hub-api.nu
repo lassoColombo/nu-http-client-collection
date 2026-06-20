@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://vtex.local" "https://{accountName}.{environment}.com.br/api"] }
-def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
+def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken" "none"] }
 
 
 # List all available API commands with their parameters
@@ -143,7 +143,7 @@ export def "giftcardproviders list-gift-card-providers" [
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/giftcardproviders")
   let accept_val = "text/plain"

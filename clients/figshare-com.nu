@@ -124,7 +124,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://api.figshare.com/v2"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def order-completer [] { ["cites" "downloads" "modified_date" "published_date" "shares" "views"] }
@@ -2835,7 +2835,7 @@ export def "account-projects-search list-private" [
   --search-for: string # Search term (e.g. figshare)
 ]: any -> table<role: string, storage: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/projects/search")
   let req_body = {"order": $order, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
@@ -3434,7 +3434,7 @@ export def "articles list" [
   --handle: string # only return articles with this handle
   --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
 ]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "item_type" $item_type "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/articles" $qp)
@@ -3478,7 +3478,7 @@ export def "articles-search list" [
   --search-for: string # Search term (e.g. figshare)
 ]: any -> table<project_id: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/articles/search")
   let req_body = {"doi": $doi, "handle": $handle, "item_type": $item_type, "order": $order, "project_id": $project_id, "resource_doi": $resource_doi, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
@@ -3506,7 +3506,7 @@ export def "articles get-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}"))
@@ -3531,7 +3531,7 @@ export def "articles-files get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/files"))
@@ -3557,7 +3557,7 @@ export def "articles-files get-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -3583,7 +3583,7 @@ export def "articles-versions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<url: string, version: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   let full_url = (build-url $base ({article_id: (encode-path-segment $article_id)} | format pattern "/articles/{article_id}/versions"))
@@ -3609,7 +3609,7 @@ export def "articles-versions version-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, custom_fields: table<is_mandatory: bool, name: string, value: string>, embargo_options: table<id: int, ip_name: string, type: string>, figshare_url: string, files: table<computed_md5: string, download_url: string, id: int, is_link_only: bool, name: string, size: int, supplied_md5: string>, resource_doi: string, resource_title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($v_number | is-empty) { error make --unspanned { msg: "path parameter 'v_number' must be non-empty" } }
@@ -3636,7 +3636,7 @@ export def "articles-versions-confidentiality version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<is_confidential: bool, reason: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($v_number | is-empty) { error make --unspanned { msg: "path parameter 'v_number' must be non-empty" } }
@@ -3663,7 +3663,7 @@ export def "articles-versions-embargo version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<embargo_date: string, embargo_options: list<record>, embargo_reason: string, embargo_title: string, embargo_type: string, is_embargoed: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($article_id | is-empty) { error make --unspanned { msg: "path parameter 'article_id' must be non-empty" } }
   if ($v_number | is-empty) { error make --unspanned { msg: "path parameter 'v_number' must be non-empty" } }
@@ -3688,7 +3688,7 @@ export def "categories list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/categories")
   let accept_val = "application/json"
@@ -3725,7 +3725,7 @@ export def "collections list" [
   --handle: string # only return collections with this handle
   --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
 ]: nothing -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "modified_since" $modified_since "scalar") (serialize-qp "group" $group "scalar") (serialize-qp "resource_doi" $resource_doi "scalar") (serialize-qp "doi" $doi "scalar") (serialize-qp "handle" $handle "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/collections" $qp)
@@ -3767,7 +3767,7 @@ export def "collections-search list" [
   --search-for: string # Search term (e.g. figshare)
 ]: any -> table<doi: string, handle: string, id: int, published_date: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections/search")
   let req_body = {"doi": $doi, "handle": $handle, "order": $order, "resource_doi": $resource_doi, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
@@ -3795,7 +3795,7 @@ export def "collections get-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string>, version: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}"))
@@ -3824,7 +3824,7 @@ export def "collections-articles get" [
   --limit: int # Number of results included on a page. Used for pagination with query (format: int64)
   --offset: int # Where to start the listing(the offset of the first result). Used for pagination with limit (format: int64)
 ]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -3850,7 +3850,7 @@ export def "collections-versions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: int, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/collections/{collection_id}/versions"))
@@ -3876,7 +3876,7 @@ export def "collections-versions version-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<articles_count: int, authors: table<full_name: string, id: int, is_active: bool, orcid_id: string, url_name: string>, categories: table<id: int, parent_id: int, path: string, source_id: string, taxonomy_id: int, title: string>, citation: string, created_date: string, custom_fields: table<is_mandatory: bool, name: string, value: string>, description: string, funding: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>, group_id: int, group_resource_id: string, institution_id: int, modified_date: string, public: bool, references: list<string>, resource_doi: string, resource_id: string, resource_link: string, resource_title: string, resource_version: int, tags: list<string>, timeline: record<posted: string, revision: string, submission: string>, version: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
   if ($version_id | is-empty) { error make --unspanned { msg: "path parameter 'version_id' must be non-empty" } }
@@ -3902,7 +3902,7 @@ export def "file-download download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/file/download/{file_id}"))
@@ -4008,7 +4008,7 @@ export def "licenses list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<name: string, url: string, value: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licenses")
   let accept_val = "application/json"
@@ -4041,7 +4041,7 @@ export def "projects list" [
   --group: int # only return collections from this group (format: int64)
   --x-cursor: string # Unique hash used for bypassing the item retrieval limit of 9,000 entities. When using this parameter, please note that the offset parameter will not be available, but the limit parameter will still work as expected.
 ]: nothing -> table<id: int, published_date: string, title: string, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "order_direction" $order_direction "scalar") (serialize-qp "institution" $institution "scalar") (serialize-qp "published_since" $published_since "scalar") (serialize-qp "group" $group "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/projects" $qp)
@@ -4080,7 +4080,7 @@ export def "projects-search list" [
   --search-for: string # Search term (e.g. figshare)
 ]: any -> table<id: int, published_date: string, title: string, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/projects/search")
   let req_body = {"order": $order, "group": $group, "institution": $institution, "limit": $limit, "modified_since": $modified_since, "offset": $offset, "order_direction": $order_direction, "page": $page, "page_size": $page_size, "published_since": $published_since, "search_for": $search_for} | compact
@@ -4108,7 +4108,7 @@ export def "projects get-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<collaborators: table<name: string, role_name: string, user_id: int>, description: string, figshare_url: string, funding: string, funding_list: table<funder_name: string, grant_code: string, id: int, is_user_defined: bool, title: string, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}"))
@@ -4133,7 +4133,7 @@ export def "projects-articles get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<defined_type: int, defined_type_name: string, doi: string, group_id: float, handle: string, id: int, published_date: string, thumb: string, timeline: record<posted: string, revision: string, submission: string>, title: string, url: string, url_private_api: string, url_private_html: string, url_public_api: string, url_public_html: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'project_id' must be non-empty" } }
   let full_url = (build-url $base ({project_id: (encode-path-segment $project_id)} | format pattern "/projects/{project_id}/articles"))

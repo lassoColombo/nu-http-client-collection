@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["query-hapikey" "bearer" "private-app-legacy"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "marketing-marketing-events-attendance-create create-{external-id}-{subscriber-state}" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "marketing-marketing-events-attendance-create create-external-subscriber-state" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # POST /marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/create
 # operationId: post-/marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/create_create
 # --inputs item shape: {interactionDateTime: int, properties?: record, vid?: int}
-export def "marketing-marketing-events-attendance-create create-{external-id}-{subscriber-state}" [
+export def "marketing-marketing-events-attendance-create create-external-subscriber-state" [
   external_event_id: string
   subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -163,7 +163,7 @@ export def "marketing-marketing-events-attendance-create create-{external-id}-{s
 # POST /marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/email-create
 # operationId: post-/marketing/v3/marketing-events/attendance/{externalEventId}/{subscriberState}/email-create_createByEmail
 # --inputs item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
-export def "marketing-marketing-events-attendance-email-create create-{external-id}-{subscriber-state}" [
+export def "marketing-marketing-events-attendance-email-create create-external-subscriber-state" [
   external_event_id: string
   subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -311,7 +311,7 @@ export def "marketing-marketing-events-events-upsert create-do" [
 # DELETE /marketing/v3/marketing-events/events/{externalEventId}
 #
 # operationId: delete-/marketing/v3/marketing-events/events/{externalEventId}_archive
-export def "marketing-marketing-events-events delete-{external-id}-archive" [
+export def "marketing-marketing-events-events delete-external-archive" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "marketing-marketing-events-events delete-{external-id}-archive" [
 # GET /marketing/v3/marketing-events/events/{externalEventId}
 #
 # operationId: get-/marketing/v3/marketing-events/events/{externalEventId}_getById
-export def "marketing-marketing-events-events get-{external-id}" [
+export def "marketing-marketing-events-events get-external" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "marketing-marketing-events-events get-{external-id}" [
 #
 # operationId: patch-/marketing/v3/marketing-events/events/{externalEventId}_update
 # --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
-export def "marketing-marketing-events-events update-{external-id}-by-external-event-id" [
+export def "marketing-marketing-events-events update-external-by-external-event-id" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "marketing-marketing-events-events update-{external-id}-by-external-e
 #
 # operationId: put-/marketing/v3/marketing-events/events/{externalEventId}_replace
 # --customProperties item shape: {name: string, persistenceTimestamp?: int, requestId: string, selectedByUser: bool, selectedByUserTimestamp: int, ... (9 more fields)}
-export def "marketing-marketing-events-events update-{external-id}-by-external-event-id-1" [
+export def "marketing-marketing-events-events update-external-by-external-event-id-1" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "marketing-marketing-events-events update-{external-id}-by-external-e
 # POST /marketing/v3/marketing-events/events/{externalEventId}/cancel
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/cancel_doCancel
-export def "marketing-marketing-events-events-cancel create-{external-id}-do" [
+export def "marketing-marketing-events-events-cancel create-external-do" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +467,7 @@ export def "marketing-marketing-events-events-cancel create-{external-id}-do" [
 # POST /marketing/v3/marketing-events/events/{externalEventId}/complete
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/complete_complete
-export def "marketing-marketing-events-events-complete create-{external-id}" [
+export def "marketing-marketing-events-events-complete create-external" [
   external_event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "marketing-marketing-events-events-complete create-{external-id}" [
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/email-upsert_doEmailUpsertById
 # --inputs item shape: {contactProperties?: record, email: string, interactionDateTime: int, properties?: record}
-export def "marketing-marketing-events-events-email-upsert create-{external-id}-{subscriber-state}-do" [
+export def "marketing-marketing-events-events-email-upsert create-external-subscriber-state-do" [
   external_event_id: string
   subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -532,7 +532,7 @@ export def "marketing-marketing-events-events-email-upsert create-{external-id}-
 #
 # operationId: post-/marketing/v3/marketing-events/events/{externalEventId}/{subscriberState}/upsert_doUpsertById
 # --inputs item shape: {interactionDateTime: int, properties?: record, vid?: int}
-export def "marketing-marketing-events-events-upsert create-{external-id}-{subscriber-state}-do" [
+export def "marketing-marketing-events-events-upsert create-external-subscriber-state-do" [
   external_event_id: string
   subscriber_state: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -564,7 +564,7 @@ export def "marketing-marketing-events-events-upsert create-{external-id}-{subsc
 # GET /marketing/v3/marketing-events/{appId}/settings
 #
 # operationId: get-/marketing/v3/marketing-events/{appId}/settings_getAll
-export def "marketing-marketing-events-settings get-{app-id}-list" [
+export def "marketing-marketing-events-settings get-app-list" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +588,7 @@ export def "marketing-marketing-events-settings get-{app-id}-list" [
 # POST /marketing/v3/marketing-events/{appId}/settings
 #
 # operationId: post-/marketing/v3/marketing-events/{appId}/settings_create
-export def "marketing-marketing-events-settings create-{app-id}" [
+export def "marketing-marketing-events-settings create-app" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://localhost/api/v2"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 # Completers for enum parameters
 def type-completer [] { ["route_server"] }
@@ -325,7 +325,7 @@ export def "auth-refresh refresh-token" [
   refresh_token: string
 ]: any -> record<access_token: string, refresh_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/refresh")
   let req_body = {"refresh_token": $refresh_token} | compact
@@ -353,7 +353,7 @@ export def "auth-token create" [
   api_secret: string
 ]: any -> record<access_token: string, refresh_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/token")
   let req_body = {"api_key": $api_key, "api_secret": $api_secret} | compact

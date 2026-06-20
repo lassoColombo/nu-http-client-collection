@@ -98,7 +98,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://ibl.api.bbci.co.uk/ibl/v1" "http://ibl.api.bbci.co.uk/ibl/v1"] }
-def auth-scheme-completer [] { ["query-api_key" "basic" "basic-credentials"] }
+def auth-scheme-completer [] { ["query-api_key" "basic" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def rights-completer [] { ["mobile" "tv" "web"] }
@@ -155,7 +155,7 @@ export def "atoz-programmes get-ato-z-list" [
   --sort-direction: string@sort-direction-completer # Whether to sort ascending or descending
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($letter | is-empty) { error make --unspanned { msg: "path parameter 'letter' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
@@ -181,7 +181,7 @@ export def "categories get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # The language for any applicable localised strings.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
@@ -207,7 +207,7 @@ export def "categories get-sub" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # The language for any applicable localised strings.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
@@ -239,7 +239,7 @@ export def "categories-episodes get" [
   --per-page: int # The number of results to return. (format: int64)
   --qp-sort: string@sort-completer-1 # The sort order of the results.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -269,7 +269,7 @@ export def "categories-highlights get" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
@@ -300,7 +300,7 @@ export def "categories-programmes get" [
   --page: int # The page index. (format: int64)
   --per-page: int # The number of results to return. (format: int64)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -327,7 +327,7 @@ export def "channels get" [
   --region: string # The region to get the channels for.
   --lang: string@lang-completer # The language for any applicable localised strings.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "region" $region "scalar") (serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
@@ -358,7 +358,7 @@ export def "channels-broadcasts get" [
   --per-page: int # The number of results to return. (format: int64)
   --qp-from: string # Time to return results from, e.g. -3h
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
@@ -389,7 +389,7 @@ export def "channels-highlights get" [
   --live: oneof<nothing, bool> # Whether to include live programmes
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "live" $live "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
@@ -420,7 +420,7 @@ export def "channels-programmes get" [
   --page: int # The page index. (format: int64)
   --per-page: int # The number of results to return. (format: int64)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -450,7 +450,7 @@ export def "channels-schedule get" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($channel | is-empty) { error make --unspanned { msg: "path parameter 'channel' must be non-empty" } }
   if ($date | is-empty) { error make --unspanned { msg: "path parameter 'date' must be non-empty" } }
@@ -479,7 +479,7 @@ export def "clips get" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
@@ -508,7 +508,7 @@ export def "episodes get-programme" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
@@ -536,7 +536,7 @@ export def "episodes-next get-onward-journey" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
@@ -550,7 +550,7 @@ export def "episodes-next get-onward-journey" [
 #
 # GET /episodes/{pid}/postrolls
 # operationId: getPostRolls
-export def "episodes-postrolls get-create-rolls" [
+export def "episodes-post-rolls get" [
   pid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "episodes-postrolls get-create-rolls" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
@@ -592,7 +592,7 @@ export def "episodes-prerolls get-trailers-pre-rolls" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
@@ -622,7 +622,7 @@ export def "episodes-recommendations get-programme" [
   --page: int # The page index. (format: int64)
   --per-page: int # The number of results to return. (format: int64)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -655,7 +655,7 @@ export def "groups-popular-episodes get-programmes" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/groups/popular/episodes" $qp)
@@ -688,7 +688,7 @@ export def "groups-episodes get" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
@@ -717,7 +717,7 @@ export def "home-highlights get-programme" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --mixin: list<string>@mixin-completer # Request additional data in the output
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "mixin" $mixin "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/home/highlights" $qp)
@@ -745,7 +745,7 @@ export def "programmes get-by-parent" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --initial-child-count: int # The depth to return child entities. (default: 4)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
@@ -774,7 +774,7 @@ export def "programmes-episodes get-by-parent" [
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
   --initial-child-count: int # The depth to return child entities. (default: 4)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($pid | is-empty) { error make --unspanned { msg: "path parameter 'pid' must be non-empty" } }
   let qp = [(serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar") (serialize-qp "initial_child_count" $initial_child_count "scalar")] | flatten | str join "&"
@@ -800,7 +800,7 @@ export def "regions get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string@lang-completer # The language for any applicable localised strings.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lang" $lang "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/regions" $qp)
@@ -824,7 +824,7 @@ export def "schema-ibl-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/schema/ibl.json")
   let accept_val = "application/json"
@@ -851,7 +851,7 @@ export def "search list" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
@@ -879,7 +879,7 @@ export def "search-suggest list" [
   --rights: string@rights-completer # The rights group to limit results to. (default: web)
   --availability: string@availability-completer # Whether to return all, or available programmes (default: available)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "rights" $rights "scalar") (serialize-qp "availability" $availability "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search-suggest" $qp)
@@ -903,7 +903,7 @@ export def "status get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status")
   let accept_val = "application/json"
@@ -952,7 +952,7 @@ export def "user-recommendations get-store" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --identity-cookie: float # The BBC-id cookie value (format: double)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/recommendations" $qp)
@@ -977,7 +977,7 @@ export def "user-watching get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --identity-cookie: float # The BBC-id cookie value (format: double)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "identity_cookie" $identity_cookie "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/user/watching" $qp)

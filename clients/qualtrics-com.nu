@@ -217,7 +217,7 @@ export def "distributions generate-links" [
 #
 # GET /distributions/{DistributionId}/links
 # operationId: Retrievedistributionlinks
-export def "distributions-links get-retrievedistributionlinks" [
+export def "distributions-links get-distributionlinks" [
   distribution_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

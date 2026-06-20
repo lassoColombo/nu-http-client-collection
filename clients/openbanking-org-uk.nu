@@ -150,7 +150,7 @@ export def "atms get" [
 # Gets header information on the current set of `ATM` data
 #
 # HEAD /atms
-export def "atms head-head" [
+export def "atms head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "branches get" [
 # Gets header information on the current set of `Branch` data
 #
 # HEAD /branches
-export def "branches head-head" [
+export def "branches head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "business-current-accounts get" [
 # Gets header information on the current set of `Business Current Account` data
 #
 # HEAD /business-current-accounts
-export def "business-current-accounts head-head" [
+export def "business-current-accounts head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "commercial-credit-cards get" [
 # Gets header information on the current set of `Commerical Credit Card` data
 #
 # HEAD /commercial-credit-cards
-export def "commercial-credit-cards head-head" [
+export def "commercial-credit-cards head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "personal-current-accounts get" [
 # Gets header information on the current set of `Personal Current Account` data
 #
 # HEAD /personal-current-accounts
-export def "personal-current-accounts head-head" [
+export def "personal-current-accounts head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "unsecured-sme-loans get" [
 # Gets header information on the current set of `Unsercured SME Lending` data
 #
 # HEAD /unsecured-sme-loans
-export def "unsecured-sme-loans head-head" [
+export def "unsecured-sme-loans head" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

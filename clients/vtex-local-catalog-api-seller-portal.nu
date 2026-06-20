@@ -357,7 +357,7 @@ export def "catalog-seller-portal-category-tree-categories create" [
 #
 # GET /api/catalog-seller-portal/category-tree/categories/{categoryId}
 # operationId: Getbyid
-export def "catalog-seller-portal-category-tree-categories get-getbyid" [
+export def "catalog-seller-portal-category-tree-categories get" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

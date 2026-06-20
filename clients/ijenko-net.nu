@@ -1,6 +1,6 @@
 # Auto-generated client for IoE² IoT API - to create end-user applications v3.0.0
 # Source: https://api.apis.guru/v2/specs/ijenko.net/3.0.0/swagger.json
-# Auth: --token flag or $env.IOE_IOT_API___TO_CREATE_END_USER_APPLICATIONS_TOKEN
+# Auth: --token flag or $env.IOE_IOT_API_TO_CREATE_END_USER_APPLICATIONS_TOKEN
 
 const BASE_URL = "https://ioe2api.ijenko.net"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://ioe2api.ijenko.net"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o IOE_IOT_API___TO_CREATE_END_USER_APPLICATIONS_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o IOE_IOT_API_TO_CREATE_END_USER_APPLICATIONS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -97,7 +97,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://ioe2api.ijenko.net"] }
-def auth-scheme-completer [] { ["access-token" "query-token"] }
+def auth-scheme-completer [] { ["access-token" "query-token" "none"] }
 
 # Completers for enum parameters
 def span-completer [] { ["D" "H" "M" "Wmo" "Wsu" "Y"] }
@@ -468,7 +468,7 @@ export def "auth-login create-account" [
   --ttl: int # Desired maximum life-time in seconds for the refresh token (e.g. 1800)
 ]: any -> record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-token"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/login")
   let req_body = {"appId": $app_id, "login": $login, "password": $password, "ttl": $ttl} | compact
@@ -496,7 +496,7 @@ export def "auth-refresh refresh-token" [
   refresh_token: string
 ]: any -> record<accessToken: string, accessTokenExpires: string, refreshToken: string, refreshTokenExpires: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-token"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/refresh")
   let req_body = {"appId": $app_id, "refreshToken": $refresh_token} | compact
@@ -525,7 +525,7 @@ export def "auth-reset-password reset" [
   --login: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-token"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/reset-password")
   let req_body = {"appId": $app_id, "email": $email, "login": $login} | compact

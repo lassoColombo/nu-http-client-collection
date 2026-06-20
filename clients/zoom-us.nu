@@ -3255,7 +3255,7 @@ export def "im-users-me-chat-messages create-sendimmessages" [
 # DEPRECATED
 # operationId: listimmessages
 @deprecated
-export def "im-users-chat-messages get-listimmessages" [
+export def "im-users-chat-messages list-immessages" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

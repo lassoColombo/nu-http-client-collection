@@ -1342,7 +1342,7 @@ export def "api list-custom-routing-endpoint-groups" [
 #
 # POST /
 # operationId: ListCustomRoutingListeners
-export def "api list-custom-routing-listeners" [
+export def "api list-custom-routing-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "api list-endpoint-groups" [
 #
 # POST /
 # operationId: ListListeners
-export def "api list-listeners" [
+export def "api list-eners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

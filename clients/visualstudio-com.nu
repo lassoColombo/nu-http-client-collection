@@ -1172,7 +1172,7 @@ export def "geneva-actions-pools create" [
 # POST /api/v1/GenevaActions/Prebuilds/pools/createorupdatesettings
 #
 # --pools item shape: {poolType?: "0 (None)"|"1 (Blob)"|"2 (CodespacePool)"|"3 (StoragePool)"|"4 (CodespaceAndStoragePool)", skuName?: string, targetCount?: int}
-export def "geneva-actions-prebuilds-pools-createorupdatesettings create" [
+export def "geneva-actions-prebuilds-pools-create-orupdatesettings create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4367,7 +4367,7 @@ export def "prebuilds-templates-skus-repo-branch-hash-location-devcontainerpath 
 }
 
 # POST /api/v2/prebuilds/templates/updatemaxversions
-export def "prebuilds-templates-updatemaxversions create" [
+export def "prebuilds-templates-update-maxversions create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4394,7 +4394,7 @@ export def "prebuilds-templates-updatemaxversions create" [
 }
 
 # POST /api/v2/prebuilds/templates/{templateId}/updatestatus
-export def "prebuilds-templates-updatestatus create" [
+export def "prebuilds-templates-update-status create" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

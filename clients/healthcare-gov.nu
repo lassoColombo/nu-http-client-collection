@@ -101,7 +101,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "articles-media-type-extension get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "articlesmedia-type-extension get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # Returns pages content.
 #
 # GET /api/articles{mediaTypeExtension}
-export def "articles-media-type-extension get" [
+export def "articlesmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -148,7 +148,7 @@ export def "articles-media-type-extension get" [
 # Returns pages content.
 #
 # GET /api/blog{mediaTypeExtension}
-export def "blog-media-type-extension get" [
+export def "blogmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "blog-media-type-extension get" [
 # Returns pages content.
 #
 # GET /api/glossary{mediaTypeExtension}
-export def "glossary-media-type-extension get" [
+export def "glossarymedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "glossary-media-type-extension get" [
 # Returns pages content.
 #
 # GET /api/questions{mediaTypeExtension}
-export def "questions-media-type-extension get" [
+export def "questionsmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "questions-media-type-extension get" [
 # Returns pages content.
 #
 # GET /api/states{mediaTypeExtension}
-export def "states-media-type-extension get" [
+export def "statesmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -244,7 +244,7 @@ export def "states-media-type-extension get" [
 # Returns pages content.
 #
 # GET /api/topics{mediaTypeExtension}
-export def "topics-media-type-extension get" [
+export def "topicsmedia-type-extension get" [
   media_type_extension: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

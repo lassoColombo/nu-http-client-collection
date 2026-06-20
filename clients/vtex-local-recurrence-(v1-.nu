@@ -1,6 +1,6 @@
 # Auto-generated client for Subscription (v1 - deprecated) v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Recurrence-(v1-/1.0/openapi.json
-# Auth: --token flag or $env.SUBSCRIPTION_V1___DEPRECATED_TOKEN
+# Auth: --token flag or $env.SUBSCRIPTION_V1_DEPRECATED_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SUBSCRIPTION_V1___DEPRECATED_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SUBSCRIPTION_V1_DEPRECATED_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -158,7 +158,7 @@ export def "subscriptions get-recurrencebyemail" [
 # PUT /subscriptions
 # operationId: Updaterecurrence
 # --items item shape: {frequency: record, quantity: int, seller: string, shippingAddressId: string, sku: string}
-export def "subscriptions update-updaterecurrence" [
+export def "subscriptions update-recurrence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "subscriptions update-updaterecurrence" [
 #
 # GET /subscriptions/me
 # operationId: Getselfrecurrence
-export def "subscriptions-me get-getselfrecurrence" [
+export def "subscriptions-me get-selfrecurrence" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "subscriptions-me get-getselfrecurrence" [
 #
 # GET /subscriptions/settings
 # operationId: Getrecurrencesettings
-export def "subscriptions-settings get-getrecurrencesettings" [
+export def "subscriptions-settings get-recurrencesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "subscriptions-settings get-getrecurrencesettings" [
 #
 # PUT /subscriptions/settings
 # operationId: Updaterecurrencesettings
-export def "subscriptions-settings update-updaterecurrencesettings" [
+export def "subscriptions-settings update-recurrencesettings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "subscriptions get-recurrencebyrecurrence" [
 #
 # PATCH /subscriptions/{recurrenceId}
 # operationId: Updatepartialrecurrence
-export def "subscriptions update-updatepartialrecurrence" [
+export def "subscriptions update-partialrecurrence" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -349,7 +349,7 @@ export def "subscriptions update-updatepartialrecurrence" [
 #
 # GET /subscriptions/{recurrenceId}/addresses
 # operationId: Getrecurrenceaddresses
-export def "subscriptions-addresses get-getrecurrenceaddresses" [
+export def "subscriptions-addresses get-recurrenceaddresses" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "subscriptions-reindex update-reindexrecurrence" [
 #
 # GET /subscriptions/{recurrenceid}/accounts
 # operationId: Getpaymentaccounts
-export def "subscriptions-accounts get-getpaymentaccounts" [
+export def "subscriptions-accounts get-paymentaccounts" [
   recurrenceid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

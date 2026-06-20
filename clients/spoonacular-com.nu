@@ -549,7 +549,7 @@ export def "food-ingredients-information get" [
 # GET /food/ingredients/{id}/substitutes
 # Docs: https://spoonacular.com/food-api/docs#Get-Ingredient-Substitutes-by-ID — Read entire docs
 # operationId: getIngredientSubstitutesByID
-export def "food-ingredients-substitutes get-by-id-id" [
+export def "food-ingredients-substitutes get-by-id" [
   id: int
   id: float
   --base-url(-b): string@base-url-completer # API base URL

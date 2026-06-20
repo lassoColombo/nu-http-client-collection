@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://api.axesso.de"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 
 # List all available API commands with their parameters
@@ -163,7 +163,7 @@ export def "amz-amazon-lookup-product request" [
   --url: string # The url of the requested product.
   --size: string # Size parameter if available.
 ]: nothing -> record<answeredQuestions: int, asin: string, countReview: int, features: list<string>, fulfilledBy: string, manufacturer: string, price: float, priceSaving: string, priceShippingInformation: string, prime: bool, productRating: string, productTitle: string, responseMessage: string, responseStatus: string, retailPrice: float, sizeSelection: list<string>, soldBy: string, warehouseAvailability: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amz/amazon-lookup-product" $qp)
@@ -191,7 +191,7 @@ export def "amz-amazon-search-by-keyword list" [
   --sort-by: string # sort option (default: relevanceblender)
   --number-of-products: int # number of the results (max 20) (default: 20)
 ]: nothing -> record<domainCode: string, foundProducts: list<string>, keyword: string, numberOfProducts: int, responseMessage: string, responseStatus: string, sortStrategy: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keyword" $keyword "scalar") (serialize-qp "domainCode" $domain_code "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "numberOfProducts" $number_of_products "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/amz/amazon-search-by-keyword" $qp)

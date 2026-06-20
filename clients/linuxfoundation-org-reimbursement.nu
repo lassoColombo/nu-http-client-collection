@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://localhost/v1"] }
-def auth-scheme-completer [] { ["x-api-key"] }
+def auth-scheme-completer [] { ["x-api-key" "none"] }
 
 
 # List all available API commands with their parameters
@@ -137,7 +137,7 @@ export def "api-docs get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api-docs")
   let accept_val = "text/html"
@@ -160,7 +160,7 @@ export def "health check" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<BuildTimeStamp: string, Githash: string, Healths: table<Duration: string, Error: string, Healthy: bool, Name: string, TimeStamp: string>, Status: string, TimeStamp: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health")
   let accept_val = "application/json"

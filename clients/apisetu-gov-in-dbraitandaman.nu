@@ -1,6 +1,6 @@
 # Auto-generated client for Dr. B.R. Ambedkar Institute of Technology,Andaman & Nicobar Islands v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/dbraitandaman/3.0.0/openapi.json
-# Auth: --token flag or $env.DR_B_R__AMBEDKAR_INSTITUTE_OF_TECHNOLOGY_ANDAMAN___NICOBAR_ISLANDS_TOKEN
+# Auth: --token flag or $env.DR_B_R_AMBEDKAR_INSTITUTE_OF_TECHNOLOGY_ANDAMAN_NICOBAR_ISLANDS_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/dbraitandaman/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/dbraitandaman/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DR_B_R__AMBEDKAR_INSTITUTE_OF_TECHNOLOGY_ANDAMAN___NICOBAR_ISLANDS_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o DR_B_R_AMBEDKAR_INSTITUTE_OF_TECHNOLOGY_ANDAMAN_NICOBAR_ISLANDS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

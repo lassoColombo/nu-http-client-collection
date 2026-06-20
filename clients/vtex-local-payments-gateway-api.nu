@@ -580,7 +580,7 @@ export def "pvt-rules update" [
 #
 # POST /api/pvt/transactions
 # operationId: 1.Createanewtransaction
-export def "pvt-transactions create-createanewtransaction" [
+export def "pvt-transactions create-anewtransaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

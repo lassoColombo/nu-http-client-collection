@@ -187,7 +187,7 @@ export def "sku-binding-pvt-skuseller-activate create" [
 #
 # GET /sku-binding/pvt/skuseller/admin
 # operationId: Getpagedadmin
-export def "sku-binding-pvt-skuseller-admin get-getpagedadmin" [
+export def "sku-binding-pvt-skuseller-admin get-pagedadmin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -346,7 +346,7 @@ export def "sku-binding-pvt-skuseller-insertion create" [
 #
 # GET /sku-binding/pvt/skuseller/list/bysellerId/{sellerId}
 # operationId: GetallbySellerId
-export def "sku-binding-pvt-skuseller-list-byseller-id get-getallby-seller" [
+export def "sku-binding-pvt-skuseller-list-byseller-id get-allby-seller" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -375,7 +375,7 @@ export def "sku-binding-pvt-skuseller-list-byseller-id get-getallby-seller" [
 #
 # GET /sku-binding/pvt/skuseller/paged/sellerid/{sellerId}
 # operationId: GetpagedbySellerId
-export def "sku-binding-pvt-skuseller-paged-sellerid get-getpagedby-seller" [
+export def "sku-binding-pvt-skuseller-paged-sellerid get-pagedby-seller" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -1,6 +1,6 @@
 # Auto-generated client for Subscriptions API (v2 - DEPRECATED) v1.0
 # Source: https://api.apis.guru/v2/specs/vtex.local/Subscriptions-API-(v2)/1.0/openapi.json
-# Auth: --token flag or $env.SUBSCRIPTIONS_API_V2___DEPRECATED_TOKEN
+# Auth: --token flag or $env.SUBSCRIPTIONS_API_V2_DEPRECATED_TOKEN
 
 const BASE_URL = "https://vtex.local"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://vtex.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SUBSCRIPTIONS_API_V2___DEPRECATED_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o SUBSCRIPTIONS_API_V2_DEPRECATED_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {
@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-report-status get-getreportstatusby" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-report-status get-reportstatusby" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /report/reportStatus/{reportId}
 # operationId: GetreportstatusbyID
-export def "report-report-status get-getreportstatusby" [
+export def "report-report-status get-reportstatusby" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -383,7 +383,7 @@ export def "settings create-edit" [
 #
 # GET /subscriptions
 # operationId: Getsubscriptionstocustomer
-export def "subscriptions get-getsubscriptionstocustomer" [
+export def "subscriptions get-subscriptionstocustomer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "subscriptions-group get-allsubscriptiongroup" [
 #
 # GET /subscriptions-group/list
 # operationId: Getsubscriptiongrouplist
-export def "subscriptions-group-list get-getsubscriptiongrouplist" [
+export def "subscriptions-group-list get-subscriptiongrouplist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "subscriptions-group-additem create-additemsubscription" [
 #
 # GET /subscriptions-group/{groupId}/addresses
 # operationId: GetaddressesbygroupId
-export def "subscriptions-group-addresses get-getaddressesbygroup" [
+export def "subscriptions-group-addresses get-addressesbygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +800,7 @@ export def "subscriptions-group-conversation-message get-messagebygroup" [
 #
 # GET /subscriptions-group/{groupId}/frequency-options
 # operationId: GetfrequencyoptionsbygroupId
-export def "subscriptions-group-frequency-options get-getfrequencyoptionsbygroup" [
+export def "subscriptions-group-frequency-options get-frequencyoptionsbygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,7 +829,7 @@ export def "subscriptions-group-frequency-options get-getfrequencyoptionsbygroup
 #
 # GET /subscriptions-group/{groupId}/payment-systems
 # operationId: GetpaymentSystembygroupId
-export def "subscriptions-group-payment-systems get-getpayment-systembygroup" [
+export def "subscriptions-group-payment-systems get-systembygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -858,7 +858,7 @@ export def "subscriptions-group-payment-systems get-getpayment-systembygroup" [
 #
 # GET /subscriptions-group/{groupId}/will-create
 # operationId: GetwillcreatebygroupId
-export def "subscriptions-group-will-create get-getwillcreatebygroup" [
+export def "subscriptions-group-will-create get-willcreatebygroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -945,7 +945,7 @@ export def "subscriptions-list get" [
 #
 # GET /subscriptions/{subscriptionId}
 # operationId: GetsubscriptionbyId
-export def "subscriptions get-getsubscriptionby" [
+export def "subscriptions get-subscriptionby" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "subscriptions-cancel cancel-subscriptionsby" [
 #
 # GET /subscriptions/{subscriptionId}/frequency-options
 # operationId: GetfrequencyoptionsbysubscriptionId
-export def "subscriptions-frequency-options get-getfrequencyoptionsbysubscription" [
+export def "subscriptions-frequency-options get-frequencyoptionsbysubscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

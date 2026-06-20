@@ -1071,7 +1071,7 @@ export def "pretargetingconfigs update-by-account-id-config-id-1" [
 # POST /privateauction/{privateAuctionId}/updateproposal
 # operationId: adexchangebuyer.marketplaceprivateauction.updateproposal
 # --note shape: {creatorRole?: string, dealId?: string, kind?: string, note?: string, noteId?: string, proposalId?: string, proposalRevisionNumber?: string, timestampMs?: string}
-export def "privateauction-updateproposal create" [
+export def "privateauction-update-proposal update" [
   private_auction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

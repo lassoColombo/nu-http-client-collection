@@ -196,7 +196,7 @@ export def "clean get-scan-page" [
 #
 # GET /getfindings/{scanId}
 # operationId: GetFindingPage
-export def "getfindings get-finding-page" [
+export def "get-findings get-page" [
   scan_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

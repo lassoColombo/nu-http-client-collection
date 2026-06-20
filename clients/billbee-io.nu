@@ -117,7 +117,7 @@ def shipping-carrier-completer [] { ["0" "1" "10" "11" "12" "13" "14" "15" "16" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automaticprovision-createaccount create-automatic-provisioning-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "automaticprovision-create-account create-automatic-provisioning" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # POST /api/v1/automaticprovision/createaccount
 # operationId: AutomaticProvisioning_CreateAccount
 # --Address shape: {Address1?: string, Address2?: string, City?: string, Company?: string, Country?: string, Name?: string, VatId?: string, Zip?: string}
-export def "automaticprovision-createaccount create-automatic-provisioning-account" [
+export def "automaticprovision-create-account create-automatic-provisioning" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,7 +1859,7 @@ export def "products-stocks get-article" [
 #
 # POST /api/v1/products/updatestock
 # operationId: Article_UpdateStock
-export def "products-updatestock update-article-stock" [
+export def "products-update-stock update-article" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1895,7 +1895,7 @@ export def "products-updatestock update-article-stock" [
 #
 # POST /api/v1/products/updatestockcode
 # operationId: Article_UpdateStockCode
-export def "products-updatestockcode update-article-stock-code" [
+export def "products-update-stockcode update-article-stock-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1926,7 +1926,7 @@ export def "products-updatestockcode update-article-stock-code" [
 #
 # POST /api/v1/products/updatestockmultiple
 # operationId: Article_UpdateStockMultiple
-export def "products-updatestockmultiple update-article-stock-multiple" [
+export def "products-update-stockmultiple update-article-stock-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

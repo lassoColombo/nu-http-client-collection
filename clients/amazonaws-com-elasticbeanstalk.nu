@@ -3079,7 +3079,7 @@ export def "api get-environment" [
 #
 # POST /
 # operationId: POST_RetrieveEnvironmentInfo
-export def "api create-get-environment-get" [
+export def "api create-get-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

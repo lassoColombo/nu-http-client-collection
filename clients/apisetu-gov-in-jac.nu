@@ -1,6 +1,6 @@
 # Auto-generated client for Jharkhand State Board (Jharkhand Academic Council), Jharkhand v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/jac/3.0.0/openapi.json
-# Auth: --token flag or $env.JHARKHAND_STATE_BOARD_JHARKHAND_ACADEMIC_COUNCIL___JHARKHAND_TOKEN
+# Auth: --token flag or $env.JHARKHAND_STATE_BOARD_JHARKHAND_ACADEMIC_COUNCIL_JHARKHAND_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/jac/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/jac/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o JHARKHAND_STATE_BOARD_JHARKHAND_ACADEMIC_COUNCIL___JHARKHAND_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o JHARKHAND_STATE_BOARD_JHARKHAND_ACADEMIC_COUNCIL_JHARKHAND_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

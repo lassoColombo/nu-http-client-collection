@@ -369,7 +369,7 @@ export def "dataentities-client-documents update-customer-profile" [
 #
 # PATCH /api/dataentities/{dataEntityName}/documents
 # operationId: Createorupdatepartialdocument
-export def "dataentities-documents update-createorupdatepartialdocument" [
+export def "dataentities-documents create-orupdatepartialdocument" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "dataentities-documents update-createorupdatepartialdocument" [
 #
 # POST /api/dataentities/{dataEntityName}/documents
 # operationId: Createnewdocument
-export def "dataentities-documents create-createnewdocument" [
+export def "dataentities-documents create-newdocument" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -443,7 +443,7 @@ export def "dataentities-documents create-createnewdocument" [
 #
 # DELETE /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Deletedocument
-export def "dataentities-documents delete-deletedocument" [
+export def "dataentities-documents delete" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +474,7 @@ export def "dataentities-documents delete-deletedocument" [
 #
 # GET /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Getdocument
-export def "dataentities-documents get-getdocument" [
+export def "dataentities-documents get" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +505,7 @@ export def "dataentities-documents get-getdocument" [
 #
 # PATCH /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Updatepartialdocument
-export def "dataentities-documents update-updatepartialdocument" [
+export def "dataentities-documents update-partialdocument" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -542,7 +542,7 @@ export def "dataentities-documents update-updatepartialdocument" [
 #
 # PUT /api/dataentities/{dataEntityName}/documents/{id}
 # operationId: Updateentiredocument
-export def "dataentities-documents update-updateentiredocument" [
+export def "dataentities-documents update-entiredocument" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -613,7 +613,7 @@ export def "dataentities-documents-clusters create-validatedocumentbyclusters" [
 #
 # GET /api/dataentities/{dataEntityName}/documents/{id}/versions
 # operationId: Listversions
-export def "dataentities-documents-versions get-listversions" [
+export def "dataentities-documents-versions list" [
   data_entity_name: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -647,7 +647,7 @@ export def "dataentities-documents-versions get-listversions" [
 #
 # GET /api/dataentities/{dataEntityName}/documents/{id}/versions/{versionId}
 # operationId: Getversion
-export def "dataentities-documents-versions get-getversion" [
+export def "dataentities-documents-versions get" [
   data_entity_name: string
   id: string
   version_id: string
@@ -680,7 +680,7 @@ export def "dataentities-documents-versions get-getversion" [
 #
 # PUT /api/dataentities/{dataEntityName}/documents/{id}/versions/{versionId}
 # operationId: Putversion
-export def "dataentities-documents-versions update-putversion" [
+export def "dataentities-documents-versions update" [
   data_entity_name: string
   id: string
   version_id: string
@@ -713,7 +713,7 @@ export def "dataentities-documents-versions update-putversion" [
 #
 # GET /api/dataentities/{dataEntityName}/indices
 # operationId: Getindices
-export def "dataentities-indices get-getindices" [
+export def "dataentities-indices get" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -741,7 +741,7 @@ export def "dataentities-indices get-getindices" [
 #
 # PUT /api/dataentities/{dataEntityName}/indices
 # operationId: Putindices
-export def "dataentities-indices update-putindices" [
+export def "dataentities-indices update" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -772,7 +772,7 @@ export def "dataentities-indices update-putindices" [
 #
 # DELETE /api/dataentities/{dataEntityName}/indices/{index_name}
 # operationId: Deleteindexbyname
-export def "dataentities-indices delete-deleteindexbyname" [
+export def "dataentities-indices delete-indexbyname" [
   data_entity_name: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -802,7 +802,7 @@ export def "dataentities-indices delete-deleteindexbyname" [
 #
 # GET /api/dataentities/{dataEntityName}/indices/{index_name}
 # operationId: Getindexbyname
-export def "dataentities-indices get-getindexbyname" [
+export def "dataentities-indices get-indexbyname" [
   data_entity_name: string
   index_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -832,7 +832,7 @@ export def "dataentities-indices get-getindexbyname" [
 #
 # GET /api/dataentities/{dataEntityName}/schemas
 # operationId: Getschemas
-export def "dataentities-schemas get-getschemas" [
+export def "dataentities-schemas get" [
   data_entity_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -860,7 +860,7 @@ export def "dataentities-schemas get-getschemas" [
 #
 # DELETE /api/dataentities/{dataEntityName}/schemas/{schemaName}
 # operationId: Deleteschemabyname
-export def "dataentities-schemas delete-deleteschemabyname" [
+export def "dataentities-schemas delete-schemabyname" [
   data_entity_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -890,7 +890,7 @@ export def "dataentities-schemas delete-deleteschemabyname" [
 #
 # GET /api/dataentities/{dataEntityName}/schemas/{schemaName}
 # operationId: Getschemabyname
-export def "dataentities-schemas get-getschemabyname" [
+export def "dataentities-schemas get-schemabyname" [
   data_entity_name: string
   schema_name: string
   --base-url(-b): string@base-url-completer # API base URL

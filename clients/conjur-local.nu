@@ -99,7 +99,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["http://conjur.local" "http://localhost"] }
-def auth-scheme-completer [] { ["basic" "bearer" "mutual" "basic-credentials"] }
+def auth-scheme-completer [] { ["basic" "bearer" "mutual" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def accept-encoding-completer [] { ["application/json" "base64"] }
@@ -176,7 +176,7 @@ export def "authn-azure-authenticate get-access-token-via" [
   --jwt: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -212,7 +212,7 @@ export def "authn-gcp-authenticate get-access-token-via" [
   --jwt: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   let full_url = (build-url $base ({account: (encode-path-segment $account)} | format pattern "/authn-gcp/{account}/authenticate"))
@@ -275,7 +275,7 @@ export def "authn-iam-authenticate get-access-token-via-aws" [
   --body: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -309,7 +309,7 @@ export def "authn-jwt-authenticate get-access-token-via-by-service-id-account" [
   --jwt: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -342,7 +342,7 @@ export def "authn-jwt-authenticate get-access-token-via-by-service-id-account-id
   --body: record
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -468,7 +468,7 @@ export def "authn-ldap-authenticate get-access-token-via" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -502,7 +502,7 @@ export def "authn-oidc-authenticate get-access-token-via" [
   --id-token: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'service_id' must be non-empty" } }
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
@@ -626,7 +626,7 @@ export def "authn-authenticate get-access-token" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "basic"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($account | is-empty) { error make --unspanned { msg: "path parameter 'account' must be non-empty" } }
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }

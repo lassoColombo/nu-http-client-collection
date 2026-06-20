@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "suggestions get-getsuggestions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "suggestions get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /suggestions
 # operationId: Getsuggestions
-export def "suggestions get-getsuggestions" [
+export def "suggestions get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "suggestions get-getsuggestions" [
 #
 # GET /suggestions/configuration
 # operationId: Getaccountconfig
-export def "suggestions-configuration get-getaccountconfig" [
+export def "suggestions-configuration get-accountconfig" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "suggestions-configuration-autoapproval-toggle-seller update-saveauto
 #
 # GET /suggestions/configuration/seller/{sellerId}
 # operationId: Getselleraccountconfig
-export def "suggestions-configuration-seller get-getselleraccountconfig" [
+export def "suggestions-configuration-seller get-selleraccountconfig" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "suggestions-configuration-seller get-getselleraccountconfig" [
 #
 # PUT /suggestions/configuration/seller/{sellerId}
 # operationId: Putselleraccountconfig
-export def "suggestions-configuration-seller update-putselleraccountconfig" [
+export def "suggestions-configuration-seller update-selleraccountconfig" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -475,7 +475,7 @@ export def "suggestions delete" [
 #
 # GET /suggestions/{sellerId}/{sellerSkuId}
 # operationId: GetSuggestion
-export def "suggestions get" [
+export def "suggestions get-by-seller-id-seller-sku-id" [
   seller_id: string
   seller_sku_id: string
   --base-url(-b): string@base-url-completer # API base URL

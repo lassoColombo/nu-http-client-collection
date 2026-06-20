@@ -510,7 +510,7 @@ export def "related-tags get" [
 # Search Articles
 #
 # GET /search/articles?query={query}
-export def "search-articles-query-query get" [
+export def "search-articles-queryquery get" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +536,7 @@ export def "search-articles-query-query get" [
 # Search Lists
 #
 # GET /search/lists?query={query}
-export def "search-lists-query-query get" [
+export def "search-lists-queryquery get" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "search-lists-query-query get" [
 # Search Publications
 #
 # GET /search/publications?query={query}
-export def "search-publications-query-query get" [
+export def "search-publications-queryquery get" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -588,7 +588,7 @@ export def "search-publications-query-query get" [
 # Search Tags
 #
 # GET /search/tags?query={query}
-export def "search-tags-query-query get" [
+export def "search-tags-queryquery get" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "search-tags-query-query get" [
 # Search Users
 #
 # GET /search/users?query={query}
-export def "search-users-query-query get" [
+export def "search-users-queryquery get" [
   query: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -1,6 +1,6 @@
 # Auto-generated client for Accelerated Mobile Pages (AMP) URL API vv1
 # Source: https://api.apis.guru/v2/specs/googleapis.com/acceleratedmobilepageurl/v1/openapi.json
-# Auth: --token flag or $env.ACCELERATED_MOBILE_PAGES_AMP__URL_API_TOKEN
+# Auth: --token flag or $env.ACCELERATED_MOBILE_PAGES_AMP_URL_API_TOKEN
 
 const BASE_URL = "https://acceleratedmobilepageurl.googleapis.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://acceleratedmobilepageurl.googleapis.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ACCELERATED_MOBILE_PAGES_AMP__URL_API_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o ACCELERATED_MOBILE_PAGES_AMP_URL_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

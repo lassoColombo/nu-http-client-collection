@@ -230,7 +230,7 @@ export def "files-files-import-from-url-async create" [
 #
 # GET /files/v3/files/import-from-url/async/tasks/{taskId}/status
 # operationId: get-/files/v3/files/import-from-url/async/tasks/{taskId}/status_checkImport
-export def "files-files-import-from-url-async-tasks-status get-{task-id}-check" [
+export def "files-files-import-from-url-async-tasks-status get-check" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "files-files-search get-do" [
 #
 # DELETE /files/v3/files/{fileId}
 # operationId: delete-/files/v3/files/{fileId}_archive
-export def "files-files delete-{file-id}-archive" [
+export def "files-files delete-archive" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "files-files delete-{file-id}-archive" [
 #
 # GET /files/v3/files/{fileId}
 # operationId: get-/files/v3/files/{fileId}_getById
-export def "files-files get-{file-id}" [
+export def "files-files get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -355,7 +355,7 @@ export def "files-files get-{file-id}" [
 #
 # PATCH /files/v3/files/{fileId}
 # operationId: patch-/files/v3/files/{fileId}_updateProperties
-export def "files-files update-{file-id}-properties" [
+export def "files-files update-properties" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "files-files update-{file-id}-properties" [
 #
 # PUT /files/v3/files/{fileId}
 # operationId: put-/files/v3/files/{fileId}_replace
-export def "files-files update-{file-id}" [
+export def "files-files update" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -421,7 +421,7 @@ export def "files-files update-{file-id}" [
 #
 # DELETE /files/v3/files/{fileId}/gdpr-delete
 # operationId: delete-/files/v3/files/{fileId}/gdpr-delete_archiveGDPR
-export def "files-files-gdpr-delete archive-{file-id}" [
+export def "files-files-gdpr-delete archive" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "files-files-gdpr-delete archive-{file-id}" [
 #
 # GET /files/v3/files/{fileId}/signed-url
 # operationId: get-/files/v3/files/{fileId}/signed-url_getSignedUrl
-export def "files-files-signed-url get-{file-id}" [
+export def "files-files-signed-url get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "files-folders-update-async create-properties" [
 #
 # GET /files/v3/folders/update/async/tasks/{taskId}/status
 # operationId: get-/files/v3/folders/update/async/tasks/{taskId}/status_checkUpdateStatus
-export def "files-folders-update-async-tasks-status get-{task-id}-check" [
+export def "files-folders-update-async-tasks-status get-check" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +597,7 @@ export def "files-folders-update-async-tasks-status get-{task-id}-check" [
 #
 # DELETE /files/v3/folders/{folderId}
 # operationId: delete-/files/v3/folders/{folderId}_archive
-export def "files-folders delete-{folder-id}-archive" [
+export def "files-folders delete-archive" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "files-folders delete-{folder-id}-archive" [
 #
 # GET /files/v3/folders/{folderId}
 # operationId: get-/files/v3/folders/{folderId}_getById
-export def "files-folders get-{folder-id}" [
+export def "files-folders get" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,7 +649,7 @@ export def "files-folders get-{folder-id}" [
 #
 # DELETE /files/v3/folders/{folderPath}
 # operationId: delete-/files/v3/folders/{folderPath}_archiveByPath
-export def "files-folders delete-{folder-path}-archive-by-path" [
+export def "files-folders delete-path-archive-by-path" [
   folder_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "files-folders delete-{folder-path}-archive-by-path" [
 #
 # GET /files/v3/folders/{folderPath}
 # operationId: get-/files/v3/folders/{folderPath}_getByPath
-export def "files-folders get-{folder-path}-by-path" [
+export def "files-folders get-path-by-path" [
   folder_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

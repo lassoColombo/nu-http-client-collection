@@ -2,7 +2,7 @@
 # Source: https://api.apis.guru/v2/specs/azure.com/keyvault/7.0-preview/swagger.json
 # Auth: --token flag or $env.KEYVAULTCLIENT_TOKEN
 
-const BASE_URL = "https://azure.local"
+const BASE_URL = "{vaultBaseUrl}"
 
 # Build auth: returns {scheme: string, headers: record, query: string, location: string}.
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
@@ -94,7 +94,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
   if $allow_errors { $resp } else if $resp.status >= 400 { error make --unspanned { msg: $"HTTP ($resp.status): ($resp.body)" } } else if $full { {status: $resp.status, headers: $resp.headers, body: $resp.body} } else if $resp.status == 204 { null } else { $resp.body }
 }
 
-def base-url-completer [] { ["https://azure.local"] }
+def base-url-completer [] { ["{vaultBaseUrl}"] }
 def auth-scheme-completer [] { ["bearer"] }
 
 # Completers for enum parameters
@@ -829,7 +829,7 @@ export def "certificates update" [
 #
 # GET /deletedcertificates
 # operationId: GetDeletedCertificates
-export def "deletedcertificates get-deleted-certificates" [
+export def "delete-dcertificates get-deleted-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -856,7 +856,7 @@ export def "deletedcertificates get-deleted-certificates" [
 #
 # DELETE /deletedcertificates/{certificate-name}
 # operationId: PurgeDeletedCertificate
-export def "deletedcertificates delete-purge-deleted" [
+export def "delete-dcertificates delete-purge-deleted" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +883,7 @@ export def "deletedcertificates delete-purge-deleted" [
 #
 # GET /deletedcertificates/{certificate-name}
 # operationId: GetDeletedCertificate
-export def "deletedcertificates get-deleted" [
+export def "delete-dcertificates get-deleted" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "deletedcertificates get-deleted" [
 #
 # POST /deletedcertificates/{certificate-name}/recover
 # operationId: RecoverDeletedCertificate
-export def "deletedcertificates-recover create-deleted" [
+export def "delete-dcertificates-recover create-deleted" [
   certificate_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "deletedcertificates-recover create-deleted" [
 #
 # GET /deletedkeys
 # operationId: GetDeletedKeys
-export def "deletedkeys get-deleted-keys" [
+export def "delete-dkeys get-deleted-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "deletedkeys get-deleted-keys" [
 #
 # DELETE /deletedkeys/{key-name}
 # operationId: PurgeDeletedKey
-export def "deletedkeys delete-purge-deleted" [
+export def "delete-dkeys delete-purge-deleted" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,7 +990,7 @@ export def "deletedkeys delete-purge-deleted" [
 #
 # GET /deletedkeys/{key-name}
 # operationId: GetDeletedKey
-export def "deletedkeys get-deleted" [
+export def "delete-dkeys get-deleted" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1017,7 +1017,7 @@ export def "deletedkeys get-deleted" [
 #
 # POST /deletedkeys/{key-name}/recover
 # operationId: RecoverDeletedKey
-export def "deletedkeys-recover create-deleted" [
+export def "delete-dkeys-recover create-deleted" [
   key_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "deletedkeys-recover create-deleted" [
 #
 # GET /deletedsecrets
 # operationId: GetDeletedSecrets
-export def "deletedsecrets get-deleted-secrets" [
+export def "delete-dsecrets get-deleted-secrets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1070,7 +1070,7 @@ export def "deletedsecrets get-deleted-secrets" [
 #
 # DELETE /deletedsecrets/{secret-name}
 # operationId: PurgeDeletedSecret
-export def "deletedsecrets delete-purge-deleted" [
+export def "delete-dsecrets delete-purge-deleted" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1097,7 @@ export def "deletedsecrets delete-purge-deleted" [
 #
 # GET /deletedsecrets/{secret-name}
 # operationId: GetDeletedSecret
-export def "deletedsecrets get-deleted" [
+export def "delete-dsecrets get-deleted" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1124,7 +1124,7 @@ export def "deletedsecrets get-deleted" [
 #
 # POST /deletedsecrets/{secret-name}/recover
 # operationId: RecoverDeletedSecret
-export def "deletedsecrets-recover create-deleted" [
+export def "delete-dsecrets-recover create-deleted" [
   secret_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1151,7 +1151,7 @@ export def "deletedsecrets-recover create-deleted" [
 #
 # GET /deletedstorage
 # operationId: GetDeletedStorageAccounts
-export def "deletedstorage get-deleted-storage-accounts" [
+export def "delete-dstorage get-deleted-storage-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "deletedstorage get-deleted-storage-accounts" [
 #
 # DELETE /deletedstorage/{storage-account-name}
 # operationId: PurgeDeletedStorageAccount
-export def "deletedstorage delete-purge-deleted" [
+export def "delete-dstorage delete-purge-deleted" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1204,7 +1204,7 @@ export def "deletedstorage delete-purge-deleted" [
 #
 # GET /deletedstorage/{storage-account-name}
 # operationId: GetDeletedStorageAccount
-export def "deletedstorage get-deleted" [
+export def "delete-dstorage get-deleted" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1231,7 +1231,7 @@ export def "deletedstorage get-deleted" [
 #
 # POST /deletedstorage/{storage-account-name}/recover
 # operationId: RecoverDeletedStorageAccount
-export def "deletedstorage-recover create-deleted" [
+export def "delete-dstorage-recover create-deleted" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1258,7 +1258,7 @@ export def "deletedstorage-recover create-deleted" [
 #
 # GET /deletedstorage/{storage-account-name}/sas
 # operationId: GetDeletedSasDefinitions
-export def "deletedstorage-sas get-deleted-definitions" [
+export def "delete-dstorage-sas get-deleted-definitions" [
   storage_account_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "deletedstorage-sas get-deleted-definitions" [
 #
 # GET /deletedstorage/{storage-account-name}/sas/{sas-definition-name}
 # operationId: GetDeletedSasDefinition
-export def "deletedstorage-sas get-deleted" [
+export def "delete-dstorage-sas get-deleted" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1315,7 +1315,7 @@ export def "deletedstorage-sas get-deleted" [
 #
 # POST /deletedstorage/{storage-account-name}/sas/{sas-definition-name}/recover
 # operationId: RecoverDeletedSasDefinition
-export def "deletedstorage-sas-recover create-deleted" [
+export def "delete-dstorage-sas-recover create-deleted" [
   storage_account_name: string
   sas_definition_name: string
   --base-url(-b): string@base-url-completer # API base URL

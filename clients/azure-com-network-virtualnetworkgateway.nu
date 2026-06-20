@@ -1075,7 +1075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getvpnclientipsecparameters
 # operationId: VirtualNetworkGateways_GetVpnclientIpsecParameters
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-getvpnclientipsecparameters get-vpnclient-ipsec-parameters" [
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-vpnclientipsecparameters get-vpnclient-ipsec-parameters" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1106,7 +1106,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getvpnprofilepackageurl
 # operationId: VirtualNetworkGateways_GetVpnProfilePackageUrl
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-getvpnprofilepackageurl get-vpn-profile-package-url" [
+export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-vpnprofilepackageurl get-vpn-profile-package-url" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string

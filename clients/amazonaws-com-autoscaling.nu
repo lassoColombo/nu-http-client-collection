@@ -575,7 +575,7 @@ export def "api create-batch-delete-scheduled-action" [
 #
 # GET /
 # operationId: GET_BatchPutScheduledUpdateGroupAction
-export def "api get-batch-update-scheduled-update-group-action" [
+export def "api get-batch-update-scheduled-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -612,7 +612,7 @@ export def "api get-batch-update-scheduled-update-group-action" [
 #
 # POST /
 # operationId: POST_BatchPutScheduledUpdateGroupAction
-export def "api create-batch-update-scheduled-update-group-action" [
+export def "api create-batch-update-scheduled-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4290,7 +4290,7 @@ export def "api create-update-scaling-policy" [
 #
 # GET /
 # operationId: GET_PutScheduledUpdateGroupAction
-export def "api get-update-scheduled-update-group-action" [
+export def "api get-update-scheduled-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4335,7 +4335,7 @@ export def "api get-update-scheduled-update-group-action" [
 #
 # POST /
 # operationId: POST_PutScheduledUpdateGroupAction
-export def "api create-update-scheduled-update-group-action" [
+export def "api create-update-scheduled-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

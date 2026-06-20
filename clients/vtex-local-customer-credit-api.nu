@@ -296,7 +296,7 @@ export def "creditcontrol-accounts get-retrievea-accountby" [
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}
 # operationId: Updateemailanddescriptionofaaccount
-export def "creditcontrol-accounts update-updateemailanddescriptionofaaccount" [
+export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "creditcontrol-accounts-holders create-addanaccount" [
 #
 # DELETE /api/creditcontrol/accounts/{creditAccountId}/holders/{holderId}
 # operationId: Deleteanaccountholder
-export def "creditcontrol-accounts-holders delete-deleteanaccountholder" [
+export def "creditcontrol-accounts-holders delete-anaccountholder" [
   credit_account_id: string
   holder_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -603,7 +603,7 @@ export def "creditcontrol-accounts-invoices-payments create-markaninvoiceas-paid
 #
 # PUT /api/creditcontrol/accounts/{creditAccountId}/invoices/{invoiceId}/postponement
 # operationId: Postponeaninvoice
-export def "creditcontrol-accounts-invoices-postponement update-postponeaninvoice" [
+export def "creditcontrol-accounts-invoices-post-ponement create-poneaninvoice" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,7 +960,7 @@ export def "creditcontrol-invoices get-searchallinvoices" [
 #
 # GET /api/creditcontrol/storeconfig
 # operationId: Retrievestoreconfiguration
-export def "creditcontrol-storeconfig get-retrievestoreconfiguration" [
+export def "creditcontrol-storeconfig get-storeconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -988,7 +988,7 @@ export def "creditcontrol-storeconfig get-retrievestoreconfiguration" [
 # PUT /api/creditcontrol/storeconfig
 # operationId: Createorchangestoreconfiguration
 # --notificationsSettings shape: {daysAfter?: list, daysPrior?: list}
-export def "creditcontrol-storeconfig update-createorchangestoreconfiguration" [
+export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

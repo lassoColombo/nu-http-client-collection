@@ -2384,7 +2384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/functions/{functionName}/listsecrets
 # operationId: WebApps_ListFunctionSecrets
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions-listsecrets list-apps-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-functions-list-secrets list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -3395,7 +3395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-isclonea
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/listsyncfunctiontriggerstatus
 # operationId: WebApps_ListSyncFunctionTriggers
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-listsyncfunctiontriggerstatus list-apps-sync-function-triggers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-list-syncfunctiontriggerstatus sync-apps-function-triggers" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -7366,7 +7366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/functions/{functionName}/listsecrets
 # operationId: WebApps_ListFunctionSecretsSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions-listsecrets list-apps-secrets" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-functions-list-secrets list-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -8435,7 +8435,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-is
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/sites/{name}/slots/{slot}/listsyncfunctiontriggerstatus
 # operationId: WebApps_ListSyncFunctionTriggersSlot
-export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-listsyncfunctiontriggerstatus list-apps-sync-function-triggers" [
+export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-list-syncfunctiontriggerstatus sync-apps-function-triggers" [
   subscription_id: string
   resource_group_name: string
   name: string

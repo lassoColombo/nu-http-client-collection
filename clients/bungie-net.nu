@@ -504,7 +504,7 @@ export def "destiny2-actions-items-insert-socket-plug-free create" [
 #
 # POST /Destiny2/Actions/Items/PullFromPostmaster/
 # operationId: Destiny2.PullFromPostmaster
-export def "destiny2-actions-items-pull-from-postmaster pull" [
+export def "destiny2-actions-items-pull-from-post-master pull" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

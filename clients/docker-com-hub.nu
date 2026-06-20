@@ -95,7 +95,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://hub.docker.com" "https://docker.com/1.33"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["none"] }
 
 # Completers for enum parameters
 def status-completer [] { ["active" "inactive"] }
@@ -473,7 +473,7 @@ export def "namespaces-repositories-tags list" [
 # Check repository tags
 #
 # HEAD /v2/namespaces/{namespace}/repositories/{repository}/tags
-export def "namespaces-repositories-tags head-head-by-namespace-repository" [
+export def "namespaces-repositories-tags head-by-namespace-repository" [
   namespace: string
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -527,7 +527,7 @@ export def "namespaces-repositories-tags get" [
 # Check repository tag
 #
 # HEAD /v2/namespaces/{namespace}/repositories/{repository}/tags/{tag}
-export def "namespaces-repositories-tags head-head-by-namespace-repository-tag" [
+export def "namespaces-repositories-tags head-by-namespace-repository-tag" [
   namespace: string
   repository: string
   tag: string
@@ -618,7 +618,7 @@ export def "scim-2-0-resource-types list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/ResourceTypes")
   let accept_val = "application/json"
@@ -641,7 +641,7 @@ export def "scim-2-0-resource-types get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/v2/scim/2.0/ResourceTypes/{name}"))
@@ -664,7 +664,7 @@ export def "scim-2-0-schemas list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Schemas")
   let accept_val = "application/json"
@@ -687,7 +687,7 @@ export def "scim-2-0-schemas get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Schemas/{id}"))
@@ -710,7 +710,7 @@ export def "scim-2-0-service-provider-config get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/ServiceProviderConfig")
   let accept_val = "application/json"
@@ -738,7 +738,7 @@ export def "scim-2-0-users list" [
   --sort-order: string@sort-order-completer
   --sort-by: string # User attribute to sort by. (e.g. userName)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sortBy" $sort_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/scim/2.0/Users" $qp)
@@ -763,7 +763,7 @@ export def "scim-2-0-users create" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/scim/2.0/Users")
   let req_body = $body
@@ -788,7 +788,7 @@ export def "scim-2-0-users get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}"))
@@ -814,7 +814,7 @@ export def "scim-2-0-users update" [
   --body: any
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/v2/scim/2.0/Users/{id}"))

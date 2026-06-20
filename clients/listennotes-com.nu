@@ -1,6 +1,6 @@
 # Auto-generated client for Listen API: Podcast Search, Directory, and Insights API v2.0
 # Source: https://api.apis.guru/v2/specs/listennotes.com/2.0/openapi.json
-# Auth: --token flag or $env.LISTEN_API_PODCAST_SEARCH__DIRECTORY__AND_INSIGHTS_API_TOKEN
+# Auth: --token flag or $env.LISTEN_API_PODCAST_SEARCH_DIRECTORY_AND_INSIGHTS_API_TOKEN
 
 const BASE_URL = "https://listen-api.listennotes.com/api/v2"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://listen-api.listennotes.com/api/v2"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LISTEN_API_PODCAST_SEARCH__DIRECTORY__AND_INSIGHTS_API_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LISTEN_API_PODCAST_SEARCH_DIRECTORY_AND_INSIGHTS_API_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

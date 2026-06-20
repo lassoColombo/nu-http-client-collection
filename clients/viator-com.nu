@@ -1,6 +1,6 @@
 # Auto-generated client for Viator API Documentation &amp; Specification – Merchant Partners v1.0.0
 # Source: https://api.apis.guru/v2/specs/viator.com/1.0.0/openapi.json
-# Auth: --token flag or $env.VIATOR_API_DOCUMENTATION_AMP__SPECIFICATION___MERCHANT_PARTNERS_TOKEN
+# Auth: --token flag or $env.VIATOR_API_DOCUMENTATION_AMP_SPECIFICATION_MERCHANT_PARTNERS_TOKEN
 
 const BASE_URL = "https://viatorapi.viator.com/service"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://viatorapi.viator.com/service"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VIATOR_API_DOCUMENTATION_AMP__SPECIFICATION___MERCHANT_PARTNERS_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o VIATOR_API_DOCUMENTATION_AMP_SPECIFICATION_MERCHANT_PARTNERS_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

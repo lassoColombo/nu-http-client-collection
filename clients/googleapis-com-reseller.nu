@@ -721,7 +721,7 @@ export def "apps-reseller-customers-subscriptions-suspend create" [
 #
 # GET /apps/reseller/v1/resellernotify/getwatchdetails
 # operationId: reseller.resellernotify.getwatchdetails
-export def "apps-reseller-resellernotify-getwatchdetails get" [
+export def "apps-reseller-resellernotify-get-watchdetails get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

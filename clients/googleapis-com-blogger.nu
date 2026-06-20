@@ -1260,7 +1260,7 @@ export def "blogs-posts-comments-approve approve" [
 #
 # POST /v3/blogs/{blogId}/posts/{postId}/comments/{commentId}/removecontent
 # operationId: blogger.comments.removeContent
-export def "blogs-posts-comments-removecontent delete-content" [
+export def "blogs-posts-comments-remove-content delete" [
   blog_id: string
   post_id: string
   comment_id: string

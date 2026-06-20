@@ -735,7 +735,7 @@ export def "customer-session create-controller-login" [
 #
 # POST /v2/customer/{shortName}/session/createlandlordlogin
 # operationId: SessionController_CreateLandlordLogin
-export def "customer-session-createlandlordlogin create-controller-landlord-login" [
+export def "customer-session-create-landlordlogin create-controller-landlord-login" [
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

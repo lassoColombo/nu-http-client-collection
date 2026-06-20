@@ -1,6 +1,6 @@
 # Auto-generated client for Mastodon API Specification (https://github.com/mastodon/mastodon) v1.0
 # Source: https://api.apis.guru/v2/specs/mastodon.local/1.0/openapi.json
-# Auth: --token flag or $env.MASTODON_API_SPECIFICATION_HTTPS___GITHUB_COM_MASTODON_MASTODON_TOKEN
+# Auth: --token flag or $env.MASTODON_API_SPECIFICATION_HTTPS_GITHUB_COM_MASTODON_MASTODON_TOKEN
 
 const BASE_URL = "http://mastodon.local"
 
@@ -8,7 +8,7 @@ const BASE_URL = "http://mastodon.local"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MASTODON_API_SPECIFICATION_HTTPS___GITHUB_COM_MASTODON_MASTODON_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o MASTODON_API_SPECIFICATION_HTTPS_GITHUB_COM_MASTODON_MASTODON_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

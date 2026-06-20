@@ -3028,7 +3028,7 @@ export def "2020-05-31-function get-function2020-by-name" [
 #
 # GET /2020-05-31/distribution/{DistributionId}/invalidation/{Id}
 # operationId: GetInvalidation2020_05_31
-export def "2020-05-31-distribution-invalidation get-invalidation2020-by-distribution-id-id" [
+export def "2020-05-31-distribution-invalidation get-invalidation2020-by-distribution-id" [
   distribution_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL

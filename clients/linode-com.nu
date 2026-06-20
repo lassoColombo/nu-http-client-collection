@@ -2473,7 +2473,7 @@ export def "databases-mysql-instances-ssl get-my-sql" [
 #
 # GET /databases/postgresql/instances
 # operationId: getDatabasesPostgreSQLInstances
-export def "databases-postgresql-instances list" [
+export def "databases-post-gresql-instances list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2499,7 +2499,7 @@ export def "databases-postgresql-instances list" [
 #
 # POST /databases/postgresql/instances
 # operationId: postDatabasesPostgreSQLInstances
-export def "databases-postgresql-instances create-postgre-sql" [
+export def "databases-post-gresql-instances create-postgre-sql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2535,7 +2535,7 @@ export def "databases-postgresql-instances create-postgre-sql" [
 #
 # DELETE /databases/postgresql/instances/{instanceId}
 # operationId: deleteDatabasesPostgreSQLInstance
-export def "databases-postgresql-instances delete-postgre-sql" [
+export def "databases-post-gresql-instances delete-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2560,7 @@ export def "databases-postgresql-instances delete-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}
 # operationId: getDatabasesPostgreSQLInstance
-export def "databases-postgresql-instances get-postgre-sql" [
+export def "databases-post-gresql-instances get-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2585,7 +2585,7 @@ export def "databases-postgresql-instances get-postgre-sql" [
 #
 # PUT /databases/postgresql/instances/{instanceId}
 # operationId: putDatabasesPostgreSQLInstance
-export def "databases-postgresql-instances update-postgre-sql" [
+export def "databases-post-gresql-instances update-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2616,7 +2616,7 @@ export def "databases-postgresql-instances update-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/backups
 # operationId: getDatabasesPostgreSQLInstanceBackups
-export def "databases-postgresql-instances-backups list" [
+export def "databases-post-gresql-instances-backups list" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2644,7 +2644,7 @@ export def "databases-postgresql-instances-backups list" [
 #
 # POST /databases/postgresql/instances/{instanceId}/backups
 # operationId: postDatabasesPostgreSQLInstanceBackup
-export def "databases-postgresql-instances-backups create-postgre-sql" [
+export def "databases-post-gresql-instances-backups create-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2674,7 +2674,7 @@ export def "databases-postgresql-instances-backups create-postgre-sql" [
 #
 # DELETE /databases/postgresql/instances/{instanceId}/backups/{backupId}
 # operationId: deleteDatabasePostgreSQLInstanceBackup
-export def "databases-postgresql-instances-backups delete-postgre-sql" [
+export def "databases-post-gresql-instances-backups delete-postgre-sql" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2701,7 +2701,7 @@ export def "databases-postgresql-instances-backups delete-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/backups/{backupId}
 # operationId: getDatabasesPostgreSQLInstanceBackup
-export def "databases-postgresql-instances-backups get-postgre-sql" [
+export def "databases-post-gresql-instances-backups get-postgre-sql" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2728,7 +2728,7 @@ export def "databases-postgresql-instances-backups get-postgre-sql" [
 #
 # POST /databases/postgresql/instances/{instanceId}/backups/{backupId}/restore
 # operationId: postDatabasesPostgreSQLInstanceBackupRestore
-export def "databases-postgresql-instances-backups-restore create-postgre-sql" [
+export def "databases-post-gresql-instances-backups-restore create-postgre-sql" [
   instance_id: int
   backup_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2755,7 +2755,7 @@ export def "databases-postgresql-instances-backups-restore create-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/credentials
 # operationId: getDatabasesPostgreSQLInstanceCredentials
-export def "databases-postgresql-instances-credentials get-postgre-sql" [
+export def "databases-post-gresql-instances-credentials get-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2780,7 +2780,7 @@ export def "databases-postgresql-instances-credentials get-postgre-sql" [
 #
 # POST /databases/postgresql/instances/{instanceId}/credentials/reset
 # operationId: postDatabasesPostgreSQLInstanceCredentialsReset
-export def "databases-postgresql-instances-credentials-reset create-postgre-sql" [
+export def "databases-post-gresql-instances-credentials-reset create-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2805,7 +2805,7 @@ export def "databases-postgresql-instances-credentials-reset create-postgre-sql"
 #
 # POST /databases/postgresql/instances/{instanceId}/patch
 # operationId: postDatabasesPostgreSQLInstancePatch
-export def "databases-postgresql-instances-patch create-postgre-sql" [
+export def "databases-post-gresql-instances-patch create-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2830,7 @@ export def "databases-postgresql-instances-patch create-postgre-sql" [
 #
 # GET /databases/postgresql/instances/{instanceId}/ssl
 # operationId: getDatabasesPostgreSQLInstanceSSL
-export def "databases-postgresql-instances-ssl get-postgre-sql" [
+export def "databases-post-gresql-instances-ssl get-postgre-sql" [
   instance_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

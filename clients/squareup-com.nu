@@ -96,7 +96,7 @@ def do-request [method: string, url: string, auth: record, insecure: bool, raw: 
 }
 
 def base-url-completer [] { ["https://connect.squareup.com"] }
-def auth-scheme-completer [] { ["bearer"] }
+def auth-scheme-completer [] { ["bearer" "none"] }
 
 
 # List all available API commands with their parameters
@@ -233,7 +233,7 @@ export def "oauth2-token create-obtain" [
   --short-lived: oneof<nothing, bool> # A boolean indicating a request for a short-lived access token. The short-lived access token returned in the response will expire in 24 hours.
 ]: any -> record<access_token: string, expires_at: string, id_token: string, merchant_id: string, plan_id: string, refresh_token: string, short_lived: bool, subscription_id: string, token_type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/token")
   let req_body = {"client_id": $client_id, "client_secret": $client_secret, "code": $code, "grant_type": $grant_type, "migration_token": $migration_token, "redirect_uri": $redirect_uri, "refresh_token": $refresh_token, "scopes": $scopes, "short_lived": $short_lived} | compact

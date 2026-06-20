@@ -416,7 +416,7 @@ export def "accounts-holdings get" [
 #
 # PUT /api/Accounts/{accountId}/Holdings/{id}
 # operationId: Accounts_PutByAccountidIdHolding
-export def "accounts-holdings update-by-account-id-id" [
+export def "accounts-holdings update-by-account-id-1" [
   account_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL

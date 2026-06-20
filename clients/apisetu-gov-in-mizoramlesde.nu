@@ -1,6 +1,6 @@
 # Auto-generated client for Labour Employment, Skill Development and Entrepreneurship, Mizoram v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/mizoramlesde/3.0.0/openapi.json
-# Auth: --token flag or $env.LABOUR_EMPLOYMENT_SKILL_DEVELOPMENT_AND_ENTREPRENEURSHIP__MIZORAM_TOKEN
+# Auth: --token flag or $env.LABOUR_EMPLOYMENT_SKILL_DEVELOPMENT_AND_ENTREPRENEURSHIP_MIZORAM_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/mizoramlesde/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/mizoramlesde/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LABOUR_EMPLOYMENT_SKILL_DEVELOPMENT_AND_ENTREPRENEURSHIP__MIZORAM_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o LABOUR_EMPLOYMENT_SKILL_DEVELOPMENT_AND_ENTREPRENEURSHIP_MIZORAM_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

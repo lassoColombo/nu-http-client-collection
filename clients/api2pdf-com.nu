@@ -1,6 +1,6 @@
 # Auto-generated client for Api2Pdf - PDF Generation, Powered by AWS Lambda v1.0.0
 # Source: https://api.apis.guru/v2/specs/api2pdf.com/1.0.0/openapi.json
-# Auth: --token flag or $env.API2PDF_PDF_GENERATION__POWERED_BY_AWS_LAMBDA_TOKEN
+# Auth: --token flag or $env.API2PDF_PDF_GENERATION_POWERED_BY_AWS_LAMBDA_TOKEN
 
 const BASE_URL = "https://v2018.api2pdf.com"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://v2018.api2pdf.com"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o API2PDF_PDF_GENERATION__POWERED_BY_AWS_LAMBDA_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o API2PDF_PDF_GENERATION_POWERED_BY_AWS_LAMBDA_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

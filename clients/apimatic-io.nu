@@ -126,7 +126,7 @@ def build-multipart-body [parts: record, file_fields: list<string>, dry_run: boo
 }
 
 def base-url-completer [] { ["https://apimatic.io/api/transform"] }
-def auth-scheme-completer [] { ["query-apikey" "basic" "basic-credentials"] }
+def auth-scheme-completer [] { ["query-apikey" "basic" "none" "basic-credentials"] }
 
 # Completers for enum parameters
 def format-completer [] { ["apiblueprint" "apimatic" "raml" "swagger10" "swagger20" "swaggeryaml" "wadl2009"] }
@@ -174,7 +174,7 @@ export def "transform create-convert" [
   --url: string
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
+  let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/transform" $qp)

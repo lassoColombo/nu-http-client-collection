@@ -232,7 +232,7 @@ export def "key get" [
 # HEAD info on Authentiq ID
 #
 # HEAD /key/{PK}
-export def "key head-head" [
+export def "key head" [
   pk: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -1,6 +1,6 @@
 # Auto-generated client for Board of Ayurvedic and Unani Systems of Medicine, Himachal Pradesh, Himachal Pradesh v3.0.0
 # Source: https://api.apis.guru/v2/specs/apisetu.gov.in/hpayushboard/3.0.0/openapi.json
-# Auth: --token flag or $env.BOARD_OF_AYURVEDIC_AND_UNANI_SYSTEMS_OF_MEDICINE_HIMACHAL_PRADESH__HIMACHAL_PRADESH_TOKEN
+# Auth: --token flag or $env.BOARD_OF_AYURVEDIC_AND_UNANI_SYSTEMS_OF_MEDICINE_HIMACHAL_PRADESH_HIMACHAL_PRADESH_TOKEN
 
 const BASE_URL = "https://apisetu.gov.in/hpayushboard/v3"
 
@@ -8,7 +8,7 @@ const BASE_URL = "https://apisetu.gov.in/hpayushboard/v3"
 # `location` is "header" | "query" | "cookie" | "none" and tells dry-run callers
 # where the token went without inspecting headers/query themselves.
 def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
-  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BOARD_OF_AYURVEDIC_AND_UNANI_SYSTEMS_OF_MEDICINE_HIMACHAL_PRADESH__HIMACHAL_PRADESH_TOKEN | default "" }
+  let token_val = if ($token != null) and ($token | is-not-empty) { $token } else { $env | get -o BOARD_OF_AYURVEDIC_AND_UNANI_SYSTEMS_OF_MEDICINE_HIMACHAL_PRADESH_HIMACHAL_PRADESH_TOKEN | default "" }
   let scheme = ($auth_scheme | default "bearer")
   if ($scheme == "none") or ($token_val | is-empty) { return {scheme: $scheme, headers: {}, query: "", location: "none"} }
   match $scheme {

@@ -2867,7 +2867,7 @@ export def "namespaces-pods-proxy list" [
 #
 # HEAD /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1HeadNamespacedPodProxy
-export def "namespaces-pods-proxy head-connect-head-by-namespace-name" [
+export def "namespaces-pods-proxy head-connect-by-namespace-name" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2896,7 +2896,7 @@ export def "namespaces-pods-proxy head-connect-head-by-namespace-name" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/pods/{name}/proxy
 # operationId: connectCoreV1OptionsNamespacedPodProxy
-export def "namespaces-pods-proxy options-connect-options-by-namespace-name" [
+export def "namespaces-pods-proxy options-connect-by-namespace-name" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3074,7 +3074,7 @@ export def "namespaces-pods-proxy get-connect" [
 #
 # HEAD /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1HeadNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy head-connect-head-by-namespace-name-path" [
+export def "namespaces-pods-proxy head-connect-by-namespace-name-path" [
   namespace: string
   name: string
   path: string
@@ -3105,7 +3105,7 @@ export def "namespaces-pods-proxy head-connect-head-by-namespace-name-path" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/pods/{name}/proxy/{path}
 # operationId: connectCoreV1OptionsNamespacedPodProxyWithPath
-export def "namespaces-pods-proxy options-connect-options-by-namespace-name-path" [
+export def "namespaces-pods-proxy options-connect-by-namespace-name-path" [
   namespace: string
   name: string
   path: string
@@ -5505,7 +5505,7 @@ export def "namespaces-services-proxy list" [
 #
 # HEAD /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1HeadNamespacedServiceProxy
-export def "namespaces-services-proxy head-connect-head-by-namespace-name" [
+export def "namespaces-services-proxy head-connect-by-namespace-name" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5534,7 +5534,7 @@ export def "namespaces-services-proxy head-connect-head-by-namespace-name" [
 #
 # OPTIONS /api/v1/namespaces/{namespace}/services/{name}/proxy
 # operationId: connectCoreV1OptionsNamespacedServiceProxy
-export def "namespaces-services-proxy options-connect-options-by-namespace-name" [
+export def "namespaces-services-proxy options-connect-by-namespace-name" [
   namespace: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5712,7 +5712,7 @@ export def "namespaces-services-proxy get-connect" [
 #
 # HEAD /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1HeadNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy head-connect-head-by-namespace-name-path" [
+export def "namespaces-services-proxy head-connect-by-namespace-name-path" [
   namespace: string
   name: string
   path: string
@@ -5743,7 +5743,7 @@ export def "namespaces-services-proxy head-connect-head-by-namespace-name-path" 
 #
 # OPTIONS /api/v1/namespaces/{namespace}/services/{name}/proxy/{path}
 # operationId: connectCoreV1OptionsNamespacedServiceProxyWithPath
-export def "namespaces-services-proxy options-connect-options-by-namespace-name-path" [
+export def "namespaces-services-proxy options-connect-by-namespace-name-path" [
   namespace: string
   name: string
   path: string
@@ -6604,7 +6604,7 @@ export def "nodes-proxy list" [
 #
 # HEAD /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1HeadNodeProxy
-export def "nodes-proxy head-connect-head-by-name" [
+export def "nodes-proxy head-connect-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6631,7 +6631,7 @@ export def "nodes-proxy head-connect-head-by-name" [
 #
 # OPTIONS /api/v1/nodes/{name}/proxy
 # operationId: connectCoreV1OptionsNodeProxy
-export def "nodes-proxy options-connect-options-by-name" [
+export def "nodes-proxy options-connect-by-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6797,7 +6797,7 @@ export def "nodes-proxy get-connect" [
 #
 # HEAD /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1HeadNodeProxyWithPath
-export def "nodes-proxy head-connect-head-by-name-path" [
+export def "nodes-proxy head-connect-by-name-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6826,7 +6826,7 @@ export def "nodes-proxy head-connect-head-by-name-path" [
 #
 # OPTIONS /api/v1/nodes/{name}/proxy/{path}
 # operationId: connectCoreV1OptionsNodeProxyWithPath
-export def "nodes-proxy options-connect-options-by-name-path" [
+export def "nodes-proxy options-connect-by-name-path" [
   name: string
   path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14266,7 +14266,7 @@ export def "apis-apps-watch-controllerrevisions list-controller-revision-for-nam
 #
 # GET /apis/apps/v1/watch/daemonsets
 # operationId: watchAppsV1DaemonSetListForAllNamespaces
-export def "apis-apps-watch-daemonsets update-daemon-list-for-list-namespaces" [
+export def "apis-apps-watch-daemonsets update-daemon-list-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14728,7 +14728,7 @@ export def "apis-apps-watch-namespaces-statefulsets update-stateful" [
 #
 # GET /apis/apps/v1/watch/replicasets
 # operationId: watchAppsV1ReplicaSetListForAllNamespaces
-export def "apis-apps-watch-replicasets update-replica-list-for-list-namespaces" [
+export def "apis-apps-watch-replicasets update-replica-list-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14764,7 +14764,7 @@ export def "apis-apps-watch-replicasets update-replica-list-for-list-namespaces"
 #
 # GET /apis/apps/v1/watch/statefulsets
 # operationId: watchAppsV1StatefulSetListForAllNamespaces
-export def "apis-apps-watch-statefulsets update-stateful-list-for-list-namespaces" [
+export def "apis-apps-watch-statefulsets update-stateful-list-for-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
