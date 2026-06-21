@@ -48,6 +48,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -1567,7 +1578,7 @@ export def "organizations-users-count get-orga" [
   --q: string # The query to search
   --group: list<string> # Filter users by group
   --no-active-license: oneof<nothing, bool> # Filter users who don't have an active license
-]: nothing -> int {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "role" $role "multi") (serialize-qp "q" $q "scalar") (serialize-qp "group" $group "multi") (serialize-qp "noActiveLicense" $no_active_license "scalar")] | flatten | str join "&"
@@ -2217,7 +2228,7 @@ export def "scores-revisions get-data" [
   --parts: string # An optional a set of parts uuid to be exported. This parameter must be composed of parts uuids separated by commas. For example "59df645f-bb1c-f1b4-b573-d2afc4491f94,34ef645f-1aef-f3bc-1564-34cca4492b87".
   --only-cached: oneof<nothing, bool> # Only return files already generated and cached in Flat's production cache. If the file is not availabe, a 404 will be returned
   --url: oneof<nothing, bool> # Returns a json with the `url` in it instead of redirecting
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($score | is-empty) { error make --unspanned { msg: "path parameter 'score' must be non-empty" } }

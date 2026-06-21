@@ -48,6 +48,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -314,7 +325,7 @@ export def "logging-groov-logs-json download" [
   --minimum-log-level: string@minimum-log-level-completer # How verbose the log should be. (default: INFO)
   --last-timestamp: float # The earliest time to include in the log. Value is milliseconds since January 1, 1970 UTC. (format: int64, default: 0)
   --filter: string # Optional string to search for in the log.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minimum-log-level" $minimum_log_level "scalar") (serialize-qp "last-timestamp" $last_timestamp "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -341,7 +352,7 @@ export def "logging-groov-logs-txt download-text" [
   --minimum-log-level: string@minimum-log-level-completer # How verbose the log should be. (default: INFO)
   --last-timestamp: float # The earliest time to include in the log. Value is milliseconds since January 1, 1970 UTC. (format: int64, default: 0)
   --filter: string # Optional string to search for in the log.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minimum-log-level" $minimum_log_level "scalar") (serialize-qp "last-timestamp" $last_timestamp "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"

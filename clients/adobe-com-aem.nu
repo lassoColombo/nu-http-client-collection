@@ -49,6 +49,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -505,7 +516,7 @@ export def "bin-querybuilder-json get-list" [
   --p-limit: float
   --1-property: string
   --1-property-value: string
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
@@ -532,7 +543,7 @@ export def "bin-querybuilder-json create-list" [
   --p-limit: float
   --1-property: string
   --1-property-value: string
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
@@ -636,7 +647,7 @@ export def "crx-packmgr-service-json create-package" [
   --force: oneof<nothing, bool>
   --recursive: oneof<nothing, bool>
   --package: string # format: binary
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -693,7 +704,7 @@ export def "crx-packmgr-update-jsp create-package" [
   --path: string
   --filter: string
   --charset: string
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "_charset_" $charset "scalar")] | flatten | str join "&"
@@ -769,7 +780,7 @@ export def "etc-packages-jcr-content-vlt-definition-filter-tidy-2-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
@@ -795,7 +806,7 @@ export def "etc-replication-agents-runmode-1-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($runmode | is-empty) { error make --unspanned { msg: "path parameter 'runmode' must be non-empty" } }
@@ -1340,7 +1351,7 @@ export def "system-health get-aem-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string
   --combine-tags-or: oneof<nothing, bool>
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "combineTagsOr" $combine_tags_or "scalar")] | flatten | str join "&"

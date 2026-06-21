@@ -49,6 +49,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -149,7 +160,7 @@ export def "bad-word-filter create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -169,7 +180,7 @@ export def "bin-list-download list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-iso3: oneof<nothing, bool> # Include ISO 3-letter country codes and ISO 3-letter currency codes in the data. These will be added to columns 10 and 11 respectively (default: false)
   --include-8digit: oneof<nothing, bool> # Include 8-digit and higher BIN codes. This option includes all 6-digit BINs and all 8-digit and higher BINs (including some 9, 10 and 11 digit BINs where available) (default: false)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include-iso3" $include_iso3 "scalar") (serialize-qp "include-8digit" $include_8digit "scalar")] | flatten | str join "&"
@@ -235,7 +246,7 @@ export def "browser-bot create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -449,7 +460,7 @@ export def "html-clean create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The HTML content. This can be either a URL to load from, a file upload (multipart/form-data) or an HTML content string
   output_type: string # The level of sanitization, possible values are: plain-text: reduce the content to plain text only (no HTML tags at all) simple-text: allow only very basic text formatting tags like b, em, i, strong, u basic-html: allow advanced text formatting and hyper links basic-html-with-images: same as basic html but also allows image tags advanced-html: same as basic html with images but also allows many more common HTML tags like table, ul, dl, pre
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -458,7 +469,7 @@ export def "html-clean create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -498,7 +509,7 @@ export def "html-render create" [
   --timeout: int # Timeout in seconds. Give up if still trying to load the HTML content after this number of seconds (format: int32, default: 300)
   --title: string # The document title
   --zoom: float # Set the zoom factor when rendering the page (2.0 for double size, 0.5 for half size) (format: double, default: 1)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -507,7 +518,7 @@ export def "html-render create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -531,7 +542,7 @@ export def "image-resize resize" [
   image_url: string # The URL or Base64 encoded Data URL for the source image. You can also upload an image file directly using multipart/form-data
   --resize-mode: string # The resize mode to use, we support 3 main resizing modes: scaleResize to within the width and height specified while preserving aspect ratio. In this mode the width or height will be automatically adjusted to fit the aspect ratio padResize to exactly the width and height specified while preserving aspect ratio and pad any space left over. Any padded space will be filled in with the 'bg-color' value cropResize to exactly the width and height specified while preserving aspect ratio and crop any space which fall outside the area. The cropping window is centered on the original image (default: scale)
   width: int # The width to resize to (in px) (format: int32)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -540,7 +551,7 @@ export def "image-resize resize" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -567,7 +578,7 @@ export def "image-watermark create" [
   --resize-mode: string # The resize mode to use, we support 3 main resizing modes: scaleResize to within the width and height specified while preserving aspect ratio. In this mode the width or height will be automatically adjusted to fit the aspect ratio padResize to exactly the width and height specified while preserving aspect ratio and pad any space left over. Any padded space will be filled in with the 'bg-color' value cropResize to exactly the width and height specified while preserving aspect ratio and crop any space which fall outside the area. The cropping window is centered on the original image (default: scale)
   watermark_url: string # The URL or Base64 encoded Data URL for the watermark image. You can also upload an image file directly using multipart/form-data
   --width: int # If set resize the resulting image to this width (in px) (format: int32)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -576,7 +587,7 @@ export def "image-watermark create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -624,7 +635,7 @@ export def "ip-blocklist-download download" [
   --include-vpn: oneof<nothing, bool> # Include public VPN provider addresses, this option is only available for Tier 3 or higher accounts. Adds any IPs which are solely listed as VPN providers, IPs that are listed on multiple sensors will still be included without enabling this option. WARNING: This adds at least an additional 8 million IP addresses to the download if not using CIDR notation (default: false)
   --cidr: oneof<nothing, bool> # Output IPs using CIDR notation. This option should be preferred but is off by default for backwards compatibility (default: false)
   --ip6: oneof<nothing, bool> # Output the IPv6 version of the blocklist, the default is to output IPv4 only. Note that this option enables CIDR notation too as this is the only notation currently supported for IPv6 (default: false)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "include-vpn" $include_vpn "scalar") (serialize-qp "cidr" $cidr "scalar") (serialize-qp "ip6" $ip6 "scalar")] | flatten | str join "&"
@@ -712,7 +723,7 @@ export def "phone-playback create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -774,7 +785,7 @@ export def "phone-verify verify" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -797,7 +808,7 @@ export def "qr-code create" [
   --fg-color: string # The QR code foreground color (default: #000000)
   --height: int # The height of the QR code (in px) (format: int32, default: 256)
   --width: int # The width of the QR code (in px) (format: int32, default: 256)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +817,7 @@ export def "qr-code create" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 
@@ -840,7 +851,7 @@ export def "sms-verify verify" [
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
-  let req_body_wire = ($req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query)
+  let req_body_wire = (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string })
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/x-www-form-urlencoded" $req_body_wire {query: {}, body: $req_body}
 }
 

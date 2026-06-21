@@ -49,6 +49,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -2425,7 +2436,7 @@ export def "files-download get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-size: string # Resize image to specified size. Supports any sizes from 10x10 to 2000x2000 (format `{width}x{height}`). The image will be returned in the original size if the value is invalid. This parameter will be ignored for non-image files. (e.g. 700x700)
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2455,7 +2466,7 @@ export def "files-downloadextension get-download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --organization-id: string # Organization identifier in scope of which need to perform request (if not specified, the default organization will be used). (e.g. 4f6cf35x-2c4y-483z-a0a9-158621f77a21)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "reb-apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

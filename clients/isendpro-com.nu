@@ -47,6 +47,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -160,7 +171,7 @@ export def "campagne get" [
   --rapport-campagne: string@rapport-campagne-completer # Doit valoir "1"
   --date-deb: string # date de debut au format YYYY-MM-DD hh:mm
   --date-fin: string # date de fin au format YYYY-MM-DD hh:mm
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "rapportCampagne" $rapport_campagne "scalar") (serialize-qp "date_deb" $date_deb "scalar") (serialize-qp "date_fin" $date_fin "scalar")] | flatten | str join "&"
@@ -278,7 +289,7 @@ export def "get-listenoire get-liste-noire" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyid: string # Clé API (format: string)
   --get-liste-noire: string@get-liste-noire-completer # Doit valoir "1"
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "getListeNoire" $get_liste_noire "scalar")] | flatten | str join "&"

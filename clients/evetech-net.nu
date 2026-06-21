@@ -48,6 +48,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -1097,7 +1108,7 @@ export def "characters-cspa create" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --body: list
-]: any -> float {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1513,7 +1524,7 @@ export def "characters-mail create" [
   body: string # body string
   recipients: list # recipients array — item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
   subject: string # subject string
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1577,7 +1588,7 @@ export def "characters-mail-labels create" [
   --qp-token: string # Access token to use if unable to set a header
   --color: string@color-completer # Hexadecimal string representing label color, in RGB format (default: #ffffff)
   name: string # name string
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2365,7 +2376,7 @@ export def "characters-wallet get" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> float {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3440,7 +3451,7 @@ export def "corporations-members-limit get" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> int {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }

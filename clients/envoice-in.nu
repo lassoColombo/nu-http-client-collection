@@ -49,6 +49,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -176,7 +187,7 @@ export def "client-candelete delete-can" [
   --id: int # format: int32
   --x-auth-key: string
   --x-auth-secret: string
-]: nothing -> bool {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -206,7 +217,7 @@ export def "client-delete delete" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of client to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -279,7 +290,7 @@ export def "client-new create" [
   --phone-number: string # Client phone numer
   --ui-language-id: int # Hold a value of the language in which the invoice will be sent (format: int32)
   --vat: string # Client's VAT number
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +397,7 @@ export def "estimation-changestatus create-change-status" [
   --x-auth-secret: string
   --id: int # Estimation Id (format: int32)
   --status: string@status-completer # New status of the estimation
-]: any -> bool {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -450,7 +461,7 @@ export def "estimation-delete delete" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of estimation to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -564,7 +575,7 @@ export def "estimation-sendtoclient send-to-client" [
   --message: string # Message to be embedded in the email
   --send-to-self: oneof<nothing, bool> # Should email copy be send to self
   --subject: string # Subject for the email
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -596,7 +607,7 @@ export def "estimation-status get" [
   --id: int # format: int32
   --x-auth-key: string
   --x-auth-secret: string
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -877,7 +888,7 @@ export def "invoice-changestatus create-change-status" [
   --x-auth-secret: string
   --id: int # Invoice Id (format: int32)
   --status: string@status-completer-1 # New status of the invoice
-]: any -> bool {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +920,7 @@ export def "invoice-delete delete" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of invoice to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -940,7 +951,7 @@ export def "invoice-delete-category create" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # format: int32
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1116,7 +1127,7 @@ export def "invoice-sendtoaccountant send-to-accountant" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of the invoice (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1153,7 +1164,7 @@ export def "invoice-sendtoclient send-to-client" [
   --message: string # Message to be embedded in the email
   --send-to-self: oneof<nothing, bool> # Should email copy be send to self
   --subject: string # Subject for the email
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1185,7 +1196,7 @@ export def "invoice-status get" [
   --id: int # format: int32
   --x-auth-key: string
   --x-auth-secret: string
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -1431,7 +1442,7 @@ export def "order-delete delete" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of order to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1527,7 @@ export def "order-new create" [
   --tax-amount: float # Tax amount (format: double)
   --total-amount: float # Total amount (format: double)
   --what-happens-next-description: string # What happens next description
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1626,7 +1637,7 @@ export def "paymentlink-delete delete-payment-link" [
   --total-amount: float # format: double
   --user: record # shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
   --user-id: int # format: int32
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1677,7 +1688,7 @@ export def "paymentlink-new create-payment-link" [
   --total-amount: float # format: double
   --user: record # shape: {ActionNotificationsLastReadOn?: string, Email?: string, ExternalConnections?: list, HasBeenOnboarded?: bool, Id?: int, IsLocked?: bool, IsVerified?: bool, KnowledgeNotificationsLastReadOn?: string, LastSeenOn?: string, Name?: string, Password?: string, PasswordSalt?: string, ReferralPath?: string, ReferredUsers?: int, ReferrerKey?: string, Settings?: record, Status?: "Normal"|"Fraudlent"|"Locked", SubscriptionPlan?: record, Type?: "Anonymous"|"Customer"|"SystemAdministrator"|"Collaborator", ... (3 more fields)}
   --user-id: int # format: int32
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1770,7 +1781,7 @@ export def "product-delete delete" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of product to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1851,7 +1862,7 @@ export def "product-new create" [
   --shipping-description: string # Client instructions for shipping
   --status: string@status-completer-3 # Product availability status
   --what-happens-next-description: string # What happens next description
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1962,7 +1973,7 @@ export def "tax-delete delete" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of tax to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1995,7 +2006,7 @@ export def "tax-new create" [
   --x-auth-secret: string
   --name: string # Name of the task
   --percentage: float # Task percentage. Ex: 18% (format: double)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2088,7 +2099,7 @@ export def "worktype-delete delete-work-type" [
   --x-auth-key: string
   --x-auth-secret: string
   --id: int # Id of work type to be deleted (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2150,7 +2161,7 @@ export def "worktype-new create-work-type" [
   --x-auth-key: string
   --x-auth-secret: string
   --title: string # Indicates the title of of the work type (Logo design, development...)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-auth-key"))
   let base = ($base_url | default $BASE_URL)

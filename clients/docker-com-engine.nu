@@ -47,6 +47,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -231,7 +242,7 @@ export def "build build-image" [
   let extra_headers = {"Content-type": $content_type, "X-Registry-Config": $x_registry_config} | compact
   let auth = ($auth | update headers ($auth.headers | merge $extra_headers))
   let effective_ct = ($content_type | default "application/octet-stream")
-  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else { $req_body }
+  let req_body_wire = if $effective_ct == "application/x-www-form-urlencoded" { (if (($req_body | describe) | str starts-with "record") { $req_body | transpose k v | where v != null | reduce -f {} {|p, acc| $acc | upsert $p.k $p.v } | url build-query } else if ($req_body == null) { "" } else { $req_body | into string }) } else { $req_body }
   do-request "post" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full $effective_ct $req_body_wire {query: ({"dockerfile": $dockerfile, "t": $t, "extrahosts": $extrahosts, "remote": $remote, "q": $q, "nocache": $nocache, "cachefrom": $cachefrom, "pull": $pull, "rm": $rm, "forcerm": $forcerm, "memory": $memory, "memswap": $memswap, "cpushares": $cpushares, "cpusetcpus": $cpusetcpus, "cpuperiod": $cpuperiod, "cpuquota": $cpuquota, "buildargs": $buildargs, "shmsize": $shmsize, "squash": $squash, "labels": $labels, "networkmode": $networkmode} | compact), body: $req_body}
 }
 
@@ -909,7 +920,7 @@ export def "containers-logs logs" [
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines. (default: all)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2647,7 +2658,7 @@ export def "services-logs logs" [
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines. (default: all)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2775,7 +2786,7 @@ export def "swarm-init create" [
   --force-new-cluster: oneof<nothing, bool> # Force creation of a new swarm.
   --listen-addr: string # Listen address used for inter-manager communication, as well as determining the networking interface used for the VXLAN Tunnel Endpoint (VTEP). This can either be an address/port combination in the form `192.168.1.1:4567`, or an interface followed by a port number, like `eth0:4567`. If the port number is omitted, the default swarm listening port is used.
   --spec: record # User modifiable swarm configuration. — shape: {CAConfig?: record, Dispatcher?: record, EncryptionConfig?: record, Labels?: record, Name?: string, Orchestration?: record, Raft?: record, TaskDefaults?: record}
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3036,7 +3047,7 @@ export def "tasks-logs logs" [
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines. (default: all)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

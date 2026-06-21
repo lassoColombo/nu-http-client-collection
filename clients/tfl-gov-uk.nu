@@ -49,6 +49,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -488,7 +499,7 @@ export def "line-mode get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
-  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}"))
+  let full_url = (build-url $base ({modes: (encode-path-array $modes)} | format pattern "/Line/Mode/{modes}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -514,7 +525,7 @@ export def "line-mode-disruption get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
-  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}/Disruption"))
+  let full_url = (build-url $base ({modes: (encode-path-array $modes)} | format pattern "/Line/Mode/{modes}/Disruption"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -542,7 +553,7 @@ export def "line-mode-route get" [
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}/Route") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-array $modes)} | format pattern "/Line/Mode/{modes}/Route") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"serviceTypes": $service_types} | compact), body: null}
@@ -571,7 +582,7 @@ export def "line-mode-status get" [
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
   let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "severityLevel" $severity_level "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/Line/Mode/{modes}/Status") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-array $modes)} | format pattern "/Line/Mode/{modes}/Status") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"detail": $detail, "severityLevel": $severity_level} | compact), body: null}
@@ -678,7 +689,7 @@ export def "line get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Line/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -709,7 +720,7 @@ export def "line-arrivals get" [
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   if ($stop_point_id | is-empty) { error make --unspanned { msg: "path parameter 'stopPointId' must be non-empty" } }
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "destinationStationId" $destination_station_id "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids), stop_point_id: (encode-path-segment $stop_point_id)} | format pattern "/Line/{ids}/Arrivals/{stop_point_id}") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids), stop_point_id: (encode-path-segment $stop_point_id)} | format pattern "/Line/{ids}/Arrivals/{stop_point_id}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"direction": $direction, "destinationStationId": $destination_station_id} | compact), body: null}
@@ -735,7 +746,7 @@ export def "line-disruption get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}/Disruption"))
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Line/{ids}/Disruption"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -763,7 +774,7 @@ export def "line-route get" [
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   let qp = [(serialize-qp "serviceTypes" $service_types "multi")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}/Route") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Line/{ids}/Route") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"serviceTypes": $service_types} | compact), body: null}
@@ -791,7 +802,7 @@ export def "line-status get-by-ids" [
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   let qp = [(serialize-qp "detail" $detail "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Line/{ids}/Status") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Line/{ids}/Status") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"detail": $detail} | compact), body: null}
@@ -827,7 +838,7 @@ export def "line-status-to get" [
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'StartDate' must be non-empty" } }
   if ($end_date | is-empty) { error make --unspanned { msg: "path parameter 'EndDate' must be non-empty" } }
   let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dateRange.startDate" $date_range_start_date "scalar") (serialize-qp "dateRange.endDate" $date_range_end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/Line/{ids}/Status/{start_date}/to/{end_date}") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/Line/{ids}/Status/{start_date}/to/{end_date}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"detail": $detail, "startDate": $start_date, "endDate": $end_date, "dateRange.startDate": $date_range_start_date, "dateRange.endDate": $date_range_end_date} | compact), body: null}
@@ -1022,7 +1033,7 @@ export def "occupancy-bike-points get-occupancies" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Occupancy/BikePoints/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Occupancy/BikePoints/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -1121,7 +1132,7 @@ export def "occupancy-charge-connector get-status" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Occupancy/ChargeConnector/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Occupancy/ChargeConnector/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -1290,7 +1301,7 @@ export def "place-type get" [
   let base = ($base_url | default $BASE_URL)
   if ($types | is-empty) { error make --unspanned { msg: "path parameter 'types' must be non-empty" } }
   let qp = [(serialize-qp "activeOnly" $active_only "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({types: (encode-path-segment $types)} | format pattern "/Place/Type/{types}") $qp)
+  let full_url = (build-url $base ({types: (encode-path-array $types)} | format pattern "/Place/Type/{types}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"activeOnly": $active_only} | compact), body: null}
@@ -1353,7 +1364,7 @@ export def "place-at get" [
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'Lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'Lon' must be non-empty" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/Place/{type}/At/{lat}/{lon}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-array $type), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/Place/{type}/At/{lat}/{lon}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lat": $lat, "lon": $lon, "location.lat": $location_lat, "location.lon": $location_lon} | compact), body: null}
@@ -1394,7 +1405,7 @@ export def "place-overlay get" [
   if ($width | is-empty) { error make --unspanned { msg: "path parameter 'width' must be non-empty" } }
   if ($height | is-empty) { error make --unspanned { msg: "path parameter 'height' must be non-empty" } }
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({type: (encode-path-segment $type), z: (encode-path-segment $z), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/Place/{type}/overlay/{z}/{lat}/{lon}/{width}/{height}") $qp)
+  let full_url = (build-url $base ({type: (encode-path-array $type), z: (encode-path-segment $z), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/Place/{type}/overlay/{z}/{lat}/{lon}/{width}/{height}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"lat": $lat, "lon": $lon, "location.lat": $location_lat, "location.lon": $location_lon} | compact), body: null}
@@ -1494,7 +1505,7 @@ export def "road-all-disruption get" [
   let base = ($base_url | default $BASE_URL)
   if ($disruption_ids | is-empty) { error make --unspanned { msg: "path parameter 'disruptionIds' must be non-empty" } }
   let qp = [(serialize-qp "stripContent" $strip_content "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({disruption_ids: (encode-path-segment $disruption_ids)} | format pattern "/Road/all/Disruption/{disruption_ids}") $qp)
+  let full_url = (build-url $base ({disruption_ids: (encode-path-array $disruption_ids)} | format pattern "/Road/all/Disruption/{disruption_ids}") $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stripContent": $strip_content} | compact), body: null}
@@ -1546,7 +1557,7 @@ export def "road get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Road/{ids}"))
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Road/{ids}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -1577,7 +1588,7 @@ export def "road-disruption get" [
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   let qp = [(serialize-qp "stripContent" $strip_content "scalar") (serialize-qp "severities" $severities "multi") (serialize-qp "categories" $categories "multi") (serialize-qp "closures" $closures "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Road/{ids}/Disruption") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Road/{ids}/Disruption") $qp)
   let accept_val = ($accept | default "application/geo+json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"stripContent": $strip_content, "severities": $severities, "categories": $categories, "closures": $closures} | compact), body: null}
@@ -1606,7 +1617,7 @@ export def "road-status get" [
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   let qp = [(serialize-qp "dateRangeNullable.startDate" $date_range_nullable_start_date "scalar") (serialize-qp "dateRangeNullable.endDate" $date_range_nullable_end_date "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Road/{ids}/Status") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Road/{ids}/Status") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"dateRangeNullable.startDate": $date_range_nullable_start_date, "dateRangeNullable.endDate": $date_range_nullable_end_date} | compact), body: null}
@@ -1863,7 +1874,7 @@ export def "stop-point-mode get" [
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/StopPoint/Mode/{modes}") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-array $modes)} | format pattern "/StopPoint/Mode/{modes}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"page": $page} | compact), body: null}
@@ -1891,7 +1902,7 @@ export def "stop-point-mode-disruption stop" [
   let base = ($base_url | default $BASE_URL)
   if ($modes | is-empty) { error make --unspanned { msg: "path parameter 'modes' must be non-empty" } }
   let qp = [(serialize-qp "includeRouteBlockedStops" $include_route_blocked_stops "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({modes: (encode-path-segment $modes)} | format pattern "/StopPoint/Mode/{modes}/Disruption") $qp)
+  let full_url = (build-url $base ({modes: (encode-path-array $modes)} | format pattern "/StopPoint/Mode/{modes}/Disruption") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeRouteBlockedStops": $include_route_blocked_stops} | compact), body: null}
@@ -2037,7 +2048,7 @@ export def "stop-point-type get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($types | is-empty) { error make --unspanned { msg: "path parameter 'types' must be non-empty" } }
-  let full_url = (build-url $base ({types: (encode-path-segment $types)} | format pattern "/StopPoint/Type/{types}"))
+  let full_url = (build-url $base ({types: (encode-path-array $types)} | format pattern "/StopPoint/Type/{types}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -2065,7 +2076,7 @@ export def "stop-point-type-page get-by-with-pagination" [
   let base = ($base_url | default $BASE_URL)
   if ($types | is-empty) { error make --unspanned { msg: "path parameter 'types' must be non-empty" } }
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
-  let full_url = (build-url $base ({types: (encode-path-segment $types), page: (encode-path-segment $page)} | format pattern "/StopPoint/Type/{types}/page/{page}"))
+  let full_url = (build-url $base ({types: (encode-path-array $types), page: (encode-path-segment $page)} | format pattern "/StopPoint/Type/{types}/page/{page}"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}
@@ -2093,7 +2104,7 @@ export def "stop-point get" [
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   let qp = [(serialize-qp "includeCrowdingData" $include_crowding_data "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/StopPoint/{ids}") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/StopPoint/{ids}") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"includeCrowdingData": $include_crowding_data} | compact), body: null}
@@ -2123,7 +2134,7 @@ export def "stop-point-disruption stop" [
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   let qp = [(serialize-qp "getFamily" $get_family "scalar") (serialize-qp "includeRouteBlockedStops" $include_route_blocked_stops "scalar") (serialize-qp "flattenResponse" $flatten_response "scalar")] | flatten | str join "&"
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/StopPoint/{ids}/Disruption") $qp)
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/StopPoint/{ids}/Disruption") $qp)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: ({"getFamily": $get_family, "includeRouteBlockedStops": $include_route_blocked_stops, "flattenResponse": $flatten_response} | compact), body: null}
@@ -2261,7 +2272,7 @@ export def "stop-point-direction-to stop" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --line-id: string # Optional line id filter e.g. victoria
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2490,7 +2501,7 @@ export def "vehicle-arrivals get" [
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
-  let full_url = (build-url $base ({ids: (encode-path-segment $ids)} | format pattern "/Vehicle/{ids}/Arrivals"))
+  let full_url = (build-url $base ({ids: (encode-path-array $ids)} | format pattern "/Vehicle/{ids}/Arrivals"))
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   do-request "get" $full_url $auth $insecure $raw $dry_run $max_time $allow_errors $full "application/json" null {query: {}, body: null}

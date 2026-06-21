@@ -50,6 +50,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -176,7 +187,7 @@ export def "diary-appointment delete-controller" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --appointment-id: string # The unique appointment id
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
@@ -240,7 +251,7 @@ export def "diary-appointment create-controller" [
   --extra-comments: string # Additional appointment comments
   --guests: list # A collection of guests linked to the appointment. If none leave empty — item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
   --subject: string # The subject of the appointment
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -280,7 +291,7 @@ export def "diary-appointment update-controller" [
   --extra-comments: string # Additional appointment comments
   --guests: list # A collection of guests linked to the appointment. If none leave empty — item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
   --subject: string # The subject of the appointment
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -313,7 +324,7 @@ export def "diary-appointment-feedback create-controller" [
   --appointment-id: string # Appointment to submit feedback to:-
   --feedback: string # Feedback to submit:-
   --property-id: string # Property to submit feedback to:-
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -343,7 +354,7 @@ export def "diary-appointment-cancel cancel-controller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }

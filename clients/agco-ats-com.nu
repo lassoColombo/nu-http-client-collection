@@ -47,6 +47,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -249,7 +260,7 @@ export def "aftermarket-services-engines-iqa-codes update" [
   --accept: string@accept-completer # Response content type
   --edt-instance-id: string # The EDT Instance Id of the kit calling this method.
   --body: list
-]: any -> bool {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -306,7 +317,7 @@ export def "aftermarket-services-hello get-connection-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> bool {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/AftermarketServices/Hello")
@@ -360,7 +371,7 @@ export def "aftermarket-services-user-statuses update-status" [
   dealer_code: string # The dealer code of the voucher
   --state: string@state-completer-1 # The state of the voucher
   voucher_code: string # The voucher code
-]: any -> bool {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -560,7 +571,7 @@ export def "authorization-categories create" [
   --description: string # A description of the Category.
   --id: string # The ID of the Category.
   --name: string # The Name of the Category.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -779,7 +790,7 @@ export def "authorization-code-definitions create" [
   name: string # The name of the authorization code definition. May not be updated.
   --random-length: int # The bit length of random data which will be included in the authorization code. This is necessary to allow creation of "identical" authorization codes containing the same timestamp. Defaults to 5. May not be updated. (format: int32)
   --validation-fields: list # The defined fields to verify when reading authorization codes generated from this definition. May not be updated. — item shape: {Name: string, Type: "Boolean"|"Float"|"Int"|"StringCaseInsensitive"|"StringCaseSensitive"}
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1012,7 @@ export def "authorization-codes create" [
   --id: int # The identifier for the authorization code. Read only. (format: int32)
   --is-deleted: oneof<nothing, bool> # Indicates whether this code is deleted.
   --validation-parameters: list # The parameters and values used to validate this authorization code. May not be updated. — item shape: {Name: string, Value: string}
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1215,7 +1226,7 @@ export def "authorization-contact-information create" [
   --id: int # ID of authorizationContactInformation (format: int32)
   --notes: string # Optional notes used for internal use.
   phone: string # Phone number of contact.
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1301,7 +1312,7 @@ export def "bundles create" [
   bundle_number: int # The bundle number (format: int32)
   description: string # The Bundle description.
   update_group_id: string # The update group this bundle belongs to.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1793,7 +1804,7 @@ export def "content-definitions create" [
   --name: string # The name of this content. Name must be valid for Attribute on PackageType.
   --package-type-id: string # Read Only. The ID of the package type used for this content.
   --type-id: int # The type of content. (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1943,7 +1954,7 @@ export def "content-definitions-attributes create" [
   --id: int # The ID of this attribute. (format: int32)
   name: string # The name of this Attribute.
   --value: string # The value of this Attribute
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2040,7 +2051,7 @@ export def "content-releases create" [
   --test-report-url: string # The URL at which test reports for this content can be found
   --updated-date: string # Updated Date (format: date-time)
   --version: int # version (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2273,7 +2284,7 @@ export def "content-submission-types create" [
   --job-id: int # The ID of the JobDefinition for which to initiate a Job. A value of '0' will cause a submission to fail. Either 'BuildDefinitionID' or 'JobID' is required. (format: int32)
   name: string # The Name of the Content Submission Type
   --release-notes-description: string # A description of how release notes for this Content Submission Type are used
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2438,7 +2449,7 @@ export def "content-submissions create" [
   --submission-date: string # Read Only. The UTC date and time the content submission was made. (format: date-time)
   --user-id: int # Read Only. The ID of the user who submitted the content (format: int32)
   --version: int # Optional. The version number assigned to this Content Submission and the resulting Package. If not provided, version shall be 1 if it is the first content submission for the ContentDefinitionID otherwise it shall be the highest content submission version for the specified ContentDefinitionID incremented by 1. (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2596,7 +2607,7 @@ export def "content-submissions-attributes create" [
   --id: int # The ID of this attribute. (format: int32)
   name: string # The name of this Attribute.
   --value: string # The value of this Attribute
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2801,7 +2812,7 @@ export def "files create" [
   path: string # The Path of the file.
   --size: int # The size of the file in bytes. Null until assigned by server when marked as 'Available'. Read Only (format: int64)
   state: string@state-completer-2 # Indicates the state of this file. Must be 'Created' when created.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2997,7 +3008,7 @@ export def "global-image-categories create-file" [
   --accept: string@accept-completer # Response content type
   --id: string # The Id of the GlobalImage Categories.
   name: string # The name of the globalImage Catetory.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3096,7 +3107,7 @@ export def "global-images create" [
   thumbnail_crc: string # The Hash of the thumbnail file (SHA256, HEX-encoded).
   --thumbnail-size: int # The size of the thumbnail file in bytes. Null until assigned by server when marked as 'Available'. Read Only (format: int64)
   width: int # The width of the file. (format: int32)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3306,7 +3317,7 @@ export def "languages create" [
   description: string # The description of the language (e.g. “English – United States”).
   --is-deleted: oneof<nothing, bool> # Indicates whether the API supports the language. Must be false when created. Read Only.
   locale_id: int # The Locale Id of the language. (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3451,7 +3462,7 @@ export def "license-activations-register-edt-lite create" [
   expiration_date: string # The date at which the content of the EDT Lite expires. (format: date-time)
   instance_id: string # The identifier for the EDT Lite.
   voucher_code: string # The voucher code with which the EDT Lite was created.
-]: any -> bool {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3621,7 +3632,7 @@ export def "logs create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --message: string # Message to enter into the log
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Message" $message "scalar")] | flatten | str join "&"
@@ -3741,7 +3752,7 @@ export def "package-types create" [
   --localized-name: string # Optional. The StringID used to localize the name of the PackageType
   --max-delta-packages: int # The maximum number of "chained" delta packages to use when updating the client (format: int32)
   --package-type-id: string # Read Only. The package type id.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4071,7 +4082,7 @@ export def "packages create" [
   --switches: string # The command line arguments for the package. Default value is an empty string.
   url: string # The Url to download the package from.
   version: int # The version. (format: int32)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4225,7 +4236,7 @@ export def "permissions create" [
   --description: string
   --id: int # The identifier of the permission. (format: int32)
   name: string # The name of the permission.
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4382,7 +4393,7 @@ export def "priority-packages create" [
   --time-stamp: string # Read Only. The timestamp of the priority package. (format: date-time)
   --url: string # Read Only. From the package specified by package ID.
   --version: int # Read Only. From the package specified by package ID. (format: int32)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4495,7 +4506,7 @@ export def "releases create" [
   --release-id: int # Release ID (format: int32)
   --release-number: string # Release Number
   --visible: oneof<nothing, bool> # Visible
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4950,7 +4961,7 @@ export def "roles create" [
   description: string # Role description
   --id: int # The role's identifier. (format: int32)
   name: string # The name of the role. Must be alpha-numeric strings separated by a period (.).
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5443,7 +5454,7 @@ export def "translation-keys create" [
   --id: int # The identifier for the translationKey. Read Only. (format: int32)
   key_name: string # The key name of the item. One example is tkODX_HWIKM14R01
   string_id: string # Foreign key to StringDefinitionID
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5566,7 +5577,7 @@ export def "translation-requests create" [
   --submitted-by: int # The ID of the User that submitted the request (format: int32)
   --translator-email: string # The email address for the translator
   --translator-name: string # The name of the translator
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5906,7 +5917,7 @@ export def "translation-sets-attributes create" [
   name: string # The name of this Attribute.
   --translation-set-id: int # The ID of the translation set to which this attribute belongs. (format: int32)
   --value: string # The value of this Attribute
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6111,7 +6122,7 @@ export def "update-group-client-relationships create-subscription" [
   --last-checkin: string # ReadOnly. The timestamp of the last checkin. (format: date-time)
   --relationship-id: string # Read Only after creation. The relationship id. A relationship id will be assigned if not provided on creation.
   update_group_id: string # Read Only after creation. The update group to subscribe to.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6259,7 +6270,7 @@ export def "update-group-subscriptions create" [
   package_type_id: string # The PackageType to set subscription status for
   update_group_id: string # The Update Group this subscription is relevant for.
   --update-group-subscription-id: int # The Update Group Subscription ID. This ID will be automatically assigned when creating an Update Group Subscription. (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6464,7 +6475,7 @@ export def "update-groups create" [
   --validating-field: string # A field used for validation in the status report for this update group. Specify the field with the format [Label]: {[InventoryPackageID].[Category].[Attribute]}. (i.e. example: {bec778ca-278d-424a-867a-4653a1a19e86.MyCategory.MyAttribute})
   --value-to-validate: string # The value to validate the ValidationField against.
   --version: string # The version of the UpdateGroup, this value is incremented with each modification to a related Bundle or PackageType (format: byte)
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6725,7 +6736,7 @@ export def "user-content-definitions create" [
   --content-definition-id: int # The ID of the ContentDefinition. (format: int32)
   --user-content-definition-id: int # Read Only. The ID of the User to ContentDefinition relationship. (format: int32)
   --user-id: int # The ID of the user. (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7236,7 +7247,7 @@ export def "vouchers create" [
   --purpose: string # Required for Internal Vouchers. Not supported for other Vouchers.
   --type: string@type-completer # The type of voucher. Commercial is the default if not specified.
   --voucher-code: string # The voucher code.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7418,7 +7429,7 @@ export def "activities create-activity" [
   --activity-id: int # The ID of the activity (format: int32)
   --deleted: oneof<nothing, bool>
   --name: string # The name of the activity
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7714,7 +7725,7 @@ export def "agents create" [
   machine_name: string # The machine name of the computer the agent is running on
   status: record # A DTO for an IAgentStatus — shape: {LastStatusUpdate?: string, Online: bool}
   user_id: int # The UserID of the Agent (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8003,7 +8014,7 @@ export def "job-runs create" [
   --job-run-id: int # The ID of this JobRun (format: int32)
   --start-date: string # The UTC date and time when the job started (format: date-time)
   --status: string@status-completer-2 # The status of this JobRun
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8151,7 +8162,7 @@ export def "jobs create" [
   --deleted: oneof<nothing, bool> # Indicates if the job has been deleted.
   --job-id: int # The ID of the job (format: int32)
   --name: string # The name of the job
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8299,7 +8310,7 @@ export def "steps create" [
   implementation_id: string # The implementation ID used to lookup the step implementation when it is executed
   name: string # The name of the step
   --step-id: int # The ID of the step (format: int32)
-]: any -> int {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

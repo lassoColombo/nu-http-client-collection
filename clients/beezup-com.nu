@@ -48,6 +48,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -2314,7 +2325,7 @@ export def "user-catalogs-custom-columns-compute-expression create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   encrypted_expression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
   product_values: record # The key is the column identifier (e.g. {012929c0-e78b-462a-a96e-25c061575385: http://media.conforama.fr/Medias/500000/80000/5000/500/10/G_585511_A.jpg, 46602e10-bc45-4944-a440-63d5f7ece1f8: 42, 68082b11-4ffd-4bec-964a-465a471c7d37: SKU1234, b6d74510-41ce-42ec-947a-0bdf62e9beee: Refrigerateur, ba270fa0-8482-46be-905a-cae4ca746b92: http://www.conforama.fr/gros-electromenager/encastrable/refrigerateur-encastrable/refrigerateur-combine-161-litres-far-r5115s/p/585511})
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2404,7 +2415,7 @@ export def "user-catalogs-custom-columns-expression get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -2959,7 +2970,7 @@ export def "user-catalogs-importations-custom-columns-expression get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -3080,7 +3091,7 @@ export def "user-catalogs-importations-product-samples-custom-columns get-value"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }

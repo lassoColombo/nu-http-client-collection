@@ -48,6 +48,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -138,7 +149,7 @@ export def "baggage-baggagetripandcontact get-trip-and-contact" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_id | is-empty) { error make --unspanned { msg: "path parameter 'searchID' must be non-empty" } }
@@ -174,7 +185,7 @@ export def "offers-fares-allfares list" [
   --fare-family: string # Mandatory for 4U. Specifies, which fares to be returned, such as basic, smart, best, smartflex, bestflex . (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: smart)
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
   --hdr-accept: string # Mandatory http header: application/xml or application/json
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
@@ -211,7 +222,7 @@ export def "offers-fares-bestfares get-best" [
   --trackingid: string # Austrian Airlines only - specify the web tracking id to be used in OS Deep link.
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex")
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "range" $range "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "fare-family" $fare_family "scalar")] | flatten | str join "&"
@@ -257,7 +268,7 @@ export def "offers-fares-deeplink get-deep-links" [
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "origin-name" $origin_name "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "destination-name" $destination_name "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
@@ -296,7 +307,7 @@ export def "offers-fares-deeplink-ffp get-lh-deep-links" [
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
@@ -340,7 +351,7 @@ export def "offers-fares-deeplink-itco get-lh-deep-links" [
   --partnerid: string # Deep link partner id (e.g. '1247')
   --encryption-key: string # Deep link encryption-key
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "outbound-segments" $outbound_segments "scalar") (serialize-qp "fare" $fare "scalar") (serialize-qp "fare-currency" $fare_currency "scalar") (serialize-qp "trackingid" $trackingid "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "return-segments" $return_segments "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "net-fare" $net_fare "scalar") (serialize-qp "partnerid" $partnerid "scalar") (serialize-qp "encryption-key" $encryption_key "scalar")] | flatten | str join "&"
@@ -372,7 +383,7 @@ export def "offers-fares-fares get" [
   --travelers: string # Type and number of travelers e.g. (adult=1;child=1;infant=1)
   --fare-types: string # Fares family: basic,smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "segments" $segments "scalar") (serialize-qp "carriers" $carriers "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-types" $fare_types "scalar")] | flatten | str join "&"
@@ -408,7 +419,7 @@ export def "offers-fares-lowestfares get-lowest" [
   --fare-family: string # Fare family: basic, smart, best, smartflex, bestflex - Germanwings only (Acceptable values are: "", "basic", "smart", "best", "smartflex", "bestflex") (default: basic)
   --country: string # Country code of requestor. 2-letter ISO 3166-1 country code (e.g. 'de')
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "travel-date" $travel_date "scalar") (serialize-qp "return-date" $return_date "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "travelers" $travelers "scalar") (serialize-qp "fare-family" $fare_family "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
@@ -443,7 +454,7 @@ export def "offers-fares-subscriptions get" [
   --country: string # 2-letter ISO 3166-1 country code
   --trackingid: string # Tracking parameter
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "origin" $origin "scalar") (serialize-qp "destination" $destination "scalar") (serialize-qp "cabin-class" $cabin_class "scalar") (serialize-qp "trip-duration" $trip_duration "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "lang" $lang "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "trackingid" $trackingid "scalar")] | flatten | str join "&"
@@ -475,7 +486,7 @@ export def "offers-ond-route get" [
   --limit: string # Number of records returned per request. Defaults to 20, maximum is 100 (if a value bigger than 100 is given, 100 will be taken)
   --offset: string # Number of records skipped. Defaults to 0
   --hdr-accept: string # Mandatory http header: application/xml or application/json
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
@@ -507,7 +518,7 @@ export def "offers-ond-status get" [
   --new-routes: string # Enter if newly added routes should be returned in the response. (Acceptable values are: "", "true", "false")
   --old-routes: string # Enter if old (deleted) routes should be returned in the response. (Acceptable values are: "", "true", "false")
   --hdr-accept: string # Mandatory http header: application/xml or application/json
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "new-routes" $new_routes "scalar") (serialize-qp "old-routes" $old_routes "scalar")] | flatten | str join "&"
@@ -536,7 +547,7 @@ export def "offers-ond-top top" [
   --catalogues: string # Carrier for which the OND will be retrieved (e.g. 'LH') (default: LH)
   --origin: string # Enter the origin country code (e.g. 'DE'). Leave empty to search Top OND across all countries
   --hdr-accept: string # Mandatory http header: application/xml or application/json
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "catalogues" $catalogues "scalar") (serialize-qp "origin" $origin "scalar")] | flatten | str join "&"
@@ -565,7 +576,7 @@ export def "orders-orders get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderID' must be non-empty" } }
@@ -595,7 +606,7 @@ export def "preflight-autocheckin check-auto" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --email-address: string # Email address
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticketnumber | is-empty) { error make --unspanned { msg: "path parameter 'ticketnumber' must be non-empty" } }
@@ -627,7 +638,7 @@ export def "promotions-priceoffers-flights-ond get-price-offers" [
   --departure-date: string # Departure date in local time (YYYY-MM-DD)
   --return-date: string # Return date in local time (YYYY-MM-DD)
   --service: string # Optional parameter. (default: amadeusBestPrice)
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($origin | is-empty) { error make --unspanned { msg: "path parameter 'origin' must be non-empty" } }
@@ -657,7 +668,7 @@ export def "references-seatdetails get-seat-details" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lang: string # 2-letter ISO 3166-1 language code
   --hdr-accept: string # http header: application/json or application/xml (Acceptable values are: "application/json", "application/xml")
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($aircraft_code | is-empty) { error make --unspanned { msg: "path parameter 'aircraftCode' must be non-empty" } }

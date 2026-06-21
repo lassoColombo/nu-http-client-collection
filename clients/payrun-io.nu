@@ -47,6 +47,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -9642,7 +9653,7 @@ export def "jobs-employer get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'EmployerId' must be non-empty" } }
@@ -10686,7 +10697,7 @@ export def "query get-response" [
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
   --query: record # shape: {Encoding?: string, ExcludeNullOrEmptyElements?: bool, Groups?: record, RootNodeName?: string, SuppressMetricAttributes?: bool, Variables?: record}
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10749,7 +10760,7 @@ export def "report-actpayins-run get-active-pay-instructions-output" [
   --type: string # the data type to filter on. E.g. TaxPayInstruction
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar") (serialize-qp "ActiveOn" $active_on "scalar") (serialize-qp "FromDate" $from_date "scalar") (serialize-qp "ToDate" $to_date "scalar") (serialize-qp "Type" $type "scalar")] | flatten | str join "&"
@@ -10782,7 +10793,7 @@ export def "report-aoeliability-run get-aoe-liability-ouput" [
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
@@ -10817,7 +10828,7 @@ export def "report-dpsmsg-run get-dps-message-output" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "FromDate" $from_date "scalar") (serialize-qp "ToDate" $to_date "scalar") (serialize-qp "MessageTypes" $message_types "scalar") (serialize-qp "MessageStatuses" $message_statuses "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
@@ -10847,7 +10858,7 @@ export def "report-empsum-run get-employer-summary-ouput" [
   --context-date: string # The date context for the report. E.g. 2018-04-30 (format: date)
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "ContextDate" $context_date "scalar")] | flatten | str join "&"
@@ -10881,7 +10892,7 @@ export def "report-gro2-net-run get-gross-to-output" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
@@ -10914,7 +10925,7 @@ export def "report-holbal-run get-holiday-balance-output" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "HolidayYearEnd" $holiday_year_end "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
@@ -10947,7 +10958,7 @@ export def "report-journal-run get-ouput" [
   --ledger-target: string # Specific to JOURNAL report, a filter used to select the journal lines for the specified ledger target. E.g. [Default]
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayFrequency" $pay_frequency "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "LedgerTarget" $ledger_target "scalar")] | flatten | str join "&"
@@ -10977,7 +10988,7 @@ export def "report-lastpaydate-run get-last-pay-date-ouput" [
   --employee-key: string # The employee unique key. E.g. EE001
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar")] | flatten | str join "&"
@@ -11011,7 +11022,7 @@ export def "report-netpay-run get-net-pay-output" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "TaxPeriod" $tax_period "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
@@ -11041,7 +11052,7 @@ export def "report-nextperiod-run get-next-pay-period-dates-output" [
   --pay-schedule-key: string # The pay schedule unique key. E.g. SCH001
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar")] | flatten | str join "&"
@@ -11074,7 +11085,7 @@ export def "report-p11-sum-run get-summary-output" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
@@ -11104,7 +11115,7 @@ export def "report-p32-run get-net-output" [
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar")] | flatten | str join "&"
@@ -11134,7 +11145,7 @@ export def "report-p32-sum-run get-summary-net-output" [
   --tax-year: string # The tax year. E.g. 2017 = 2017/18 year. (format: integer)
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar")] | flatten | str join "&"
@@ -11165,7 +11176,7 @@ export def "report-p45-run get-output" [
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "EmployeeKey" $employee_key "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
@@ -11199,7 +11210,7 @@ export def "report-p60-run get-output" [
   --max-index: string # The highest element index to return from the report. Used to control paging within large data sets. E.g. 100
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar")] | flatten | str join "&"
@@ -11234,7 +11245,7 @@ export def "report-papdis-run get-ouput" [
   --transform-definition-key: string # The transform definition unique key. E.g. P45-Pdf
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PensionKey" $pension_key "scalar") (serialize-qp "MessageFunctionCode" $message_function_code "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar")] | flatten | str join "&"
@@ -11270,7 +11281,7 @@ export def "report-pass-run get-ouput" [
   --document-id: string # Specific to PensionSync PASS report, a document identifier unique for this document within the Intermediary.
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PensionKey" $pension_key "scalar") (serialize-qp "MessageFunctionCode" $message_function_code "scalar") (serialize-qp "IntermediaryId" $intermediary_id "scalar") (serialize-qp "DocumentId" $document_id "scalar")] | flatten | str join "&"
@@ -11307,7 +11318,7 @@ export def "report-paydashboard-run get-pay-dashboard-payslip-ouput" [
   --publication-date: string # Specific to the Pay Dashboard report, allows the specification of a future payslip publication date. E.g. 2018-12-31 (format: date)
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar") (serialize-qp "PaymentDate" $payment_date "scalar") (serialize-qp "PublicationDate" $publication_date "scalar")] | flatten | str join "&"
@@ -11343,7 +11354,7 @@ export def "report-payslip3-run get-output" [
   --payment-date: string # The payment date context for the report. E.g. 2018-04-30 (format: date)
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "PayScheduleKey" $pay_schedule_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "EmployeeCodes" $employee_codes "scalar") (serialize-qp "TransformDefinitionKey" $transform_definition_key "scalar") (serialize-qp "StartIndex" $start_index "scalar") (serialize-qp "MaxIndex" $max_index "scalar") (serialize-qp "PaymentDate" $payment_date "scalar")] | flatten | str join "&"
@@ -11374,7 +11385,7 @@ export def "report-penliability-run get-pension-liability-output" [
   --pension-key: string # The pension scheme unique key. E.g. PENSCH001
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EmployerKey" $employer_key "scalar") (serialize-qp "TaxYear" $tax_year "scalar") (serialize-qp "PensionKey" $pension_key "scalar")] | flatten | str join "&"
@@ -11495,7 +11506,7 @@ export def "report-run get-output" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($report_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'ReportDefinitionId' must be non-empty" } }
@@ -11610,7 +11621,7 @@ export def "schemas get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dto_data_type | is-empty) { error make --unspanned { msg: "path parameter 'DtoDataType' must be non-empty" } }
@@ -11780,7 +11791,7 @@ export def "template get-model" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # The OAuth 1 authorization header. 'Auto' enables auto complete.
   --api-version: string # The version of the api to target. Omit or set as 'default' to target the current api version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dto_data_type | is-empty) { error make --unspanned { msg: "path parameter 'DtoDataType' must be non-empty" } }

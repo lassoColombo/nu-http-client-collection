@@ -48,6 +48,17 @@ def encode-path-segment [v: any]: nothing -> string {
   $v | into string | url encode --all | str replace --all "%2D" "-" | str replace --all "%2E" "." | str replace --all "%5F" "_" | str replace --all "%7E" "~"
 }
 
+# Serialize an array-typed path parameter (issue 49.A). OpenAPI 3 `style: simple`
+# (the default for path params) and Swagger 2 `collectionFormat: csv` both join
+# the elements with a literal comma WITHIN the single path segment, each element
+# RFC-3986-encoded individually (so a comma inside an element stays %2C). Without
+# this a `list` positional would render as the Nushell debug form `[a, b]`,
+# producing a guaranteed-404 URL. The else-branch keeps scalar values on the
+# historical encode-path-segment path (defensive against a bare string).
+def encode-path-array [v: any]: nothing -> string {
+  if (($v | describe) | str starts-with "list") { $v | each { encode-path-segment $in } | str join "," } else { encode-path-segment $v }
+}
+
 # Build URL from base, path, and optional query string
 def build-url [base: string, path: string, query?: string]: nothing -> string {
   let parsed = ($base | url parse | reject params)
@@ -418,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter-data: string # Start Packet capture parameters.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -453,7 +464,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --sas-url: string # SAS url for packet capture on virtual network gateway.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -490,7 +501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
   --device-family: string # The device family for the vpn device.
   --firmware-version: string # The firmware version for the vpn device.
   --vendor: string # The vendor for the vpn device.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -891,7 +902,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --client-root-certificates: list<string> # A list of client root certificates public certificate data encoded as Base-64 strings. Optional parameter for external radius based authentication with EAPTLS.
   --processor-architecture: string@processor-architecture-completer # VPN client Processor Architecture.
   --radius-server-auth-certificate: string # The public certificate data for the radius server authentication certificate as a Base-64 encoded string. Required only if external radius authentication has been configured with EAPTLS authentication.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -929,7 +940,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --client-root-certificates: list<string> # A list of client root certificates public certificate data encoded as Base-64 strings. Optional parameter for external radius based authentication with EAPTLS.
   --processor-architecture: string@processor-architecture-completer # VPN client Processor Architecture.
   --radius-server-auth-certificate: string # The public certificate data for the radius server authentication certificate as a Base-64 encoded string. Required only if external radius authentication has been configured with EAPTLS authentication.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1120,7 +1131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1257,7 +1268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter-data: string # Start Packet capture parameters.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1292,7 +1303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --sas-url: string # SAS url for packet capture on virtual network gateway.
-]: any -> string {
+]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1326,7 +1337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-]: nothing -> string {
+]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
