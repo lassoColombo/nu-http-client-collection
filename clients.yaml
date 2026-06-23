@@ -3643,7 +3643,7 @@ clients:
     source: https://api.apis.guru/v2/specs/hubapi.com/auth/v1/openapi.json
   - name: hubapi-com-automation
     source: https://api.apis.guru/v2/specs/hubapi.com/automation/v4/openapi.json
-  - name: hubapi-com-business units
+  - name: hubapi-com-business-units
     source: https://api.apis.guru/v2/specs/hubapi.com/business units/v3/openapi.json
   - name: hubapi-com-cms
     source: https://api.apis.guru/v2/specs/hubapi.com/cms/v3/openapi.json
@@ -4009,7 +4009,7 @@ clients:
     source: https://api.apis.guru/v2/specs/namsor.com/2.0.24/openapi.json
   - name: nasa-gov-apod
     source: https://api.apis.guru/v2/specs/nasa.gov/apod/1.0.0/openapi.json
-  - name: nasa-gov-asteroids neows
+  - name: nasa-gov-asteroids-neows
     source: https://api.apis.guru/v2/specs/nasa.gov/asteroids neows/3.4.0/openapi.json
   - name: nativeads-com
     source: https://api.apis.guru/v2/specs/nativeads.com/1.0.0/swagger.json
@@ -4905,7 +4905,7 @@ clients:
     source: https://api.apis.guru/v2/specs/vtex.local/Message-Center-API/1.0.0/openapi.json
   - name: vtex-local-orders-api
     source: https://api.apis.guru/v2/specs/vtex.local/Orders-API/1.0/openapi.json
-  - name: vtex-local-orders-api-(pii-version)
+  - name: vtex-local-orders-api-pii-version
     source: https://api.apis.guru/v2/specs/vtex.local/Orders-API-(PII-version)/1.0/openapi.json
   - name: vtex-local-payments-gateway-api
     source: https://api.apis.guru/v2/specs/vtex.local/Payments-Gateway-API/1.0/openapi.json
@@ -4921,7 +4921,7 @@ clients:
     source: https://api.apis.guru/v2/specs/vtex.local/Profile-System/1.0/openapi.json
   - name: vtex-local-promotions-
     source: https://api.apis.guru/v2/specs/vtex.local/Promotions-/1.0/openapi.json
-  - name: vtex-local-recurrence-(v1-
+  - name: vtex-local-recurrence-v1
     source: https://api.apis.guru/v2/specs/vtex.local/Recurrence-(v1-/1.0/openapi.json
   - name: vtex-local-reviews-and-ratings-api
     source: https://api.apis.guru/v2/specs/vtex.local/Reviews-and-Ratings-API/1.0/openapi.json
@@ -4931,9 +4931,9 @@ clients:
     source: https://api.apis.guru/v2/specs/vtex.local/Session-Manager-API/1.0/openapi.json
   - name: vtex-local-sku-bindings-api
     source: https://api.apis.guru/v2/specs/vtex.local/SKU-Bindings-API/1.0/openapi.json
-  - name: vtex-local-subscriptions-api-(v2)
+  - name: vtex-local-subscriptions-api-v2
     source: https://api.apis.guru/v2/specs/vtex.local/Subscriptions-API-(v2)/1.0/openapi.json
-  - name: vtex-local-subscriptions-api-(v3)
+  - name: vtex-local-subscriptions-api-v3
     source: https://api.apis.guru/v2/specs/vtex.local/Subscriptions-API-(v3)/1.0/openapi.json
   - name: vtex-local-vtex-do-api
     source: https://api.apis.guru/v2/specs/vtex.local/VTEX-Do-API/1.0/openapi.json

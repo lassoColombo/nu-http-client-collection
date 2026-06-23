@@ -110,7 +110,11 @@ def validate-unique-sources [clients: list] {
     }
 }
 
-# Names must be globally unique (flat layout: clients/<name>.nu).
+# Names must be globally unique (flat layout: clients/<name>.nu) AND must
+# avoid characters that prevent `use clients/<name>.nu` from parsing —
+# spaces, parens, brackets. Underscores and ampersands are tolerated for
+# backward compatibility with existing entries (they parse-load when the
+# path is quoted).
 def validate-unique-names [clients: list] {
     let dupes = (
         $clients
@@ -121,6 +125,11 @@ def validate-unique-names [clients: list] {
     if not ($dupes | is-empty) {
         let names = ($dupes | get name | str join ", ")
         error make { msg: $"client names must be unique — found duplicates: ($names)" }
+    }
+    let bad = ($clients | where ($it.name =~ '[ ()\[\]{}]'))
+    if not ($bad | is-empty) {
+        let names = ($bad | get name | str join ", ")
+        error make { msg: $"client names must not contain spaces, parens, or brackets — invalid: ($names)" }
     }
 }
 

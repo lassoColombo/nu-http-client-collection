@@ -10,18 +10,16 @@ Your collection of Nushell HTTP clients, automatically generated from API specif
 
 ---
 
-1. [nu-http-client-collection](#nu-http-client-collection)
-   1. [Purpose(s)](#purpose(s))
-         1. [A community registry](#a-community-registry)
-         2. [Your personal collection](#your-personal-collection)
-   2. [1 - Using a client from the registry](#1---using-a-client-from-the-registry)
-      1. [Manually trimming down a client](#manually-trimming-down-a-client)
-   3. [2 - Forking for your own collection](#2---forking-for-your-own-collection)
-      1. [Editing clients.yaml](#editing-clients.yaml)
-      2. [Regenerating the collection](#regenerating-the-collection)
-      3. [The bundled GitHub action](#the-bundled-github-action)
-   4. [Contributing](#contributing)
-
+- [Purpose(s)](#purpose(s))
+  - [A community registry](#a-community-registry)
+  - [Your personal collection](#your-personal-collection)
+- [1 - Using a client from the registry](#1---using-a-client-from-the-registry)
+  - [Manually trimming down a client](#manually-trimming-down-a-client)
+- [2 - Forking for your own collection](#2---forking-for-your-own-collection)
+  - [Editing clients.yaml](#editing-clients.yaml)
+  - [Regenerating the collection](#regenerating-the-collection)
+  - [The bundled GitHub action](#the-bundled-github-action)
+- [Contributing](#contributing)
 
 ---
 
