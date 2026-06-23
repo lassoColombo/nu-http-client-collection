@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -144,8 +154,8 @@ export def commands []: nothing -> table {
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 export def "v1beta1-documents-analyze-entities create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -167,7 +177,7 @@ export def "v1beta1-documents-analyze-entities create" [
   --encoding-type: string@encoding-type-completer # The encoding type used by the API to calculate offsets.
 ]: any -> record<entities: table<mentions: list, metadata: record, name: string, salience: float, type: string>, language: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/documents:analyzeEntities" $qp)
@@ -185,8 +195,8 @@ export def "v1beta1-documents-analyze-entities create" [
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 export def "v1beta1-documents-analyze-sentiment create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -208,7 +218,7 @@ export def "v1beta1-documents-analyze-sentiment create" [
   --encoding-type: string@encoding-type-completer # The encoding type used by the API to calculate sentence offsets for the sentence sentiment.
 ]: any -> record<documentSentiment: record<magnitude: float, polarity: float, score: float>, language: string, sentences: table<sentiment: record, text: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/documents:analyzeSentiment" $qp)
@@ -226,8 +236,8 @@ export def "v1beta1-documents-analyze-sentiment create" [
 # --document shape: {content?: string, gcsContentUri?: string, language?: string, type?: "TYPE_UNSPECIFIED"|"PLAIN_TEXT"|"HTML"}
 export def "v1beta1-documents-analyze-syntax create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -249,7 +259,7 @@ export def "v1beta1-documents-analyze-syntax create" [
   --encoding-type: string@encoding-type-completer # The encoding type used by the API to calculate offsets.
 ]: any -> record<language: string, sentences: table<sentiment: record, text: record>, tokens: table<dependencyEdge: record, lemma: string, partOfSpeech: record, text: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/documents:analyzeSyntax" $qp)
@@ -268,8 +278,8 @@ export def "v1beta1-documents-analyze-syntax create" [
 # --features shape: {extractDocumentSentiment?: bool, extractEntities?: bool, extractSyntax?: bool}
 export def "v1beta1-documents-annotate-text create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -292,7 +302,7 @@ export def "v1beta1-documents-annotate-text create" [
   --features: record # All available features for sentiment, syntax, and semantic analysis. Setting each one to true will enable that specific analysis for the input. — shape: {extractDocumentSentiment?: bool, extractEntities?: bool, extractSyntax?: bool}
 ]: any -> record<documentSentiment: record<magnitude: float, polarity: float, score: float>, entities: table<mentions: list, metadata: record, name: string, salience: float, type: string>, language: string, sentences: table<sentiment: record, text: record>, tokens: table<dependencyEdge: record, lemma: string, partOfSpeech: record, text: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_NATURAL_LANGUAGE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1beta1/documents:annotateText" $qp)

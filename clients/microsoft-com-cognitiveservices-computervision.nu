@@ -271,7 +271,7 @@ export def "generate-thumbnail generate" [
   --height: int # Height of the thumbnail, in pixels. It must be between 1 and 1024. Recommended minimum of 50. (format: int32)
   --smart-cropping: oneof<nothing, bool> # Boolean flag for enabling smart cropping. (default: false)
   url: string # Publicly reachable URL of an image.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

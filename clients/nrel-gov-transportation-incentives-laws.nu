@@ -162,7 +162,7 @@ export def "v1-output-format list-transportation-incentives-laws" [
   --law-type: string # Search by the law type. A single type, or a comma-separate list of multiple types, may be given. Values are as follows: 'STATEINC' for State Incentives, 'UPINC ' for Utility/Private Incentives, 'LAWREG' for Laws and Regulations, 'INC' for Incentives, 'PROG' for Programs, 'LUP' for Last Updated, 'OVIEW' for Overview, and 'HILITE' for Highlights.
   --keyword: string # Search laws by keyword in title or text.
   --local: oneof<nothing, bool> # Show only local examples of laws and incentives. (default: false)
-]: nothing -> any {
+]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: table<agency: string, amended_date: string, archived_date: string, categories: list, contacts: list, enacted_date: string, expired_date: string, id: int, is_recent: bool, plaintext: string, recent_update_or_new: string, references: list, repealed_date: string, seq_num: int, significant_update_date: string, state: string, text: string, title: string, topics: list, type: string, types: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
@@ -190,7 +190,7 @@ export def "category-list-output-format get-transportation-incentives-laws-categ
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API Key (default: DEMO_KEY)
   --type: string@type-completer # Search by the category type.
-]: nothing -> any {
+]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: table<category_type: string, code: string, help_text: string, sort_order: string, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
@@ -218,7 +218,7 @@ export def "pocs-output-format get-transportation-incentives-laws" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # API Key (default: DEMO_KEY)
   --jurisdiction: string # Return the points of contact for the given Jurisdiction. Jurisdiction must be given as a two character state code (eg, 'CO' for Colorado). A single jurisdiction, or a comma-separate list of multiple jurisdiction, may be given. Use the code 'US' for federal laws and the code 'DC' for Washington D.C.
-]: nothing -> any {
+]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: table<agency: string, email: string, fax: string, name: string, state: string, telephone: string, title: string, web_page: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($output_format | is-empty) { error make --unspanned { msg: "path parameter 'output_format' must be non-empty" } }
@@ -248,7 +248,7 @@ export def "api get-transportation-incentives-laws" [
   --api-key: string # API Key (default: DEMO_KEY)
   --poc: oneof<nothing, bool> # Include points of contacts in the return value. (default: false)
   --expired: oneof<nothing, bool> # The 'true' value returns a record no matter its status (current, expired, archived, or repealed). The default 'false' value returns only current laws and incentives. (default: false)
-]: nothing -> any {
+]: nothing -> record<inputs: any, metadata: record<count: int, version: string>, result: record<agency: string, amended_date: string, archived_date: string, categories: list<record>, contacts: list<record>, enacted_date: string, expired_date: string, id: int, is_recent: bool, plaintext: string, recent_update_or_new: string, references: list<record>, repealed_date: string, seq_num: int, significant_update_date: string, state: string, text: string, title: string, topics: list<record>, type: string, types: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

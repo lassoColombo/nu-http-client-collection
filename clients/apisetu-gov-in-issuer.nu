@@ -149,7 +149,7 @@ export def "your-pull-doc-request-api-path pull" [
   --content-type: string # application/xml
   --x-digilocker-hmac: string # This is used for authentication and to verify the integrity of the request. DigiLocker calculates the hash message authentication code (hmac) of the HTTP request body using SHA256 hashing algorithm and the API Key provided by the issuer as the hashing key. The API Key is specified by the issuer while configuring the Pull Doc API in DigiLocker Partner Portal. The resulting hmac is converted to Base64 format and sent in this parameter. It is strongly recommended that the issuer API calculates the hmac of the HTTP request body, convert it to Base64 and match it with this parameter to ensure authenticity of the request.
   --body: any
-]: any -> any {
+]: any -> record<DocDetails: record<DataContent: string, DocContent: string>, ResponseStatus: record<Status: string, ts: string, txn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -182,7 +182,7 @@ export def "your-pull-uri-request-api-path pull" [
   --content-type: string # application/xml
   --x-digilocker-hmac: string # This is used for authentication and to verify the integrity of the request. DigiLocker calculates the hash message authentication code (hmac) of the HTTP request body using SHA256 hashing algorithm and the API Key provided by the issuer as the hashing key. The API Key is specified by the issuer while configuring the Pull Doc API in DigiLocker Partner Portal. The resulting hmac is converted to Base64 format and sent in this parameter. It is strongly recommended that the issuer API calculates the hmac of the HTTP request body, convert it to Base64 and match it with this parameter to ensure authenticity of the request.
   --body: any
-]: any -> any {
+]: any -> record<DocDetails: record<DOB: string, DataContent: string, DigiLockerId: string, DocContent: string, DocType: string, FullName: string, UDF1: string, UDF2: string, UID: string, URI: string>, ResponseStatus: record<Status: string, ts: string, txn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

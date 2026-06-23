@@ -150,7 +150,7 @@ export def "v1-addresses delete-customer-address-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -177,7 +177,7 @@ export def "v1-amazon-billing-address get-payment-management-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   address_consent_token: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -207,7 +207,7 @@ export def "v1-amazon-shipping-address get-payment-management-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   address_consent_token: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -515,7 +515,7 @@ export def "v1-bulk-operation-status get-asynchronous-count-by-and" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_uuid | is-empty) { error make --unspanned { msg: "path parameter 'bulkUuid' must be non-empty" } }
@@ -569,7 +569,7 @@ export def "v1-bundle-products-options-add create-management-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   option: record # Interface OptionInterface — shape: {extension_attributes?: record, option_id?: int, position?: int, product_links?: list, required?: bool, sku?: string, title?: string, type?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -623,7 +623,7 @@ export def "v1-bundle-products-options update-management-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   option: record # Interface OptionInterface — shape: {extension_attributes?: record, option_id?: int, position?: int, product_links?: list, required?: bool, sku?: string, title?: string, type?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -683,7 +683,7 @@ export def "v1-bundle-products-links update-management-save-child" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   linked_product: record # Interface LinkInterface — shape: {can_change_quantity?: int, extension_attributes?: record, id?: string, is_default: bool, option_id?: int, position?: int, price: float, price_type: int, qty?: float, sku?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -716,7 +716,7 @@ export def "v1-bundle-products-links create-management-child-by" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   linked_product: record # Interface LinkInterface — shape: {can_change_quantity?: int, extension_attributes?: record, id?: string, is_default: bool, option_id?: int, position?: int, price: float, price_type: int, qty?: float, sku?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -773,7 +773,7 @@ export def "v1-bundle-products-options delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -830,7 +830,7 @@ export def "v1-bundle-products-options-children delete-link-management-child" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -857,7 +857,7 @@ export def "v1-carts create-quote-management-empty" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/")
@@ -883,7 +883,7 @@ export def "v1-carts-guest-carts-check-gift-card get-account-account-management"
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<float, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -912,7 +912,7 @@ export def "v1-carts-guest-carts-gift-cards create-account-account-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_card_account_data: record # Gift Card Account data — shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -942,7 +942,7 @@ export def "v1-carts-guest-carts-gift-cards delete-account-account-management-by
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -1016,7 +1016,7 @@ export def "v1-carts-mine create-quote-management-empty-for-customer" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/mine")
@@ -1069,7 +1069,7 @@ export def "v1-carts-mine-balance-apply create-customer-management-from-quote" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/mine/balance/apply")
@@ -1093,7 +1093,7 @@ export def "v1-carts-mine-balance-unapply create-customer-management-from-quote"
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/mine/balance/unapply")
@@ -1144,7 +1144,7 @@ export def "v1-carts-mine-billing-address assign-quote-management-create" [
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   --use-for-shipping: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,7 +1172,7 @@ export def "v1-carts-mine-check-gift-card get-account-account-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<float, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_code | is-empty) { error make --unspanned { msg: "path parameter 'giftCardCode' must be non-empty" } }
@@ -1259,7 +1259,7 @@ export def "v1-carts-mine-collection-point-search-request delete-temando-shippin
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/mine/collection-point/search-request")
@@ -1337,7 +1337,7 @@ export def "v1-carts-mine-collection-point-select create-temando-shipping-manage
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   entity_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1364,7 +1364,7 @@ export def "v1-carts-mine-coupons delete-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/mine/coupons")
@@ -1388,7 +1388,7 @@ export def "v1-carts-mine-coupons get-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/carts/mine/coupons")
@@ -1413,7 +1413,7 @@ export def "v1-carts-mine-coupons update-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($coupon_code | is-empty) { error make --unspanned { msg: "path parameter 'couponCode' must be non-empty" } }
@@ -1549,7 +1549,7 @@ export def "v1-carts-mine-gift-message create-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_message: record # Interface MessageInterface — shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1605,7 +1605,7 @@ export def "v1-carts-mine-gift-message create-item-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_message: record # Interface MessageInterface — shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1635,7 +1635,7 @@ export def "v1-carts-mine-gift-cards create-account-account-management-save-by-q
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_card_account_data: record # Gift Card Account data — shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1663,7 +1663,7 @@ export def "v1-carts-mine-gift-cards delete-account-account-management-by-quote"
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_code | is-empty) { error make --unspanned { msg: "path parameter 'giftCardCode' must be non-empty" } }
@@ -1742,7 +1742,7 @@ export def "v1-carts-mine-items delete-quote-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -1800,7 +1800,7 @@ export def "v1-carts-mine-order update-quote-management-place" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --payment-method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1855,7 +1855,7 @@ export def "v1-carts-mine-payment-information create-checkout-management-save-an
   --accept: string@accept-completer # Response content type
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1932,7 +1932,7 @@ export def "v1-carts-mine-selected-payment-method update-quote-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1963,7 +1963,7 @@ export def "v1-carts-mine-set-payment-information create-checkout-management-sav
   --accept: string@accept-completer # Response content type
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2157,7 +2157,7 @@ export def "v1-carts assign-quote-management-customer-update" [
   --accept: string@accept-completer # Response content type
   customer_id: int # The customer ID.
   store_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2213,7 +2213,7 @@ export def "v1-carts-billing-address create" [
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   --use-for-shipping: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2241,7 +2241,7 @@ export def "v1-carts-coupons delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -2266,7 +2266,7 @@ export def "v1-carts-coupons get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -2292,7 +2292,7 @@ export def "v1-carts-coupons update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -2404,7 +2404,7 @@ export def "v1-carts-gift-message create-by-cart-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_message: record # Interface MessageInterface — shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2462,7 +2462,7 @@ export def "v1-carts-gift-message create-by-cart-id-item-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_message: record # Interface MessageInterface — shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2494,7 +2494,7 @@ export def "v1-carts-gift-cards update-account-account-management-save-by-quote"
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_card_account_data: record # Gift Card Account data — shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2523,7 +2523,7 @@ export def "v1-carts-gift-cards delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -2575,7 +2575,7 @@ export def "v1-carts-items delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -2635,7 +2635,7 @@ export def "v1-carts-order update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --payment-method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2715,7 +2715,7 @@ export def "v1-carts-selected-payment-method update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3082,7 +3082,7 @@ export def "v1-categories delete-catalog-category-repository-by-identifier" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
@@ -3138,7 +3138,7 @@ export def "v1-categories-move update-catalog-category-management" [
   --accept: string@accept-completer # Response content type
   --after-id: int
   parent_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3195,7 +3195,7 @@ export def "v1-categories-products create-catalog-category-link-repository-save"
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   product_link: record # shape: {category_id: string, extension_attributes?: record, position?: int, sku?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3226,7 +3226,7 @@ export def "v1-categories-products update-catalog-category-link-repository-save"
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   product_link: record # shape: {category_id: string, extension_attributes?: record, position?: int, sku?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3256,7 +3256,7 @@ export def "v1-categories-products delete-catalog-category-link-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
@@ -3375,7 +3375,7 @@ export def "v1-cms-block delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($block_id | is-empty) { error make --unspanned { msg: "path parameter 'blockId' must be non-empty" } }
@@ -3550,7 +3550,7 @@ export def "v1-cms-page delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_id | is-empty) { error make --unspanned { msg: "path parameter 'pageId' must be non-empty" } }
@@ -3665,7 +3665,7 @@ export def "v1-company-assign-roles update-acl" [
   --accept: string@accept-completer # Response content type
   roles: list # item shape: {company_id?: int, extension_attributes?: record, id?: int, permissions: list, role_name?: string}
   user_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3785,7 +3785,7 @@ export def "v1-company-role delete-repository" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
@@ -3863,7 +3863,7 @@ export def "v1-company delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_id | is-empty) { error make --unspanned { msg: "path parameter 'companyId' must be non-empty" } }
@@ -4038,7 +4038,7 @@ export def "v1-company-credits-history update-management" [
   --accept: string@accept-completer # Response content type
   --comment: string # [optional]
   --purchase-order: string # [optional]
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4101,7 +4101,7 @@ export def "v1-company-credits-decrease-balance create-management" [
   operation_type: int
   --options: record # Credit balance data transfer object interface. — shape: {currency_base: string, currency_display: string, order_increment: string, purchase_order: string}
   value: float
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4136,7 +4136,7 @@ export def "v1-company-credits-increase-balance create-management" [
   operation_type: int
   --options: record # Credit balance data transfer object interface. — shape: {currency_base: string, currency_display: string, order_increment: string, purchase_order: string}
   value: float
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4228,7 +4228,7 @@ export def "v1-configurable-products-child create-link-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   child_sku: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4284,7 +4284,7 @@ export def "v1-configurable-products-children delete-link-management-child" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -4313,7 +4313,7 @@ export def "v1-configurable-products-options create-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   option: record # Interface OptionInterface — shape: {attribute_id?: string, extension_attributes?: record, id?: int, is_use_default?: bool, label?: string, position?: int, product_id?: int, values?: list}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4369,7 +4369,7 @@ export def "v1-configurable-products-options delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -4427,7 +4427,7 @@ export def "v1-configurable-products-options update-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   option: record # Interface OptionInterface — shape: {attribute_id?: string, extension_attributes?: record, id?: int, is_use_default?: bool, label?: string, position?: int, product_id?: int, values?: list}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4605,7 +4605,7 @@ export def "v1-coupons delete-sales-rule-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($coupon_id | is-empty) { error make --unspanned { msg: "path parameter 'couponId' must be non-empty" } }
@@ -4773,7 +4773,7 @@ export def "v1-creditmemo cancel-sales-management-update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4856,7 +4856,7 @@ export def "v1-creditmemo-emails notify-sales-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4969,7 +4969,7 @@ export def "v1-customer-groups-default update-config" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5052,7 +5052,7 @@ export def "v1-customer-groups delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5135,7 +5135,7 @@ export def "v1-customer-groups-permissions get-management-is-readonly" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5220,7 +5220,7 @@ export def "v1-customers-confirm resend-account-management-confirmation-create" 
   email: string
   --redirect-url: string
   website_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5249,7 +5249,7 @@ export def "v1-customers-is-email-available create-account-management" [
   --accept: string@accept-completer # Response content type
   customer_email: string
   --website-id: int # If not set, will use the current websiteId
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5384,7 +5384,7 @@ export def "v1-customers-me-password update-account-management-change-by" [
   --accept: string@accept-completer # Response content type
   current_password: string
   new_password: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5438,7 +5438,7 @@ export def "v1-customers-password reset-account-management-initiate-update" [
   email: string
   template: string
   --website-id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5468,7 +5468,7 @@ export def "v1-customers-reset-password create-account-management" [
   email: string # If empty value given then the customer will be matched by the RP token.
   new_password: string
   reset_token: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5557,7 +5557,7 @@ export def "v1-customers delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -5663,7 +5663,7 @@ export def "v1-customers-carts create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -5689,7 +5689,7 @@ export def "v1-customers-confirm get-account-management-confirmation-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -5716,7 +5716,7 @@ export def "v1-customers-password-reset-link-token validate-account-management-g
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -5743,7 +5743,7 @@ export def "v1-customers-permissions-readonly get-account-management-is" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($customer_id | is-empty) { error make --unspanned { msg: "path parameter 'customerId' must be non-empty" } }
@@ -5961,7 +5961,7 @@ export def "v1-eav-attribute-sets delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_set_id | is-empty) { error make --unspanned { msg: "path parameter 'attributeSetId' must be non-empty" } }
@@ -6106,7 +6106,7 @@ export def "v1-gift-wrappings delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6219,7 +6219,7 @@ export def "v1-guest-carts create-quote-management-empty" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/guest-carts")
@@ -6272,7 +6272,7 @@ export def "v1-guest-carts assign-quote-management-customer-update" [
   --accept: string@accept-completer # Response content type
   customer_id: int # The customer ID.
   store_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6330,7 +6330,7 @@ export def "v1-guest-carts-billing-address assign-quote-management-create" [
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   --use-for-shipping: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6425,7 +6425,7 @@ export def "v1-guest-carts-collection-point-search-request delete-temando-shippi
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -6509,7 +6509,7 @@ export def "v1-guest-carts-collection-point-select create-temando-shipping-manag
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   entity_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6538,7 +6538,7 @@ export def "v1-guest-carts-coupons delete-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -6564,7 +6564,7 @@ export def "v1-guest-carts-coupons get-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -6591,7 +6591,7 @@ export def "v1-guest-carts-coupons update-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -6707,7 +6707,7 @@ export def "v1-guest-carts-gift-message create-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_message: record # Interface MessageInterface — shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6767,7 +6767,7 @@ export def "v1-guest-carts-gift-message create-item-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_message: record # Interface MessageInterface — shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6855,7 +6855,7 @@ export def "v1-guest-carts-items delete-quote-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -6917,7 +6917,7 @@ export def "v1-guest-carts-order update-quote-management-place" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --payment-method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6977,7 +6977,7 @@ export def "v1-guest-carts-payment-information create-checkout-management-save-a
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   email: string
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7060,7 +7060,7 @@ export def "v1-guest-carts-selected-payment-method update-quote-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7094,7 +7094,7 @@ export def "v1-guest-carts-set-payment-information create-checkout-management-sa
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   email: string
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7324,7 +7324,7 @@ export def "v1-integration-admin-token create-service-access" [
   --accept: string@accept-completer # Response content type
   password: string
   username: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7353,7 +7353,7 @@ export def "v1-integration-customer-token create-service-access" [
   --accept: string@accept-completer # Response content type
   password: string
   username: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7390,7 +7390,7 @@ export def "v1-invoice-refund create-sales-execute" [
   --is-online: oneof<nothing, bool>
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
   --notify: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7535,7 +7535,7 @@ export def "v1-invoices-capture update-sales-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7587,7 +7587,7 @@ export def "v1-invoices-emails notify-sales-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7613,7 +7613,7 @@ export def "v1-invoices-void update-sales-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7692,7 +7692,7 @@ export def "v1-negotiable-carts-billing-address assign-quote-management-create" 
   --accept: string@accept-completer # Response content type
   address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   --use-for-shipping: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7721,7 +7721,7 @@ export def "v1-negotiable-carts-coupons delete-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -7748,7 +7748,7 @@ export def "v1-negotiable-carts-coupons update-quote-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -7838,7 +7838,7 @@ export def "v1-negotiable-carts-gift-cards create-quote-account-management-save-
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   gift_card_account_data: record # Gift Card Account data — shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7868,7 +7868,7 @@ export def "v1-negotiable-carts-gift-cards delete-quote-account-management-by-qu
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cart_id | is-empty) { error make --unspanned { msg: "path parameter 'cartId' must be non-empty" } }
@@ -7925,7 +7925,7 @@ export def "v1-negotiable-carts-payment-information create-quote-management-save
   --accept: string@accept-completer # Response content type
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7958,7 +7958,7 @@ export def "v1-negotiable-carts-set-payment-information create-quote-management-
   --accept: string@accept-completer # Response content type
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8071,7 +8071,7 @@ export def "v1-negotiable-quote-decline create-management" [
   --accept: string@accept-completer # Response content type
   quote_id: int
   reason: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8099,7 +8099,7 @@ export def "v1-negotiable-quote-prices-updated create-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   quote_ids: list<int>
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8131,7 +8131,7 @@ export def "v1-negotiable-quote-request create-management" [
   --files: list # item shape: {base64_encoded_data: string, extension_attributes?: record, name: string, type: string}
   quote_id: int
   quote_name: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8162,7 +8162,7 @@ export def "v1-negotiable-quote-submit-to-customer send-management-admin-create"
   --comment: string
   --files: list # item shape: {base64_encoded_data: string, extension_attributes?: record, name: string, type: string}
   quote_id: int
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8248,7 +8248,7 @@ export def "v1-negotiable-quote-shipping-method update-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   shipping_method: string # The shipping method code.
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8286,7 +8286,7 @@ export def "v1-order-invoice create-sales-execute" [
   --comment: record # Interface InvoiceCommentCreationInterface — shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
   --notify: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8323,7 +8323,7 @@ export def "v1-order-refund create-sales-execute" [
   --comment: record # Interface CreditmemoCommentCreationInterface — shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
   --items: list # item shape: {extension_attributes?: record, order_item_id: int, qty: float}
   --notify: oneof<nothing, bool>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8364,7 +8364,7 @@ export def "v1-order-ship create-sales-execute" [
   --notify: oneof<nothing, bool>
   --packages: list # item shape: {extension_attributes?: record}
   --tracks: list # item shape: {carrier_code: string, extension_attributes?: record, title: string, track_number: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8567,7 +8567,7 @@ export def "v1-orders-cancel create-sales-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8621,7 +8621,7 @@ export def "v1-orders-comments create-sales-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   status_history: record # Order status history interface. An order is a document that a web store issues to a customer. Magento generates a sales order that lists the product items, billing and shipping addresses, and shipping and payment methods. A corresponding external document, known as a purchase order, is emailed to the customer. — shape: {comment: string, created_at?: string, entity_id?: int, entity_name?: string, extension_attributes?: record, is_customer_notified: int, is_visible_on_front: int, parent_id: int, status?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8650,7 +8650,7 @@ export def "v1-orders-emails notify-sales-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8676,7 +8676,7 @@ export def "v1-orders-hold create-sales-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8702,7 +8702,7 @@ export def "v1-orders-statuses get-sales-management-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8728,7 +8728,7 @@ export def "v1-orders-unhold create-sales-management-un-hold" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8914,7 +8914,7 @@ export def "v1-products-attribute-sets-attributes assign-catalog-management-crea
   attribute_group_id: int
   attribute_set_id: int
   sort_order: int
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9003,7 +9003,7 @@ export def "v1-products-attribute-sets-groups delete-catalog-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -9061,7 +9061,7 @@ export def "v1-products-attribute-sets delete-catalog-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_set_id | is-empty) { error make --unspanned { msg: "path parameter 'attributeSetId' must be non-empty" } }
@@ -9171,7 +9171,7 @@ export def "v1-products-attribute-sets-attributes delete-catalog-management-unas
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_set_id | is-empty) { error make --unspanned { msg: "path parameter 'attributeSetId' must be non-empty" } }
@@ -9314,7 +9314,7 @@ export def "v1-products-attributes delete-catalog-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attributeCode' must be non-empty" } }
@@ -9425,7 +9425,7 @@ export def "v1-products-attributes-options create-catalog-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   option: record # Created from: — shape: {is_default?: bool, label: string, sort_order?: int, store_labels?: list, value: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9455,7 +9455,7 @@ export def "v1-products-attributes-options delete-catalog-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attribute_code | is-empty) { error make --unspanned { msg: "path parameter 'attributeCode' must be non-empty" } }
@@ -9568,7 +9568,7 @@ export def "v1-products-cost-delete create-catalog-storage" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   skus: list<string>
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9624,7 +9624,7 @@ export def "v1-products-downloadable-links-samples delete-repository" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9650,7 +9650,7 @@ export def "v1-products-downloadable-links delete-repository" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10064,7 +10064,7 @@ export def "v1-products-stock-items update-catalog-inventory-registry-by-sku" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   stock_item: record # Interface StockItem — shape: {backorders: int, enable_qty_increments: bool, extension_attributes?: record, is_decimal_divided: bool, is_in_stock: bool, is_qty_decimal: bool, item_id?: int, low_stock_date: string, manage_stock: bool, max_sale_qty: float, min_qty: float, min_sale_qty: float, notify_stock_qty: float, product_id?: int, qty: float, qty_increments: float, show_default_notification_message: bool, stock_id?: int, stock_status_changed_auto: int, use_config_backorders: bool, use_config_enable_qty_inc: bool, ... (6 more fields)}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10094,7 +10094,7 @@ export def "v1-products delete-catalog-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10211,7 +10211,7 @@ export def "v1-products-downloadable-links create-repository-save" [
   --accept: string@accept-completer # Response content type
   --is-global-scope-content: oneof<nothing, bool>
   link: record # shape: {extension_attributes?: record, id?: int, is_shareable: int, link_file?: string, link_file_content?: record, link_type: string, link_url?: string, number_of_downloads?: int, price: float, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10269,7 +10269,7 @@ export def "v1-products-downloadable-links-samples create-repository-save" [
   --accept: string@accept-completer # Response content type
   --is-global-scope-content: oneof<nothing, bool>
   sample: record # shape: {extension_attributes?: record, id?: int, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10302,7 +10302,7 @@ export def "v1-products-downloadable-links-samples update-repository-save" [
   --accept: string@accept-completer # Response content type
   --is-global-scope-content: oneof<nothing, bool>
   sample: record # shape: {extension_attributes?: record, id?: int, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10336,7 +10336,7 @@ export def "v1-products-downloadable-links update-repository-save" [
   --accept: string@accept-completer # Response content type
   --is-global-scope-content: oneof<nothing, bool>
   link: record # shape: {extension_attributes?: record, id?: int, is_shareable: int, link_file?: string, link_file_content?: record, link_type: string, link_url?: string, number_of_downloads?: int, price: float, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10396,7 +10396,7 @@ export def "v1-products-group-prices-tiers delete-catalog-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10427,7 +10427,7 @@ export def "v1-products-group-prices-tiers-price create-catalog-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10458,7 +10458,7 @@ export def "v1-products-links update-catalog-management-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   items: list # item shape: {extension_attributes?: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10489,7 +10489,7 @@ export def "v1-products-links update-catalog-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   entity: record # shape: {extension_attributes?: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10548,7 +10548,7 @@ export def "v1-products-links delete-catalog-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10604,7 +10604,7 @@ export def "v1-products-media create-catalog-attribute-gallery-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   entry: record # shape: {content?: record, disabled: bool, extension_attributes?: record, file?: string, id?: int, label: string, media_type: string, position: int, types: list<string>}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10634,7 +10634,7 @@ export def "v1-products-media delete-catalog-attribute-gallery-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10692,7 +10692,7 @@ export def "v1-products-media update-catalog-attribute-gallery-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   entry: record # shape: {content?: record, disabled: bool, extension_attributes?: record, file?: string, id?: int, label: string, media_type: string, position: int, types: list<string>}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10749,7 +10749,7 @@ export def "v1-products-options delete-catalog-custom-repository-by-identifier" 
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10806,7 +10806,7 @@ export def "v1-products-websites create-catalog-link-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   product_website_link: record # shape: {sku: string, website_id: int}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10837,7 +10837,7 @@ export def "v1-products-websites update-catalog-link-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   product_website_link: record # shape: {sku: string, website_id: int}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10867,7 +10867,7 @@ export def "v1-products-websites delete-catalog-link-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -10986,7 +10986,7 @@ export def "v1-returns delete-rma-rma-repository" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   rma_data_object: record # Interface RmaInterface — shape: {comments: list, custom_attributes?: list, customer_custom_email: string, customer_id: int, date_requested: string, entity_id: int, extension_attributes?: record, increment_id: string, items: list, order_id: int, order_increment_id: string, status: string, store_id: int, tracks: list}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11100,7 +11100,7 @@ export def "v1-returns-comments create-rma-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   data: record # Interface CommentInterface — shape: {admin: bool, comment: string, created_at: string, custom_attributes?: list, customer_notified: bool, entity_id: int, extension_attributes?: record, rma_entity_id: int, status: string, visible_on_front: bool}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11129,7 +11129,7 @@ export def "v1-returns-labels get-rma-track-management-shipping-pdf" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11183,7 +11183,7 @@ export def "v1-returns-tracking-numbers create-rma-track-management-track" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   track: record # Interface TrackInterface — shape: {carrier_code: string, carrier_title: string, entity_id: int, extension_attributes?: record, rma_entity_id: int, track_number: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11213,7 +11213,7 @@ export def "v1-returns-tracking-numbers delete-rma-track-management-track-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -11341,7 +11341,7 @@ export def "v1-reward-mine-use-reward update-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/V1/reward/mine/use-reward")
@@ -11427,7 +11427,7 @@ export def "v1-sales-rules delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -11544,7 +11544,7 @@ export def "v1-shared-catalog create-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   shared_catalog: record # SharedCatalogInterface interface. — shape: {created_at: string, created_by: int, customer_group_id: int, description: string, id?: int, name: string, store_id: int, tax_class_id: int, type: int}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11606,7 +11606,7 @@ export def "v1-shared-catalog update-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   shared_catalog: record # SharedCatalogInterface interface. — shape: {created_at: string, created_by: int, customer_group_id: int, description: string, id?: int, name: string, store_id: int, tax_class_id: int, type: int}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11637,7 +11637,7 @@ export def "v1-shared-catalog-assign-categories create-category-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   categories: list # item shape: {available_sort_by?: list<string>, children?: string, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, include_in_menu?: bool, is_active?: bool, level?: int, name?: string, parent_id?: int, path?: string, position?: int, updated_at?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11668,7 +11668,7 @@ export def "v1-shared-catalog-assign-products create-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   products: list # item shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11751,7 +11751,7 @@ export def "v1-shared-catalog-unassign-categories create-category-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   categories: list # item shape: {available_sort_by?: list<string>, children?: string, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, include_in_menu?: bool, is_active?: bool, level?: int, name?: string, parent_id?: int, path?: string, position?: int, updated_at?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11782,7 +11782,7 @@ export def "v1-shared-catalog-unassign-products create-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   products: list # item shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11811,7 +11811,7 @@ export def "v1-shared-catalog delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'sharedCatalogId' must be non-empty" } }
@@ -11865,7 +11865,7 @@ export def "v1-shared-catalog-assign-companies create-company-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   companies: list # item shape: {city?: string, comment?: string, company_email?: string, company_name?: string, country_id?: string, customer_group_id: int, extension_attributes?: record, id?: int, legal_name?: string, postcode?: string, region?: string, region_id?: string, reject_reason: string, rejected_at: string, reseller_id?: string, sales_representative_id: int, status?: int, street: list<string>, super_user_id: int, telephone?: string, vat_tax_id?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11894,7 +11894,7 @@ export def "v1-shared-catalog-companies get-company-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($shared_catalog_id | is-empty) { error make --unspanned { msg: "path parameter 'sharedCatalogId' must be non-empty" } }
@@ -11922,7 +11922,7 @@ export def "v1-shared-catalog-unassign-companies create-company-management" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   companies: list # item shape: {city?: string, comment?: string, company_email?: string, company_name?: string, country_id?: string, customer_group_id: int, extension_attributes?: record, id?: int, legal_name?: string, postcode?: string, region?: string, region_id?: string, reject_reason: string, rejected_at: string, reseller_id?: string, sales_representative_id: int, status?: int, street: list<string>, super_user_id: int, telephone?: string, vat_tax_id?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12009,7 +12009,7 @@ export def "v1-shipment-track delete-sales-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12118,7 +12118,7 @@ export def "v1-shipment-emails notify-sales-management-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12144,7 +12144,7 @@ export def "v1-shipment-label get-sales-management" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -12386,7 +12386,7 @@ export def "v1-tax-classes create-class-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tax_class: record # Tax class interface. — shape: {class_id?: int, class_name: string, class_type: string, extension_attributes?: record}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12448,7 +12448,7 @@ export def "v1-tax-classes update-class-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   tax_class: record # Tax class interface. — shape: {class_id?: int, class_name: string, class_type: string, extension_attributes?: record}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12477,7 +12477,7 @@ export def "v1-tax-classes delete-class-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tax_class_id | is-empty) { error make --unspanned { msg: "path parameter 'taxClassId' must be non-empty" } }
@@ -12619,7 +12619,7 @@ export def "v1-tax-rates delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rate_id | is-empty) { error make --unspanned { msg: "path parameter 'rateId' must be non-empty" } }
@@ -12761,7 +12761,7 @@ export def "v1-tax-rules delete-repository-by" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rule_id | is-empty) { error make --unspanned { msg: "path parameter 'ruleId' must be non-empty" } }
@@ -12930,7 +12930,7 @@ export def "v1-team update-company-repository-save" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   team: record # Team interface — shape: {custom_attributes?: list, description?: string, extension_attributes?: record, id?: int, name?: string}
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12960,7 +12960,7 @@ export def "v1-temando-rma-shipments assign-shipping-management-update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   return_shipment_ids: list<string>
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13052,7 +13052,7 @@ export def "v1-worldpay-guest-carts-payment-information create-management-proxy-
   --billing-address: record # Interface AddressInterface — shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
   email: string
   payment_method: record # Interface PaymentInterface — shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

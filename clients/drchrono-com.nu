@@ -5882,7 +5882,7 @@ export def "patients-ccda get" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6030,7 +6030,7 @@ export def "patients-qrda1 get" [
   --chart-id: string
   --email: string
   --ethnicity: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

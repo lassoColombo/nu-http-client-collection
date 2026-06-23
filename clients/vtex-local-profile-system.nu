@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -140,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: CreateClientProfile
 export def "storage-profile-system-profiles create-client" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -159,7 +169,7 @@ export def "storage-profile-system-profiles create-client" [
   last_name: string # Client's last name. (e.g. Doe)
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/storage/profile-system/profiles" $qp)
@@ -181,8 +191,8 @@ export def "storage-profile-system-profiles create-client" [
 # --properties shape: {{fieldName}?: record}
 export def "storage-profile-system-profiles-schema create-or-update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -202,7 +212,7 @@ export def "storage-profile-system-profiles-schema create-or-update" [
   --version: int # Schema version. (e.g. 1)
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/storage/profile-system/profiles/schema")
   let req_body = {"description": $description, "documentTTL": $document_ttl, "properties": $properties, "required": $required, "title": $title, "type": $type, "v-indexed": $v_indexed, "v-unique": $v_unique, "version": $version} | compact
@@ -223,8 +233,8 @@ export def "storage-profile-system-profiles-schema create-or-update" [
 export def "storage-profile-system-profiles delete-client" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -234,7 +244,7 @@ export def "storage-profile-system-profiles delete-client" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}"))
@@ -252,8 +262,8 @@ export def "storage-profile-system-profiles delete-client" [
 export def "storage-profile-system-profiles get" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -264,7 +274,7 @@ export def "storage-profile-system-profiles get" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -283,8 +293,8 @@ export def "storage-profile-system-profiles get" [
 export def "storage-profile-system-profiles update-client" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -303,7 +313,7 @@ export def "storage-profile-system-profiles update-client" [
   --last-name: string # Client's last name. (e.g. Doe)
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar") (serialize-qp "ttl" $ttl "scalar")] | flatten | str join "&"
@@ -326,8 +336,8 @@ export def "storage-profile-system-profiles update-client" [
 export def "storage-profile-system-profiles-addresses get-client" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -338,7 +348,7 @@ export def "storage-profile-system-profiles-addresses get-client" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -357,8 +367,8 @@ export def "storage-profile-system-profiles-addresses get-client" [
 export def "storage-profile-system-profiles-addresses create-client-address" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -378,7 +388,7 @@ export def "storage-profile-system-profiles-addresses create-client-address" [
   street_number: string # Address street number. (e.g. 999)
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -401,8 +411,8 @@ export def "storage-profile-system-profiles-addresses create-client-address" [
 export def "storage-profile-system-profiles-addresses-unmask get-unmasked-client" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -413,7 +423,7 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-client
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -433,8 +443,8 @@ export def "storage-profile-system-profiles-addresses delete-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -445,7 +455,7 @@ export def "storage-profile-system-profiles-addresses delete-address" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -466,8 +476,8 @@ export def "storage-profile-system-profiles-addresses get-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -478,7 +488,7 @@ export def "storage-profile-system-profiles-addresses get-address" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -499,8 +509,8 @@ export def "storage-profile-system-profiles-addresses update-client-address" [
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -520,7 +530,7 @@ export def "storage-profile-system-profiles-addresses update-client-address" [
   --street-number: string # Name of the address country. (e.g. Brasil)
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -545,8 +555,8 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-addres
   profile_id: string
   address_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -558,7 +568,7 @@ export def "storage-profile-system-profiles-addresses-unmask get-unmasked-addres
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -580,8 +590,8 @@ export def "storage-profile-system-profiles-addresses-versions get-address" [
   address_id: string
   address_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -593,7 +603,7 @@ export def "storage-profile-system-profiles-addresses-versions get-address" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -616,8 +626,8 @@ export def "storage-profile-system-profiles-addresses-versions-unmask get-unmask
   address_id: string
   address_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -629,7 +639,7 @@ export def "storage-profile-system-profiles-addresses-versions-unmask get-unmask
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($address_id | is-empty) { error make --unspanned { msg: "path parameter 'addressId' must be non-empty" } }
@@ -650,8 +660,8 @@ export def "storage-profile-system-profiles-addresses-versions-unmask get-unmask
 export def "storage-profile-system-profiles-purchase-info delete-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -662,7 +672,7 @@ export def "storage-profile-system-profiles-purchase-info delete-information" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -681,8 +691,8 @@ export def "storage-profile-system-profiles-purchase-info delete-information" [
 export def "storage-profile-system-profiles-purchase-info get-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -693,7 +703,7 @@ export def "storage-profile-system-profiles-purchase-info get-information" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -712,8 +722,8 @@ export def "storage-profile-system-profiles-purchase-info get-information" [
 export def "storage-profile-system-profiles-purchase-info update-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -726,7 +736,7 @@ export def "storage-profile-system-profiles-purchase-info update-information" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -749,8 +759,8 @@ export def "storage-profile-system-profiles-purchase-info update-information" [
 export def "storage-profile-system-profiles-purchase-info create-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -763,7 +773,7 @@ export def "storage-profile-system-profiles-purchase-info create-information" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -786,8 +796,8 @@ export def "storage-profile-system-profiles-purchase-info create-information" [
 export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-information" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -797,7 +807,7 @@ export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-in
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let full_url = (build-url $base ({profile_id: (encode-path-segment $profile_id)} | format pattern "/api/storage/profile-system/profiles/{profile_id}/purchase-info/unmask"))
@@ -815,8 +825,8 @@ export def "storage-profile-system-profiles-purchase-info-unmask get-unmasked-in
 export def "storage-profile-system-profiles-unmask get-unmasked" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -828,7 +838,7 @@ export def "storage-profile-system-profiles-unmask get-unmasked" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "reason" $reason "scalar") (serialize-qp "alternativeKey" $alternative_key "scalar")] | flatten | str join "&"
@@ -848,8 +858,8 @@ export def "storage-profile-system-profiles-versions get" [
   profile_id: string
   profile_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -859,7 +869,7 @@ export def "storage-profile-system-profiles-versions get" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($profile_version_id | is-empty) { error make --unspanned { msg: "path parameter 'profileVersionId' must be non-empty" } }
@@ -879,8 +889,8 @@ export def "storage-profile-system-profiles-versions-unmask get-unmasked" [
   profile_id: string
   profile_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -891,7 +901,7 @@ export def "storage-profile-system-profiles-versions-unmask get-unmasked" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($profile_version_id | is-empty) { error make --unspanned { msg: "path parameter 'profileVersionId' must be non-empty" } }
@@ -910,8 +920,8 @@ export def "storage-profile-system-profiles-versions-unmask get-unmasked" [
 # operationId: CreateProspect
 export def "storage-profile-system-prospects create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -923,7 +933,7 @@ export def "storage-profile-system-prospects create" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/storage/profile-system/prospects")
   let req_body = $body
@@ -944,8 +954,8 @@ export def "storage-profile-system-prospects create" [
 export def "storage-profile-system-prospects delete" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -955,7 +965,7 @@ export def "storage-profile-system-prospects delete" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
   let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
@@ -973,8 +983,8 @@ export def "storage-profile-system-prospects delete" [
 export def "storage-profile-system-prospects get" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -984,7 +994,7 @@ export def "storage-profile-system-prospects get" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
   let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
@@ -1002,8 +1012,8 @@ export def "storage-profile-system-prospects get" [
 export def "storage-profile-system-prospects update" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1015,7 +1025,7 @@ export def "storage-profile-system-prospects update" [
   --body: record
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
   let full_url = (build-url $base ({prospect_id: (encode-path-segment $prospect_id)} | format pattern "/api/storage/profile-system/prospects/{prospect_id}"))
@@ -1037,8 +1047,8 @@ export def "storage-profile-system-prospects update" [
 export def "storage-profile-system-prospects-unmask get-unmasked" [
   prospect_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1049,7 +1059,7 @@ export def "storage-profile-system-prospects-unmask get-unmasked" [
   --content-type: string # Type of the content being sent. (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<any> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PROFILE_SYSTEM_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PROFILE_SYSTEM_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($prospect_id | is-empty) { error make --unspanned { msg: "path parameter 'prospectId' must be non-empty" } }
   let qp = [(serialize-qp "reason" $reason "scalar")] | flatten | str join "&"

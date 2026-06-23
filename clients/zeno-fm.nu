@@ -175,7 +175,7 @@ export def "podcasts-categories get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<id: string, parent: string, text: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/podcasts/categories")
@@ -198,7 +198,7 @@ export def "podcasts-countries get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<iso: string, iso3: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/podcasts/countries")
@@ -224,7 +224,7 @@ export def "podcasts-create create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file_logo: string # format: binary
   podcast: record # Podcast model — shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
-]: any -> any {
+]: any -> record<author: string, block: bool, categories: list<string>, copyright: string, country: string, description: string, explicit: bool, image: string, key: string, keywords: list<string>, language: string, link: string, ownerEmail: string, ownerName: string, showType: string, subtitle: string, summary: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +252,7 @@ export def "podcasts-languages get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/podcasts/languages")
@@ -280,7 +280,7 @@ export def "podcasts-search list" [
   --hits-per-page: int # format: int32, default: 10
   --page: int # format: int32, default: 1
   --query: string
-]: any -> any {
+]: any -> record<hits: table<author: string, block: bool, categories: list, copyright: string, country: string, description: string, explicit: bool, image: string, key: string, keywords: list, language: string, link: string, ownerEmail: string, ownerName: string, showType: string, subtitle: string, summary: string, title: string>, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -332,7 +332,7 @@ export def "podcasts get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<author: string, block: bool, categories: list<string>, copyright: string, country: string, description: string, explicit: bool, image: string, key: string, keywords: list<string>, language: string, link: string, ownerEmail: string, ownerName: string, showType: string, subtitle: string, summary: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($podcast_key | is-empty) { error make --unspanned { msg: "path parameter 'podcastKey' must be non-empty" } }
@@ -360,7 +360,7 @@ export def "podcasts update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-logo: string # format: binary
   podcast: record # Podcast model — shape: {author?: string, block?: bool, categories: list<string>, copyright?: string, country?: string, description: string, explicit?: bool, image?: string, key?: string, keywords?: list<string>, language: string, link?: string, ownerEmail?: string, ownerName?: string, showType?: string, subtitle?: string, summary: string, title: string}
-]: any -> any {
+]: any -> record<author: string, block: bool, categories: list<string>, copyright: string, country: string, description: string, explicit: bool, image: string, key: string, keywords: list<string>, language: string, link: string, ownerEmail: string, ownerName: string, showType: string, subtitle: string, summary: string, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -392,7 +392,7 @@ export def "podcasts-episodes list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: string # default: 10
   --offset: string # default: 0
-]: nothing -> any {
+]: nothing -> record<items: table<author: string, block: bool, description: string, duration: int, episode: int, episodeType: string, explicit: bool, fileUrl: string, image: string, key: string, link: string, publishDate: string, season: int, size: int, subtitle: string, summary: string, tags: list, title: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($podcast_key | is-empty) { error make --unspanned { msg: "path parameter 'podcastKey' must be non-empty" } }
@@ -422,7 +422,7 @@ export def "podcasts-episodes-create create" [
   episode: record # PodcastEpisode model — shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
   file_logo: string # format: binary
   file_media: string # format: binary
-]: any -> any {
+]: any -> record<author: string, block: bool, description: string, duration: int, episode: int, episodeType: string, explicit: bool, fileUrl: string, image: string, key: string, link: string, publishDate: string, season: int, size: int, subtitle: string, summary: string, tags: list<string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -480,7 +480,7 @@ export def "podcasts-episodes get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<author: string, block: bool, description: string, duration: int, episode: int, episodeType: string, explicit: bool, fileUrl: string, image: string, key: string, link: string, publishDate: string, season: int, size: int, subtitle: string, summary: string, tags: list<string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($podcast_key | is-empty) { error make --unspanned { msg: "path parameter 'podcastKey' must be non-empty" } }
@@ -510,7 +510,7 @@ export def "podcasts-episodes update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   episode: record # PodcastEpisode model — shape: {author?: string, block?: bool, description: string, duration?: int, episode?: int, episodeType?: string, explicit?: bool, fileUrl?: string, image?: string, key?: string, link?: string, publishDate: string, season?: int, size?: int, subtitle?: string, summary: string, tags?: list<string>, title: string}
   --file-logo: string # format: binary
-]: any -> any {
+]: any -> record<author: string, block: bool, description: string, duration: int, episode: int, episodeType: string, explicit: bool, fileUrl: string, image: string, key: string, link: string, publishDate: string, season: int, size: int, subtitle: string, summary: string, tags: list<string>, title: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -540,7 +540,7 @@ export def "stations-countries get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<iso: string, iso3: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/stations/countries")
@@ -563,7 +563,7 @@ export def "stations-genres get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/stations/genres")
@@ -586,7 +586,7 @@ export def "stations-languages get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/stations/languages")
@@ -611,7 +611,7 @@ export def "stations-list get-partner-aggregator" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: string # default: 1
   --hits-per-page: string # default: 10
-]: nothing -> any {
+]: nothing -> record<items: table<city: string, country: string, description: string, genre: string, key: string, language: string, logo: string, name: string, stream: string, website: string>, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "hitsPerPage" $hits_per_page "scalar")] | flatten | str join "&"
@@ -640,7 +640,7 @@ export def "stations-search list" [
   --hits-per-page: int # format: int32, default: 10
   --page: int # format: int32, default: 1
   --query: string
-]: any -> any {
+]: any -> record<hits: table<city: string, country: string, description: string, genre: string, key: string, language: string, logo: string, name: string, stream: string, website: string>, total: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-zeno-api-key"))
   let base = ($base_url | default $BASE_URL)

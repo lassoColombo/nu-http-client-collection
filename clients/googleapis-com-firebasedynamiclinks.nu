@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -145,8 +155,8 @@ export def commands []: nothing -> table {
 # --device shape: {deviceModelName?: string, languageCode?: string, languageCodeFromWebview?: string, languageCodeRaw?: string, screenResolutionHeight?: string, screenResolutionWidth?: string, timezone?: string}
 export def "install-attribution create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -174,7 +184,7 @@ export def "install-attribution create" [
   --visual-style: string@visual-style-completer # Strong match page information. Disambiguates between default UI and custom page to present when strong match succeeds/fails to find cookie.
 ]: any -> record<appMinimumVersion: string, attributionConfidence: string, deepLink: string, externalBrowserDestinationLink: string, fallbackLink: string, invitationId: string, isStrongMatchExecutable: bool, matchMessage: string, requestIpVersion: string, requestedLink: string, resolvedLink: string, utmCampaign: string, utmContent: string, utmMedium: string, utmSource: string, utmTerm: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/installAttribution" $qp)
@@ -193,8 +203,8 @@ export def "install-attribution create" [
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 export def "managed-short-links-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -219,7 +229,7 @@ export def "managed-short-links-create create" [
   --suffix: record # Short Dynamic Link suffix. — shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 ]: any -> record<managedShortLink: record<creationTime: string, flaggedAttribute: list<string>, info: record<analyticsInfo: record, androidInfo: record, desktopInfo: record, domainUriPrefix: string, dynamicLinkDomain: string, iosInfo: record, link: string, navigationInfo: record, socialMetaTagInfo: record>, link: string, linkName: string, visibility: string>, previewLink: string, warning: table<warningCode: string, warningDocumentLink: string, warningMessage: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/managedShortLinks:create" $qp)
@@ -236,8 +246,8 @@ export def "managed-short-links-create create" [
 # operationId: firebasedynamiclinks.reopenAttribution
 export def "reopen-attribution create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -260,7 +270,7 @@ export def "reopen-attribution create" [
   --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
 ]: any -> record<deepLink: string, invitationId: string, iosMinAppVersion: string, resolvedLink: string, utmCampaign: string, utmContent: string, utmMedium: string, utmSource: string, utmTerm: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/reopenAttribution" $qp)
@@ -279,8 +289,8 @@ export def "reopen-attribution create" [
 # --suffix shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 export def "short-links create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -304,7 +314,7 @@ export def "short-links create" [
   --suffix: record # Short Dynamic Link suffix. — shape: {customSuffix?: string, option?: "OPTION_UNSPECIFIED"|"UNGUESSABLE"|"SHORT"|"CUSTOM"}
 ]: any -> record<previewLink: string, shortLink: string, warning: table<warningCode: string, warningDocumentLink: string, warningMessage: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/shortLinks" $qp)
@@ -322,8 +332,8 @@ export def "short-links create" [
 export def "link-stats get" [
   dynamic_link: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -344,7 +354,7 @@ export def "link-stats get" [
   --duration-days: string # The span of time requested in days.
   --sdk-version: string # Google SDK version. Version takes the form "$major.$minor.$patch"
 ]: nothing -> record<linkEventStats: table<count: string, event: string, platform: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o FIREBASE_DYNAMIC_LINKS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($dynamic_link | is-empty) { error make --unspanned { msg: "path parameter 'dynamicLink' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "durationDays" $duration_days "scalar") (serialize-qp "sdkVersion" $sdk_version "scalar")] | flatten | str join "&"

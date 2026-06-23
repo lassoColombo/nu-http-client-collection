@@ -224,7 +224,7 @@ export def "reisezentren get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<address: string, city: string, id: int, lat: float, lon: float, name: string, openingTimes: record<fri: list<string>, mon: list<string>, sat: list<string>, sun: list<string>, thu: list<string>, tue: list<string>, wed: list<string>>, postCode: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

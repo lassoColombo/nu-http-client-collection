@@ -3228,7 +3228,7 @@ export def "markdown create-render" [
   --context: string # The repository context to use when creating references in `gfm` mode. For example, setting `context` to `octo-org/octo-repo` will change the text `#42` into an HTML link to issue 42 in the `octo-org/octo-repo` repository.
   --mode: string@mode-completer # The rendering mode. (default: markdown, e.g. markdown)
   text: string # The Markdown text to render in HTML.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3256,7 +3256,7 @@ export def "markdown-raw create-render" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3701,7 +3701,7 @@ export def "octocat get-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --s: string # The words to show in Octocat's speech bubble
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "s" $s "scalar")] | flatten | str join "&"
@@ -24093,7 +24093,7 @@ export def "scim-organizations-users list-provisioned-identities" [
   --start-index: int # Used for pagination: the index of the first result to return.
   --count: int # Used for pagination: the number of results to return.
   --filter: string # Filters results using the equals query parameter operator (`eq`). You can filter results that are equal to `id`, `userName`, `emails`, and `external_id`. For example, to search for an identity with the `userName` Octocat, you would use this query: `?filter=userName%20eq%20\"Octocat\"`. To filter results for the identity with the email `octocat@github.com`, you would use this query: `?filter=emails%20eq%20\"octocat@github.com\"`.
-]: nothing -> any {
+]: nothing -> record<Resources: table<active: bool, displayName: string, emails: list, externalId: string, groups: list, id: string, meta: record, name: record, operations: list, organization_id: int, roles: list, schemas: list, userName: string>, itemsPerPage: int, schemas: list<string>, startIndex: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
@@ -24130,7 +24130,7 @@ export def "scim-organizations-users create-provision-and-invite" [
   name: record # e.g. {familyName: User, givenName: Jane} — shape: {familyName: string, formatted?: string, givenName: string}
   --schemas: list<string>
   user_name: string # Configured by the admin. Could be an email, login, or username (e.g. someone@example.com)
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, formatted: string, givenName: string>, operations: table<op: string, path: string, value: any>, organization_id: int, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -24188,7 +24188,7 @@ export def "scim-organizations-users get-provisioning-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, formatted: string, givenName: string>, operations: table<op: string, path: string, value: any>, organization_id: int, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org | is-empty) { error make --unspanned { msg: "path parameter 'org' must be non-empty" } }
@@ -24219,7 +24219,7 @@ export def "scim-organizations-users update-attribute" [
   --dry-run(-n) # Return the request that would be sent without executing it
   operations: list # Set of operations to be performed (e.g. [{op: replace, value: {active: false}}]) — item shape: {op: "add"|"remove"|"replace", path?: string, value?: any}
   --schemas: list<string>
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, formatted: string, givenName: string>, operations: table<op: string, path: string, value: any>, organization_id: int, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -24260,7 +24260,7 @@ export def "scim-organizations-users update-information-for-provisioned" [
   name: record # e.g. {familyName: User, givenName: Jane} — shape: {familyName: string, formatted?: string, givenName: string}
   --schemas: list<string>
   user_name: string # Configured by the admin. Could be an email, login, or username (e.g. someone@example.com)
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, groups: table<display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>, name: record<familyName: string, formatted: string, givenName: string>, operations: table<op: string, path: string, value: any>, organization_id: int, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -29115,7 +29115,7 @@ export def "zen get-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/zen")

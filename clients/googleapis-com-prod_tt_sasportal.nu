@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -143,8 +153,8 @@ export def commands []: nothing -> table {
 # operationId: prod_tt_sasportal.customers.list
 export def "v1alpha1-customers list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -165,7 +175,7 @@ export def "v1alpha1-customers list" [
   --page-size: int # The maximum number of customers to return in the response.
   --page-token: string # A pagination token returned from a previous call to ListCustomers that indicates where this listing should continue from.
 ]: nothing -> record<customers: table<displayName: string, name: string, sasUserIds: list>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/customers" $qp)
@@ -180,8 +190,8 @@ export def "v1alpha1-customers list" [
 # operationId: prod_tt_sasportal.customers.provisionDeployment
 export def "v1alpha1-customers-provision-deployment create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -203,7 +213,7 @@ export def "v1alpha1-customers-provision-deployment create" [
   --new-organization-display-name: string # Optional. If this field is set, and a new SAS Portal Organization needs to be created, its display name will be set to the value of this field.
 ]: any -> record<errorMessage: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/customers:provisionDeployment" $qp)
@@ -220,8 +230,8 @@ export def "v1alpha1-customers-provision-deployment create" [
 # operationId: prod_tt_sasportal.installer.generateSecret
 export def "v1alpha1-installer-generate-secret generate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -242,7 +252,7 @@ export def "v1alpha1-installer-generate-secret generate" [
   --body: record
 ]: any -> record<secret: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/installer:generateSecret" $qp)
@@ -259,8 +269,8 @@ export def "v1alpha1-installer-generate-secret generate" [
 # operationId: prod_tt_sasportal.installer.validate
 export def "v1alpha1-installer-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -283,7 +293,7 @@ export def "v1alpha1-installer-validate validate" [
   --secret: string # Required. Secret returned by the GenerateSecret.
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/installer:validate" $qp)
@@ -300,8 +310,8 @@ export def "v1alpha1-installer-validate validate" [
 # operationId: prod_tt_sasportal.policies.get
 export def "v1alpha1-policies-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -322,7 +332,7 @@ export def "v1alpha1-policies-get get" [
   --resource: string # Required. The resource for which the policy is being requested.
 ]: any -> record<assignments: table<members: list, role: string>, etag: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/policies:get" $qp)
@@ -340,8 +350,8 @@ export def "v1alpha1-policies-get get" [
 # --policy shape: {assignments?: list, etag?: string}
 export def "v1alpha1-policies-set update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -364,7 +374,7 @@ export def "v1alpha1-policies-set update" [
   --resource: string # Required. The resource for which the policy is being specified. This policy replaces any existing policy.
 ]: any -> record<assignments: table<members: list, role: string>, etag: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/policies:set" $qp)
@@ -381,8 +391,8 @@ export def "v1alpha1-policies-set update" [
 # operationId: prod_tt_sasportal.policies.test
 export def "v1alpha1-policies-test test" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -404,7 +414,7 @@ export def "v1alpha1-policies-test test" [
   --resource: string # Required. The resource for which the permissions are being requested.
 ]: any -> record<permissions: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1alpha1/policies:test" $qp)
@@ -422,8 +432,8 @@ export def "v1alpha1-policies-test test" [
 export def "v1alpha1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -442,7 +452,7 @@ export def "v1alpha1 delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -459,8 +469,8 @@ export def "v1alpha1 delete" [
 export def "v1alpha1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -479,7 +489,7 @@ export def "v1alpha1 get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<displayName: string, name: string, sasUserIds: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -496,8 +506,8 @@ export def "v1alpha1 get" [
 export def "v1alpha1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -521,7 +531,7 @@ export def "v1alpha1 update" [
   --sas-user-ids: list<string> # User ids used by the devices belonging to this node.
 ]: any -> record<displayName: string, name: string, sasUserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -540,8 +550,8 @@ export def "v1alpha1 update" [
 export def "v1alpha1 move" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -562,7 +572,7 @@ export def "v1alpha1 move" [
   --destination: string # Required. The name of the new parent resource node or customer to reparent the node under.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -582,8 +592,8 @@ export def "v1alpha1 move" [
 export def "v1alpha1 create-sign-device" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -604,7 +614,7 @@ export def "v1alpha1 create-sign-device" [
   --device: record # shape: {activeConfig?: record, deviceMetadata?: record, displayName?: string, fccId?: string, grantRangeAllowlists?: list, grants?: list, name?: string, preloadedConfig?: record, serialNumber?: string, state?: "DEVICE_STATE_UNSPECIFIED"|"RESERVED"|"REGISTERED"|"DEREGISTERED"}
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -623,8 +633,8 @@ export def "v1alpha1 create-sign-device" [
 export def "v1alpha1 update-signed" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -646,7 +656,7 @@ export def "v1alpha1 update-signed" [
   --installer-id: string # Required. Unique installer ID (CPI ID) from the Certified Professional Installers database.
 ]: any -> record<activeConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, currentChannels: table<frequencyRange: record, score: float>, deviceMetadata: record<antennaModel: string, commonChannelGroup: string, interferenceCoordinationGroup: string, nrqzValidated: bool, nrqzValidation: record<caseId: string, cpiId: string, latitude: float, longitude: float, state: string>>, displayName: string, fccId: string, grantRangeAllowlists: table<highFrequencyMhz: float, lowFrequencyMhz: float>, grants: table<channelType: string, expireTime: string, frequencyRange: record, grantId: string, lastHeartbeatTransmitExpireTime: string, maxEirp: float, moveList: list, state: string, suspensionReason: list>, name: string, preloadedConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, serialNumber: string, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -665,8 +675,8 @@ export def "v1alpha1 update-signed" [
 export def "v1alpha1-deployments list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -688,7 +698,7 @@ export def "v1alpha1-deployments list" [
   --page-size: int # The maximum number of deployments to return in the response.
   --page-token: string # A pagination token returned from a previous call to ListDeployments that indicates where this listing should continue from.
 ]: nothing -> record<deployments: table<displayName: string, frns: list, name: string, sasUserIds: list>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -705,8 +715,8 @@ export def "v1alpha1-deployments list" [
 export def "v1alpha1-deployments create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -728,7 +738,7 @@ export def "v1alpha1-deployments create" [
   --sas-user-ids: list<string> # User ID used by the devices belonging to this deployment. Each deployment should be associated with one unique user ID.
 ]: any -> record<displayName: string, frns: list<string>, name: string, sasUserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -747,8 +757,8 @@ export def "v1alpha1-deployments create" [
 export def "v1alpha1-devices list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -770,7 +780,7 @@ export def "v1alpha1-devices list" [
   --page-size: int # The maximum number of devices to return in the response. If empty or zero, all devices will be listed. Must be in the range [0, 1000].
   --page-token: string # A pagination token returned from a previous call to ListDevices that indicates where this listing should continue from.
 ]: nothing -> record<devices: table<activeConfig: record, currentChannels: list, deviceMetadata: record, displayName: string, fccId: string, grantRangeAllowlists: list, grants: list, name: string, preloadedConfig: record, serialNumber: string, state: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -793,8 +803,8 @@ export def "v1alpha1-devices list" [
 export def "v1alpha1-devices create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -824,7 +834,7 @@ export def "v1alpha1-devices create" [
   --state: string@state-completer # Output only. Device state.
 ]: any -> record<activeConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, currentChannels: table<frequencyRange: record, score: float>, deviceMetadata: record<antennaModel: string, commonChannelGroup: string, interferenceCoordinationGroup: string, nrqzValidated: bool, nrqzValidation: record<caseId: string, cpiId: string, latitude: float, longitude: float, state: string>>, displayName: string, fccId: string, grantRangeAllowlists: table<highFrequencyMhz: float, lowFrequencyMhz: float>, grants: table<channelType: string, expireTime: string, frequencyRange: record, grantId: string, lastHeartbeatTransmitExpireTime: string, maxEirp: float, moveList: list, state: string, suspensionReason: list>, name: string, preloadedConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, serialNumber: string, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -843,8 +853,8 @@ export def "v1alpha1-devices create" [
 export def "v1alpha1-devices-create-signed create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -866,7 +876,7 @@ export def "v1alpha1-devices-create-signed create" [
   --installer-id: string # Required. Unique installer id (CPI ID) from the Certified Professional Installers database.
 ]: any -> record<activeConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, currentChannels: table<frequencyRange: record, score: float>, deviceMetadata: record<antennaModel: string, commonChannelGroup: string, interferenceCoordinationGroup: string, nrqzValidated: bool, nrqzValidation: record<caseId: string, cpiId: string, latitude: float, longitude: float, state: string>>, displayName: string, fccId: string, grantRangeAllowlists: table<highFrequencyMhz: float, lowFrequencyMhz: float>, grants: table<channelType: string, expireTime: string, frequencyRange: record, grantId: string, lastHeartbeatTransmitExpireTime: string, maxEirp: float, moveList: list, state: string, suspensionReason: list>, name: string, preloadedConfig: record<airInterface: record<radioTechnology: string, supportedSpec: string>, callSign: string, category: string, installationParams: record<antennaAzimuth: int, antennaBeamwidth: int, antennaDowntilt: int, antennaGain: int, antennaGainNewField: float, antennaModel: string, cpeCbsdIndication: bool, eirpCapability: int, eirpCapabilityNewField: float, height: float, heightType: string, horizontalAccuracy: float, indoorDeployment: bool, latitude: float, longitude: float, verticalAccuracy: float>, isSigned: bool, measurementCapabilities: list<string>, model: record<firmwareVersion: string, hardwareVersion: string, name: string, softwareVersion: string, vendor: string>, state: string, updateTime: string, userId: string>, serialNumber: string, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -885,8 +895,8 @@ export def "v1alpha1-devices-create-signed create" [
 export def "v1alpha1-nodes list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -908,7 +918,7 @@ export def "v1alpha1-nodes list" [
   --page-size: int # The maximum number of nodes to return in the response.
   --page-token: string # A pagination token returned from a previous call to ListNodes that indicates where this listing should continue from.
 ]: nothing -> record<nextPageToken: string, nodes: table<displayName: string, name: string, sasUserIds: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -925,8 +935,8 @@ export def "v1alpha1-nodes list" [
 export def "v1alpha1-nodes create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -949,7 +959,7 @@ export def "v1alpha1-nodes create" [
   --sas-user-ids: list<string> # User ids used by the devices belonging to this node.
 ]: any -> record<displayName: string, name: string, sasUserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o SAS_PORTAL_API_TESTING_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

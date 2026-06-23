@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -753,8 +763,8 @@ export def "checkout-pub-order-form-items-price update-change" [
   order_form_id: string
   item_index: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -766,7 +776,7 @@ export def "checkout-pub-order-form-items-price update-change" [
   price: int # The new price of the item. (format: int32)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }
   if ($item_index | is-empty) { error make --unspanned { msg: "path parameter 'itemIndex' must be non-empty" } }
@@ -944,8 +954,8 @@ export def "checkout-pub-order-forms-simulation create-cart" [
 # --shippingData shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
 export def "checkout-pub-orders update-place" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -964,7 +974,7 @@ export def "checkout-pub-orders update-place" [
   shipping_data: record # Shipping information. — shape: {address?: record, logisticsInfo?: list, updateStatus?: string}
 ]: any -> record<orderForm: string, orders: table<allowCancelation: bool, allowChangeSeller: bool, allowEdition: bool, checkedInPickupPointId: string, clientProfileData: record, creationDate: string, followUpEmail: string, hostName: string, isCheckedIn: bool, isCompleted: bool, isUserDataVisible: bool, itemMetadata: record, items: list, lastChange: string, merchantName: string, orderFormCreationDate: string, orderGroup: string, orderId: string, paymentData: record, ratesAndBenefitsData: record, roundingError: int, salesAssociateId: string, salesChannel: string, sellerOrderId: string, sellers: list, shippingData: record, state: string, storeId: string, timeZoneCreationDate: string, timeZoneLastChange: string, totals: list, userType: string, value: int>, transactionData: record<gatewayCallbackTemplatePath: string, merchantTransactions: list<record>, receiverUri: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sc" $sc "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/checkout/pub/orders" $qp)
@@ -1109,8 +1119,8 @@ export def "checkout-pub-regions get-sellers" [
 # operationId: GetorderFormconfiguration
 export def "checkout-pvt-configuration-order-form get-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1120,7 +1130,7 @@ export def "checkout-pvt-configuration-order-form get-formconfiguration" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm")
   let accept_val = "application/json"
@@ -1139,8 +1149,8 @@ export def "checkout-pvt-configuration-order-form get-formconfiguration" [
 # --taxConfiguration shape: {appId?: string, authorizationHeader?: string, url?: string}
 export def "checkout-pvt-configuration-order-form update-formconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1163,7 +1173,7 @@ export def "checkout-pvt-configuration-order-form update-formconfiguration" [
   --tax-configuration: record # External tax service configuration. (nullable) — shape: {appId?: string, authorizationHeader?: string, url?: string}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/orderForm")
   let req_body = {"allowManualPrice": $allow_manual_price, "allowMultipleDeliveries": $allow_multiple_deliveries, "apps": $apps, "decimalDigitsPrecision": $decimal_digits_precision, "maskFirstPurchaseData": $mask_first_purchase_data, "maxNumberOfWhiteLabelSellers": $max_number_of_white_label_sellers, "minimumQuantityAccumulatedForItems": $minimum_quantity_accumulated_for_items, "minimumValueAccumulated": $minimum_value_accumulated, "paymentConfiguration": $payment_configuration, "paymentSystemToCheckFirstInstallment": $payment_system_to_check_first_installment, "recaptchaValidation": $recaptcha_validation, "taxConfiguration": $tax_configuration} | compact
@@ -1183,8 +1193,8 @@ export def "checkout-pvt-configuration-order-form update-formconfiguration" [
 # operationId: GetWindowToChangeSeller
 export def "checkout-pvt-configuration-window-to-change-seller get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1194,7 +1204,7 @@ export def "checkout-pvt-configuration-window-to-change-seller get" [
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller")
   let accept_val = "text/plain"
@@ -1210,8 +1220,8 @@ export def "checkout-pvt-configuration-window-to-change-seller get" [
 # operationId: UpdateWindowToChangeSeller
 export def "checkout-pvt-configuration-window-to-change-seller update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1223,7 +1233,7 @@ export def "checkout-pvt-configuration-window-to-change-seller update" [
   waiting_time: int # Number of days after order cancelation by a seller, during which another seller may be assigned to fulfill the order.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CHECKOUT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CHECKOUT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/checkout/pvt/configuration/window-to-change-seller")
   let req_body = {"waitingTime": $waiting_time} | compact
@@ -1254,7 +1264,7 @@ export def "checkout-change-to-anonymous-user delete-allpersonaldata" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($order_form_id | is-empty) { error make --unspanned { msg: "path parameter 'orderFormId' must be non-empty" } }

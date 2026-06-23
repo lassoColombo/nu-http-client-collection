@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -309,8 +319,8 @@ export def "account-cart-list-json list" [
 # operationId: AccountConfigUpdate
 export def "account-config-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -408,7 +418,7 @@ export def "account-config-update-json update" [
   --zid-authorization: string # Zid Authorization
   --zid-refresh-token: string # Zid refresh token
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "new_store_key" $new_store_key "scalar") (serialize-qp "bridge_url" $bridge_url "scalar") (serialize-qp "store_root" $store_root "scalar") (serialize-qp "db_tables_prefix" $db_tables_prefix "scalar") (serialize-qp "3dcart_private_key" $3dcart_private_key "scalar") (serialize-qp "3dcart_access_token" $3dcart_access_token "scalar") (serialize-qp "3dcartapi_api_key" $3dcartapi_api_key "scalar") (serialize-qp "amazon_sp_client_id" $amazon_sp_client_id "scalar") (serialize-qp "amazon_sp_client_secret" $amazon_sp_client_secret "scalar") (serialize-qp "amazon_sp_aws_user_key_id" $amazon_sp_aws_user_key_id "scalar") (serialize-qp "amazon_sp_aws_user_secret" $amazon_sp_aws_user_secret "scalar") (serialize-qp "amazon_sp_aws_region" $amazon_sp_aws_region "scalar") (serialize-qp "amazon_sp_aws_role_arn" $amazon_sp_aws_role_arn "scalar") (serialize-qp "amazon_sp_refresh_token" $amazon_sp_refresh_token "scalar") (serialize-qp "amazon_sp_api_environment" $amazon_sp_api_environment "scalar") (serialize-qp "amazon_access_token" $amazon_access_token "scalar") (serialize-qp "amazon_seller_id" $amazon_seller_id "scalar") (serialize-qp "amazon_marketplaces_ids" $amazon_marketplaces_ids "scalar") (serialize-qp "amazon_secret_key" $amazon_secret_key "scalar") (serialize-qp "amazon_access_key_id" $amazon_access_key_id "scalar") (serialize-qp "aspdotnetstorefront_api_user" $aspdotnetstorefront_api_user "scalar") (serialize-qp "aspdotnetstorefront_api_pass" $aspdotnetstorefront_api_pass "scalar") (serialize-qp "bigcommerceapi_admin_account" $bigcommerceapi_admin_account "scalar") (serialize-qp "bigcommerceapi_api_path" $bigcommerceapi_api_path "scalar") (serialize-qp "bigcommerceapi_api_key" $bigcommerceapi_api_key "scalar") (serialize-qp "bigcommerceapi_client_id" $bigcommerceapi_client_id "scalar") (serialize-qp "bigcommerceapi_access_token" $bigcommerceapi_access_token "scalar") (serialize-qp "bigcommerceapi_context" $bigcommerceapi_context "scalar") (serialize-qp "demandware_client_id" $demandware_client_id "scalar") (serialize-qp "demandware_api_password" $demandware_api_password "scalar") (serialize-qp "demandware_user_name" $demandware_user_name "scalar") (serialize-qp "demandware_user_password" $demandware_user_password "scalar") (serialize-qp "ebay_client_id" $ebay_client_id "scalar") (serialize-qp "ebay_client_secret" $ebay_client_secret "scalar") (serialize-qp "ebay_runame" $ebay_runame "scalar") (serialize-qp "ebay_access_token" $ebay_access_token "scalar") (serialize-qp "ebay_refresh_token" $ebay_refresh_token "scalar") (serialize-qp "ebay_environment" $ebay_environment "scalar") (serialize-qp "ebay_site_id" $ebay_site_id "scalar") (serialize-qp "ecwid_acess_token" $ecwid_acess_token "scalar") (serialize-qp "ecwid_store_id" $ecwid_store_id "scalar") (serialize-qp "etsy_keystring" $etsy_keystring "scalar") (serialize-qp "etsy_shared_secret" $etsy_shared_secret "scalar") (serialize-qp "etsy_access_token" $etsy_access_token "scalar") (serialize-qp "etsy_token_secret" $etsy_token_secret "scalar") (serialize-qp "etsy_client_id" $etsy_client_id "scalar") (serialize-qp "etsy_refresh_token" $etsy_refresh_token "scalar") (serialize-qp "neto_api_key" $neto_api_key "scalar") (serialize-qp "neto_api_username" $neto_api_username "scalar") (serialize-qp "shopify_api_key" $shopify_api_key "scalar") (serialize-qp "shopify_api_password" $shopify_api_password "scalar") (serialize-qp "shopify_shared_secret" $shopify_shared_secret "scalar") (serialize-qp "shopify_access_token" $shopify_access_token "scalar") (serialize-qp "shopware_access_key" $shopware_access_key "scalar") (serialize-qp "shopware_api_key" $shopware_api_key "scalar") (serialize-qp "shopware_api_secret" $shopware_api_secret "scalar") (serialize-qp "volusion_login" $volusion_login "scalar") (serialize-qp "volusion_password" $volusion_password "scalar") (serialize-qp "walmart_client_id" $walmart_client_id "scalar") (serialize-qp "walmart_client_secret" $walmart_client_secret "scalar") (serialize-qp "walmart_environment" $walmart_environment "scalar") (serialize-qp "walmart_channel_type" $walmart_channel_type "scalar") (serialize-qp "squarespace_api_key" $squarespace_api_key "scalar") (serialize-qp "hybris_client_id" $hybris_client_id "scalar") (serialize-qp "hybris_client_secret" $hybris_client_secret "scalar") (serialize-qp "hybris_username" $hybris_username "scalar") (serialize-qp "hybris_password" $hybris_password "scalar") (serialize-qp "hybris_websites" $hybris_websites "csv") (serialize-qp "lightspeed_api_key" $lightspeed_api_key "scalar") (serialize-qp "lightspeed_api_secret" $lightspeed_api_secret "scalar") (serialize-qp "commercehq_api_key" $commercehq_api_key "scalar") (serialize-qp "commercehq_api_password" $commercehq_api_password "scalar") (serialize-qp "wc_consumer_key" $wc_consumer_key "scalar") (serialize-qp "wc_consumer_secret" $wc_consumer_secret "scalar") (serialize-qp "magento_consumer_key" $magento_consumer_key "scalar") (serialize-qp "magento_consumer_secret" $magento_consumer_secret "scalar") (serialize-qp "magento_access_token" $magento_access_token "scalar") (serialize-qp "magento_token_secret" $magento_token_secret "scalar") (serialize-qp "prestashop_webservice_key" $prestashop_webservice_key "scalar") (serialize-qp "wix_app_id" $wix_app_id "scalar") (serialize-qp "wix_app_secret_key" $wix_app_secret_key "scalar") (serialize-qp "wix_refresh_token" $wix_refresh_token "scalar") (serialize-qp "mercado_libre_app_id" $mercado_libre_app_id "scalar") (serialize-qp "mercado_libre_app_secret_key" $mercado_libre_app_secret_key "scalar") (serialize-qp "mercado_libre_refresh_token" $mercado_libre_refresh_token "scalar") (serialize-qp "zid_client_id" $zid_client_id "scalar") (serialize-qp "zid_client_secret" $zid_client_secret "scalar") (serialize-qp "zid_access_token" $zid_access_token "scalar") (serialize-qp "zid_authorization" $zid_authorization "scalar") (serialize-qp "zid_refresh_token" $zid_refresh_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account.config.update.json" $qp)
@@ -473,8 +483,8 @@ export def "account-supported-platforms-json get" [
 # operationId: AttributeAdd
 export def "attribute-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -503,7 +513,7 @@ export def "attribute-add-json create" [
   --used-for-sort-by: oneof<nothing, bool> # Used for Sorting in Product Listing (default: false)
   --apply-to: string # Types of products which can have this attribute (default: all_types)
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "is_global" $is_global "scalar") (serialize-qp "is_searchable" $is_searchable "scalar") (serialize-qp "is_filterable" $is_filterable "scalar") (serialize-qp "is_comparable" $is_comparable "scalar") (serialize-qp "is_html_allowed_on_front" $is_html_allowed_on_front "scalar") (serialize-qp "is_filterable_in_search" $is_filterable_in_search "scalar") (serialize-qp "is_configurable" $is_configurable "scalar") (serialize-qp "is_visible_in_advanced_search" $is_visible_in_advanced_search "scalar") (serialize-qp "is_used_for_promo_rules" $is_used_for_promo_rules "scalar") (serialize-qp "used_in_product_listing" $used_in_product_listing "scalar") (serialize-qp "used_for_sort_by" $used_for_sort_by "scalar") (serialize-qp "apply_to" $apply_to "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.add.json" $qp)
@@ -518,8 +528,8 @@ export def "attribute-add-json create" [
 # operationId: AttributeAssignGroup
 export def "attribute-assign-group-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -530,7 +540,7 @@ export def "attribute-assign-group-json assign" [
   --group-id: string # Attribute group_id
   --attribute-set-id: string # Attribute set id
 ]: nothing -> record<result: record<assigned: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.assign.group.json" $qp)
@@ -545,8 +555,8 @@ export def "attribute-assign-group-json assign" [
 # operationId: AttributeAssignSet
 export def "attribute-assign-set-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -557,7 +567,7 @@ export def "attribute-assign-set-json assign" [
   --group-id: string # Attribute group_id
   --attribute-set-id: string # Attribute set id
 ]: nothing -> record<result: record<assigned: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.assign.set.json" $qp)
@@ -572,8 +582,8 @@ export def "attribute-assign-set-json assign" [
 # operationId: AttributeAttributesetList
 export def "attribute-attributeset-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -586,7 +596,7 @@ export def "attribute-attributeset-list-json list" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<result: table<additional_fields: record, assigned_attribute_ids: list, attribute_set_id: string, custom_fields: record, id: string, name: string, position: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.attributeset.list.json" $qp)
@@ -601,8 +611,8 @@ export def "attribute-attributeset-list-json list" [
 # operationId: AttributeCount
 export def "attribute-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -616,7 +626,7 @@ export def "attribute-count-json get" [
   --required: oneof<nothing, bool> # Defines if the option is required
   --system: oneof<nothing, bool> # True if attribute is system
 ]: nothing -> record<result: record<attributes_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "system" $system "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.count.json" $qp)
@@ -631,8 +641,8 @@ export def "attribute-count-json get" [
 # operationId: AttributeDelete
 export def "attribute-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -642,7 +652,7 @@ export def "attribute-delete-json delete" [
   --store-id: string # Store Id
   --id: string # Entity id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.delete.json" $qp)
@@ -657,8 +667,8 @@ export def "attribute-delete-json delete" [
 # operationId: AttributeGroupList
 export def "attribute-group-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -673,7 +683,7 @@ export def "attribute-group-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --attribute-set-id: string # Attribute set id
 ]: nothing -> record<result: table<additional_fields: record, assigned_attribute_ids: list, attribute_set_id: string, custom_fields: record, id: string, name: string, position: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.group.list.json" $qp)
@@ -688,8 +698,8 @@ export def "attribute-group-list-json list" [
 # operationId: AttributeInfo
 export def "attribute-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -703,7 +713,7 @@ export def "attribute-info-json get" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<result: record<additional_fields: record, code: string, custom_fields: record, default_values: list<string>, id: string, lang_id: string, name: string, position: int, required: bool, store_id: string, system: bool, type: string, values: list<string>, visible: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.info.json" $qp)
@@ -718,8 +728,8 @@ export def "attribute-info-json get" [
 # operationId: AttributeList
 export def "attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -739,7 +749,7 @@ export def "attribute-list-json list" [
   --required: oneof<nothing, bool> # Defines if the option is required
   --system: oneof<nothing, bool> # True if attribute is system
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, attributes_count: int, custom_fields: record>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "attribute_ids" $attribute_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "system" $system "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.list.json" $qp)
@@ -754,8 +764,8 @@ export def "attribute-list-json list" [
 # operationId: AttributeTypeList
 export def "attribute-type-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -763,7 +773,7 @@ export def "attribute-type-list-json list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<attribute_type: list<string>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/attribute.type.list.json")
   let accept_val = "application/json"
@@ -777,8 +787,8 @@ export def "attribute-type-list-json list" [
 # operationId: AttributeUnassignGroup
 export def "attribute-unassign-group-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -788,7 +798,7 @@ export def "attribute-unassign-group-json create" [
   --id: string # Entity id
   --group-id: string # Customer group_id
 ]: nothing -> record<result: record<unassigned: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.unassign.group.json" $qp)
@@ -803,8 +813,8 @@ export def "attribute-unassign-group-json create" [
 # operationId: AttributeUnassignSet
 export def "attribute-unassign-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -814,7 +824,7 @@ export def "attribute-unassign-set-json update" [
   --id: string # Entity id
   --attribute-set-id: string # Attribute set id
 ]: nothing -> record<result: record<unassigned: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "attribute_set_id" $attribute_set_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.unassign.set.json" $qp)
@@ -829,8 +839,8 @@ export def "attribute-unassign-set-json update" [
 # operationId: AttributeUpdate
 export def "attribute-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -842,7 +852,7 @@ export def "attribute-update-json update" [
   --store-id: string # Store Id
   --lang-id: string # Language id
 ]: nothing -> record<result: record<updated: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/attribute.update.json" $qp)
@@ -857,8 +867,8 @@ export def "attribute-update-json update" [
 # operationId: BasketInfo
 export def "basket-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -871,7 +881,7 @@ export def "basket-info-json get" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<result: record<additional_fields: record, basket_products: list<record>, basket_url: string, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.info.json" $qp)
@@ -886,8 +896,8 @@ export def "basket-info-json get" [
 # operationId: BasketItemAdd
 export def "basket-item-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -900,7 +910,7 @@ export def "basket-item-add-json create" [
   --quantity: float # Defines new items quantity (default: 0)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<added: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "variant_id" $variant_id "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.item.add.json" $qp)
@@ -915,8 +925,8 @@ export def "basket-item-add-json create" [
 # operationId: BasketLiveShippingServiceCreate
 export def "basket-live-shipping-service-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -927,7 +937,7 @@ export def "basket-live-shipping-service-create-json create" [
   --name: string # Shipping Service Name
   --callback: string # Callback url that returns shipping rates. It should be able to accept POST requests with json data.
 ]: nothing -> record<result: record<id: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "callback" $callback "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.create.json" $qp)
@@ -942,8 +952,8 @@ export def "basket-live-shipping-service-create-json create" [
 # operationId: BasketLiveShippingServiceDelete
 export def "basket-live-shipping-service-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -952,7 +962,7 @@ export def "basket-live-shipping-service-delete-json delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: int # Entity id
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.delete.json" $qp)
@@ -967,8 +977,8 @@ export def "basket-live-shipping-service-delete-json delete" [
 # operationId: BasketLiveShippingServiceList
 export def "basket-live-shipping-service-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -979,7 +989,7 @@ export def "basket-live-shipping-service-list-json list" [
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
 ]: nothing -> record<result: record<live_shipping_services: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/basket.live_shipping_service.list.json" $qp)
@@ -994,8 +1004,8 @@ export def "basket-live-shipping-service-list-json list" [
 # operationId: BridgeDelete
 export def "bridge-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1003,7 +1013,7 @@ export def "bridge-delete-json delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bridge.delete.json")
   let accept_val = "application/json"
@@ -1017,8 +1027,8 @@ export def "bridge-delete-json delete" [
 # operationId: BridgeDownload
 export def "bridge-download-file download" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1026,8 +1036,8 @@ export def "bridge-download-file download" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --whitelabel: oneof<nothing, bool> # Identifies if there is a necessity to download whitelabel bridge. (default: false)
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+]: nothing -> oneof<string, record, nothing> {
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "whitelabel" $whitelabel "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bridge.download.file" $qp)
@@ -1042,8 +1052,8 @@ export def "bridge-download-file download" [
 # operationId: BridgeUpdate
 export def "bridge-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1051,7 +1061,7 @@ export def "bridge-update-json update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<updated: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bridge.update.json")
   let accept_val = "application/json"
@@ -1088,8 +1098,8 @@ export def "cart-bridge-json get" [
 # operationId: CartCatalogPriceRulesCount
 export def "cart-catalog-price-rules-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1097,7 +1107,7 @@ export def "cart-catalog-price-rules-count-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<catalog_price_rules_count: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.catalog_price_rules.count.json")
   let accept_val = "application/json"
@@ -1111,8 +1121,8 @@ export def "cart-catalog-price-rules-count-json get" [
 # operationId: CartCatalogPriceRulesList
 export def "cart-catalog-price-rules-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1127,7 +1137,7 @@ export def "cart-catalog-price-rules-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, catalog_price_rules: list<record>, catalog_price_rules_count: int, custom_fields: record>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.catalog_price_rules.list.json" $qp)
@@ -1142,8 +1152,8 @@ export def "cart-catalog-price-rules-list-json list" [
 # operationId: CartClearCache
 export def "cart-clear-cache-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1152,7 +1162,7 @@ export def "cart-clear-cache-json create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --cache-type: string # Defines which cache should be cleared.
 ]: nothing -> record<result: record<cache_cleared: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cache_type" $cache_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.clear_cache.json" $qp)
@@ -1167,8 +1177,8 @@ export def "cart-clear-cache-json create" [
 # operationId: CartConfig
 export def "cart-config-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1178,7 +1188,7 @@ export def "cart-config-json get" [
   --params: string # Set this parameter in order to choose which entity fields you want to retrieve (default: store_name,store_url,db_prefix)
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<result: record<db_prefix: string, store_name: string, store_url: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.config.json" $qp)
@@ -1195,8 +1205,8 @@ export def "cart-config-json get" [
 @deprecated
 export def "cart-config-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1208,7 +1218,7 @@ export def "cart-config-update-json update" [
   --store-id: string # Store Id
 ]: any -> record<result: record, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.config.update.json")
   let req_body = {"custom_fields": $custom_fields, "db_tables_prefix": $db_tables_prefix, "store_id": $store_id} | compact
@@ -1224,8 +1234,8 @@ export def "cart-config-update-json update" [
 # operationId: CartCouponAdd
 export def "cart-coupon-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1250,7 +1260,7 @@ export def "cart-coupon-add-json create" [
   --usage-limit-per-customer: int # Usage limit per customer.
 ]: any -> record<result: record<coupon_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.coupon.add.json")
   let req_body = {"action_amount": $action_amount, "action_apply_to": $action_apply_to, "action_condition_entity": $action_condition_entity, "action_condition_key": $action_condition_key, "action_condition_operator": $action_condition_operator, "action_condition_value": $action_condition_value, "action_scope": $action_scope, "action_type": $action_type, "code": $code, "codes": $codes, "date_end": $date_end, "date_start": $date_start, "name": $name, "store_id": $store_id, "usage_limit": $usage_limit, "usage_limit_per_customer": $usage_limit_per_customer} | compact
@@ -1266,8 +1276,8 @@ export def "cart-coupon-add-json create" [
 # operationId: CartCouponConditionAdd
 export def "cart-coupon-condition-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1282,7 +1292,7 @@ export def "cart-coupon-condition-add-json create" [
   --operator: string@operator-completer # Defines condition operator
   --value: string # Defines condition value, can be comma separated according to the operator.
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "coupon_id" $coupon_id "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "operator" $operator "scalar") (serialize-qp "value" $value "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.condition.add.json" $qp)
@@ -1297,8 +1307,8 @@ export def "cart-coupon-condition-add-json create" [
 # operationId: CartCouponCount
 export def "cart-coupon-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1312,7 +1322,7 @@ export def "cart-coupon-count-json get" [
   --date-end-to: string # Filter entity by date_end (less or equal)
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
 ]: nothing -> record<result: record<coupons_count: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "date_start_from" $date_start_from "scalar") (serialize-qp "date_start_to" $date_start_to "scalar") (serialize-qp "date_end_from" $date_end_from "scalar") (serialize-qp "date_end_to" $date_end_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.count.json" $qp)
@@ -1327,8 +1337,8 @@ export def "cart-coupon-count-json get" [
 # operationId: CartCouponDelete
 export def "cart-coupon-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1338,7 +1348,7 @@ export def "cart-coupon-delete-json delete" [
   --id: string # Entity id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.delete.json" $qp)
@@ -1353,8 +1363,8 @@ export def "cart-coupon-delete-json delete" [
 # operationId: CartCouponList
 export def "cart-coupon-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1376,7 +1386,7 @@ export def "cart-coupon-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, coupon: list<record>, coupon_count: int, custom_fields: record>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "coupons_ids" $coupons_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "date_start_from" $date_start_from "scalar") (serialize-qp "date_start_to" $date_start_to "scalar") (serialize-qp "date_end_from" $date_end_from "scalar") (serialize-qp "date_end_to" $date_end_to "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.coupon.list.json" $qp)
@@ -1511,8 +1521,8 @@ export def "cart-create-json create" [
 # operationId: CartDelete
 export def "cart-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1521,7 +1531,7 @@ export def "cart-delete-json delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-bridge: oneof<nothing, bool> # Identifies if there is a necessity to delete bridge (default: true)
 ]: nothing -> record<result: record<store: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delete_bridge" $delete_bridge "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.delete.json" $qp)
@@ -1538,8 +1548,8 @@ export def "cart-delete-json delete" [
 @deprecated
 export def "cart-disconnect-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1548,7 +1558,7 @@ export def "cart-disconnect-json get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --delete-bridge: oneof<nothing, bool> # Identifies if there is a necessity to delete bridge (default: false)
 ]: nothing -> record<result: record<connection: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "delete_bridge" $delete_bridge "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.disconnect.json" $qp)
@@ -1563,8 +1573,8 @@ export def "cart-disconnect-json get" [
 # operationId: CartGiftcardAdd
 export def "cart-giftcard-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1576,7 +1586,7 @@ export def "cart-giftcard-add-json create" [
   --owner-email: string # Gift card owner email
   --recipient-email: string # Gift card recipient email
 ]: nothing -> record<result: record<code: string, id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "amount" $amount "scalar") (serialize-qp "code" $code "scalar") (serialize-qp "owner_email" $owner_email "scalar") (serialize-qp "recipient_email" $recipient_email "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.add.json" $qp)
@@ -1591,8 +1601,8 @@ export def "cart-giftcard-add-json create" [
 # operationId: CartGiftcardCount
 export def "cart-giftcard-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1601,7 +1611,7 @@ export def "cart-giftcard-count-json get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
 ]: nothing -> record<result: record<gift_cards_count: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.count.json" $qp)
@@ -1616,8 +1626,8 @@ export def "cart-giftcard-count-json get" [
 # operationId: CartGiftcardList
 export def "cart-giftcard-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1632,7 +1642,7 @@ export def "cart-giftcard-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, gift_card: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.giftcard.list.json" $qp)
@@ -1647,8 +1657,8 @@ export def "cart-giftcard-list-json list" [
 # operationId: CartInfo
 export def "cart-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1660,7 +1670,7 @@ export def "cart-info-json get" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Store Id
 ]: nothing -> record<result: record<additional_fields: record, custom_fields: record, db_prefix: string, name: string, shipping_zones: list<record>, stores_info: list<record>, url: string, version: string, warehouses: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.info.json" $qp)
@@ -1700,8 +1710,8 @@ export def "cart-list-json list" [
 # operationId: CartMetaDataList
 export def "cart-meta-data-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1718,7 +1728,7 @@ export def "cart-meta-data-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.list.json" $qp)
@@ -1733,8 +1743,8 @@ export def "cart-meta-data-list-json list" [
 # operationId: CartMetaDataSet
 export def "cart-meta-data-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1748,7 +1758,7 @@ export def "cart-meta-data-set-json update" [
   --value: string # Value
   --namespace: string # Metafield namespace
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "namespace" $namespace "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.set.json" $qp)
@@ -1763,8 +1773,8 @@ export def "cart-meta-data-set-json update" [
 # operationId: CartMetaDataUnset
 export def "cart-meta-data-unset-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1777,7 +1787,7 @@ export def "cart-meta-data-unset-json delete" [
   --key: string # Key
   --id: string # Entity id
 ]: nothing -> record<result: record<status: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity_id" $entity_id "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.meta_data.unset.json" $qp)
@@ -1792,8 +1802,8 @@ export def "cart-meta-data-unset-json delete" [
 # operationId: CartMethods
 export def "cart-methods-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1801,7 +1811,7 @@ export def "cart-methods-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<method: list<string>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cart.methods.json")
   let accept_val = "application/json"
@@ -1815,8 +1825,8 @@ export def "cart-methods-json get" [
 # operationId: CartPluginList
 export def "cart-plugin-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1828,7 +1838,7 @@ export def "cart-plugin-list-json list" [
   --start: int # This parameter sets the number from which you want to get entities (default: 0)
   --count: int # This parameter sets the entity amount that has to be retrieved. Max allowed count=250 (default: 10)
 ]: nothing -> record<result: record<all_plugins: int, plugins: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_key" $store_key "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.plugin.list.json" $qp)
@@ -1843,8 +1853,8 @@ export def "cart-plugin-list-json list" [
 # operationId: CartScriptAdd
 export def "cart-script-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1859,7 +1869,7 @@ export def "cart-script-add-json create" [
   --scope: string # The page or pages on the online store where the script should be included (default: storefront)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<script_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "html" $html "scalar") (serialize-qp "src" $src "scalar") (serialize-qp "load_method" $load_method "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.add.json" $qp)
@@ -1874,8 +1884,8 @@ export def "cart-script-add-json create" [
 # operationId: CartScriptDelete
 export def "cart-script-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1885,7 +1895,7 @@ export def "cart-script-delete-json delete" [
   --id: string # Entity id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.delete.json" $qp)
@@ -1900,8 +1910,8 @@ export def "cart-script-delete-json delete" [
 # operationId: CartScriptList
 export def "cart-script-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1921,7 +1931,7 @@ export def "cart-script-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, scripts: list<record>, total_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "script_ids" $script_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.script.list.json" $qp)
@@ -1936,8 +1946,8 @@ export def "cart-script-list-json list" [
 # operationId: CartShippingZonesList
 export def "cart-shipping-zones-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1951,7 +1961,7 @@ export def "cart-shipping-zones-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<result: record<additional_fields: record, code: string, country: string, country_iso2_codes: list<string>, custom_fields: record, id: string, name: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.shipping_zones.list.json" $qp)
@@ -1966,8 +1976,8 @@ export def "cart-shipping-zones-list-json list" [
 # operationId: CartValidate
 export def "cart-validate-json validate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1976,7 +1986,7 @@ export def "cart-validate-json validate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --validate-version: oneof<nothing, bool> # Specify if api2cart should validate cart version (default: false)
 ]: nothing -> record<result: record<status: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "validate_version" $validate_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/cart.validate.json" $qp)
@@ -1991,8 +2001,8 @@ export def "cart-validate-json validate" [
 # operationId: CategoryAdd
 export def "category-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2014,7 +2024,7 @@ export def "category-add-json create" [
   --meta-keywords: string # Defines unique meta keywords for each entity
   --seo-url: string # Defines unique category's URL for SEO
 ]: nothing -> record<result: record<category_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "created_time" $created_time "scalar") (serialize-qp "modified_time" $modified_time "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "seo_url" $seo_url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.add.json" $qp)
@@ -2029,8 +2039,8 @@ export def "category-add-json create" [
 # operationId: CategoryAssign
 export def "category-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2041,7 +2051,7 @@ export def "category-assign-json assign" [
   --category-id: string # Defines category assign, specified by category id
   --store-id: string # Store Id
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.assign.json" $qp)
@@ -2056,8 +2066,8 @@ export def "category-assign-json assign" [
 # operationId: CategoryCount
 export def "category-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2073,7 +2083,7 @@ export def "category-count-json get" [
   --modified-to: string # Retrieve entities to their modification date
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
 ]: nothing -> record<result: record<categories_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.count.json" $qp)
@@ -2088,8 +2098,8 @@ export def "category-count-json get" [
 # operationId: CategoryDelete
 export def "category-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2098,7 +2108,7 @@ export def "category-delete-json delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Defines category removal, specified by category id
 ]: nothing -> record<result: record<deleted: bool>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.delete.json" $qp)
@@ -2113,8 +2123,8 @@ export def "category-delete-json delete" [
 # operationId: CategoryFind
 export def "category-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2127,7 +2137,7 @@ export def "category-find-json find" [
   --store-id: string # Store Id
   --lang-id: string # Language id
 ]: nothing -> record<result: record<category: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.find.json" $qp)
@@ -2142,8 +2152,8 @@ export def "category-find-json find" [
 # operationId: CategoryImageAdd
 export def "category-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2159,7 +2169,7 @@ export def "category-image-add-json create" [
   --position: int # Defines image’s position in the list (default: 0)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<image_path: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "mime" $mime "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.add.json" $qp)
@@ -2174,8 +2184,8 @@ export def "category-image-add-json create" [
 # operationId: CategoryImageDelete
 export def "category-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2186,7 +2196,7 @@ export def "category-image-delete-json delete" [
   --image-id: string # Define image id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "image_id" $image_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.image.delete.json" $qp)
@@ -2201,8 +2211,8 @@ export def "category-image-delete-json delete" [
 # operationId: CategoryInfo
 export def "category-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2216,7 +2226,7 @@ export def "category-info-json get" [
   --store-id: string # Retrieves category info specified by store id
   --lang-id: string # Retrieves category info specified by language id
 ]: nothing -> record<result: record<additional_fields: record, avail: bool, created_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, id: string, images: list<record>, keywords: string, meta_description: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, parent_id: string, path: string, seo_url: string, short_description: string, sort_order: int, stores_ids: list<string>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.info.json" $qp)
@@ -2231,8 +2241,8 @@ export def "category-info-json get" [
 # operationId: CategoryList
 export def "category-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2254,7 +2264,7 @@ export def "category-list-json list" [
   --modified-to: string # Retrieve entities to their modification date
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, categories_count: int, category: list<record>, custom_fields: record>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.list.json" $qp)
@@ -2269,8 +2279,8 @@ export def "category-list-json list" [
 # operationId: CategoryUnassign
 export def "category-unassign-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2281,7 +2291,7 @@ export def "category-unassign-json create" [
   --product-id: string # Defines category unassign to the product, specified by product id
   --store-id: string # Store Id
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.unassign.json" $qp)
@@ -2296,8 +2306,8 @@ export def "category-unassign-json create" [
 # operationId: CategoryUpdate
 export def "category-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2319,7 +2329,7 @@ export def "category-update-json update" [
   --lang-id: string # Language id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "parent_id" $parent_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "modified_time" $modified_time "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "seo_url" $seo_url "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/category.update.json" $qp)
@@ -2335,8 +2345,8 @@ export def "category-update-json update" [
 # --address item shape: {address_book_address1?: string, address_book_address2?: string, address_book_city?: string, address_book_company?: string, address_book_country?: string, address_book_default?: bool, address_book_fax?: string, address_book_first_name?: string, address_book_gender?: string, address_book_last_name?: string, address_book_phone?: string, address_book_postcode?: string, address_book_region?: string, address_book_state?: string, address_book_type?: string, address_book_website?: string}
 export def "customer-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2364,7 +2374,7 @@ export def "customer-add-json create" [
   --website: string # Link to customer website
 ]: any -> record<result: record<customer_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/customer.add.json")
   let req_body = {"address": $address, "birth_day": $birth_day, "company": $company, "created_time": $created_time, "email": $email, "fax": $fax, "first_name": $first_name, "gender": $gender, "group": $group, "last_login": $last_login, "last_name": $last_name, "login": $login, "modified_time": $modified_time, "news_letter_subscription": $news_letter_subscription, "password": $password, "phone": $phone, "status": $status, "store_id": $store_id, "website": $website} | compact
@@ -2380,8 +2390,8 @@ export def "customer-add-json create" [
 # operationId: CustomerAttributeList
 export def "customer-attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2397,7 +2407,7 @@ export def "customer-attribute-list-json list" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, items: list<record>, total_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.attribute.list.json" $qp)
@@ -2412,8 +2422,8 @@ export def "customer-attribute-list-json list" [
 # operationId: CustomerCount
 export def "customer-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2429,7 +2439,7 @@ export def "customer-count-json get" [
   --customer-list-id: string # The numeric ID of the customer list in Demandware.
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
 ]: nothing -> record<result: record<customers_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "group_id" $group_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "customer_list_id" $customer_list_id "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.count.json" $qp)
@@ -2444,8 +2454,8 @@ export def "customer-count-json get" [
 # operationId: CustomerFind
 export def "customer-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2457,7 +2467,7 @@ export def "customer-find-json find" [
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<email: string, first_name: string, id: string, last_name: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.find.json" $qp)
@@ -2472,8 +2482,8 @@ export def "customer-find-json find" [
 # operationId: CustomerGroupAdd
 export def "customer-group-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2484,7 +2494,7 @@ export def "customer-group-add-json create" [
   --store-id: string # Store Id
   --stores-ids: string # Assign customer group to the stores that is specified by comma-separated stores' id
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "stores_ids" $stores_ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.group.add.json" $qp)
@@ -2499,8 +2509,8 @@ export def "customer-group-add-json create" [
 # operationId: CustomerGroupList
 export def "customer-group-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2517,7 +2527,7 @@ export def "customer-group-list-json list" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, group: list<record>, group_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.group.list.json" $qp)
@@ -2532,8 +2542,8 @@ export def "customer-group-list-json list" [
 # operationId: CustomerInfo
 export def "customer-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2546,7 +2556,7 @@ export def "customer-info-json get" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Retrieves customer info specified by store id
 ]: nothing -> record<result: record<additional_fields: record, address_book: list<record>, birth_day: record<additional_fields: record, custom_fields: record, format: string, value: string>, company: string, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, email: string, fax: string, first_name: string, gender: string, group: list<record>, id: string, ip_address: string, last_login: record<additional_fields: record, custom_fields: record, format: string, value: string>, last_name: string, last_order_id: string, login: string, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, news_letter_subscription: bool, orders_count: int, phone: string, status: string, stores_ids: list<string>, website: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.info.json" $qp)
@@ -2561,8 +2571,8 @@ export def "customer-info-json get" [
 # operationId: CustomerList
 export def "customer-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2584,7 +2594,7 @@ export def "customer-list-json list" [
   --customer-list-id: string # The numeric ID of the customer list in Demandware.
   --avail: oneof<nothing, bool> # Defines category's visibility status (default: true)
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, customer: list<record>, customers_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "customer_list_id" $customer_list_id "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.list.json" $qp)
@@ -2599,8 +2609,8 @@ export def "customer-list-json list" [
 # operationId: CustomerUpdate
 export def "customer-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2626,7 +2636,7 @@ export def "customer-update-json update" [
   --address-book-state-x: string # ISO code or name of state.
   --address-book-postcode-x: string # Specifies customer's postcode
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_id" $group_id "scalar") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "first_name" $first_name "scalar") (serialize-qp "last_name" $last_name "scalar") (serialize-qp "news_letter_subscription" $news_letter_subscription "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "address_book_id_{x}" $address_book_id_x "scalar") (serialize-qp "address_book_first_name_{x}" $address_book_first_name_x "scalar") (serialize-qp "address_book_last_name_{x}" $address_book_last_name_x "scalar") (serialize-qp "address_book_company_{x}" $address_book_company_x "scalar") (serialize-qp "address_book_phone_{x}" $address_book_phone_x "scalar") (serialize-qp "address_book_address1_{x}" $address_book_address1_x "scalar") (serialize-qp "address_book_address2_{x}" $address_book_address2_x "scalar") (serialize-qp "address_book_city_{x}" $address_book_city_x "scalar") (serialize-qp "address_book_country_{x}" $address_book_country_x "scalar") (serialize-qp "address_book_state_{x}" $address_book_state_x "scalar") (serialize-qp "address_book_postcode_{x}" $address_book_postcode_x "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/customer.update.json" $qp)
@@ -2641,8 +2651,8 @@ export def "customer-update-json update" [
 # operationId: OrderAbandonedList
 export def "order-abandoned-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2664,7 +2674,7 @@ export def "order-abandoned-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, order: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "skip_empty_email" $skip_empty_email "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.abandoned.list.json" $qp)
@@ -2681,8 +2691,8 @@ export def "order-abandoned-list-json list" [
 # --order_item item shape: {order_item_allow_refund_items_separately?: bool, order_item_allow_ship_items_separately?: bool, order_item_id: string, order_item_model?: string, order_item_name: string, order_item_option?: list, order_item_parent?: int, order_item_parent_option_name?: string, order_item_price: float, order_item_price_includes_tax?: bool, order_item_property?: list, order_item_quantity: int, order_item_tax?: float, order_item_variant_id?: string, order_item_weight?: float}
 export def "order-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2757,7 +2767,7 @@ export def "order-add-json create" [
   --transaction-id: string # Payment transaction id
 ]: any -> record<result: record<order_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.add.json")
   let req_body = {"admin_comment": $admin_comment, "admin_private_comment": $admin_private_comment, "bill_address_1": $bill_address_1, "bill_address_2": $bill_address_2, "bill_city": $bill_city, "bill_company": $bill_company, "bill_country": $bill_country, "bill_fax": $bill_fax, "bill_first_name": $bill_first_name, "bill_last_name": $bill_last_name, "bill_phone": $bill_phone, "bill_postcode": $bill_postcode, "bill_state": $bill_state, "channel_id": $channel_id, "clear_cache": $clear_cache, "comment": $comment, "coupon_discount": $coupon_discount, "coupons": $coupons, "create_invoice": $create_invoice, "currency": $currency, "customer_birthday": $customer_birthday, "customer_email": $customer_email, "customer_fax": $customer_fax, "customer_first_name": $customer_first_name, "customer_last_name": $customer_last_name, "customer_phone": $customer_phone, "date": $date, "date_finished": $date_finished, "date_modified": $date_modified, "discount": $discount, "external_source": $external_source, "financial_status": $financial_status, "fulfillment_status": $fulfillment_status, "gift_certificate_discount": $gift_certificate_discount, "id": $id, "inventory_behaviour": $inventory_behaviour, "note_attributes": $note_attributes, "order_id": $order_id, "order_item": $order_item, "order_payment_method": $order_payment_method, "order_shipping_method": $order_shipping_method, "order_status": $order_status, "prices_inc_tax": $prices_inc_tax, "send_admin_notifications": $send_admin_notifications, "send_notifications": $send_notifications, "shipp_address_1": $shipp_address_1, "shipp_address_2": $shipp_address_2, "shipp_city": $shipp_city, "shipp_company": $shipp_company, "shipp_country": $shipp_country, "shipp_fax": $shipp_fax, "shipp_first_name": $shipp_first_name, "shipp_last_name": $shipp_last_name, "shipp_phone": $shipp_phone, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "shipping_price": $shipping_price, "shipping_tax": $shipping_tax, "store_id": $store_id, "subtotal_price": $subtotal_price, "tags": $tags, "tax_price": $tax_price, "total_paid": $total_paid, "total_price": $total_price, "total_weight": $total_weight, "transaction_id": $transaction_id} | compact
@@ -2773,8 +2783,8 @@ export def "order-add-json create" [
 # operationId: OrderCount
 export def "order-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2799,7 +2809,7 @@ export def "order-count-json get" [
   --delivery-method: string # Retrieves order with delivery method
   --ship-node-type: string # Retrieves order with ship node type
 ]: nothing -> record<result: record<orders_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "order_status_ids" $order_status_ids "csv") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "ebay_order_status" $ebay_order_status "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "shipping_method" $shipping_method "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "ship_node_type" $ship_node_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.count.json" $qp)
@@ -2814,8 +2824,8 @@ export def "order-count-json get" [
 # operationId: OrderFinancialStatusList
 export def "order-financial-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2823,7 +2833,7 @@ export def "order-financial-status-list-json list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<order_financial_statuses: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.financial_status.list.json")
   let accept_val = "application/json"
@@ -2839,8 +2849,8 @@ export def "order-financial-status-list-json list" [
 @deprecated
 export def "order-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2860,7 +2870,7 @@ export def "order-find-json find" [
   --modified-from: string # Retrieve entities from their modification date
   --financial-status: string # Retrieves orders specified by financial status
 ]: nothing -> record<result: record<order: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "financial_status" $financial_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.find.json" $qp)
@@ -2875,8 +2885,8 @@ export def "order-find-json find" [
 # operationId: OrderFulfillmentStatusList
 export def "order-fulfillment-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2884,7 +2894,7 @@ export def "order-fulfillment-status-list-json list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<order_fulfillment_statuses: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.fulfillment_status.list.json")
   let accept_val = "application/json"
@@ -2898,8 +2908,8 @@ export def "order-fulfillment-status-list-json list" [
 # operationId: OrderInfo
 export def "order-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2914,7 +2924,7 @@ export def "order-info-json get" [
   --store-id: string # Defines store id where the order should be found
   --enable-cache: oneof<nothing, bool> # If the value is 'true' and order exist in our cache, we will return order.info response from cache (default: false)
 ]: nothing -> record<result: record<additional_fields: record, basket_id: string, billing_address: record<additional_fields: record, address1: string, address2: string, city: string, company: string, country: record, custom_fields: record, default: bool, fax: string, first_name: string, gender: string, id: string, last_name: string, phone: string, postcode: string, region: string, state: record, type: string, website: string>, bundles: list<record>, channel_id: string, comment: string, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, currency: record<additional_fields: record, avail: bool, custom_fields: record, default: bool, id: string, iso3: string, name: string, rate: float, symbol_left: string, symbol_right: string>, custom_fields: record, customer: record<additional_fields: record, custom_fields: record, email: string, first_name: string, id: string, last_name: string, phone: string>, discounts: list<record>, finished_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, gift_message: string, id: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, order_details_url: string, order_id: string, order_products: list<record>, payment_method: record<additional_fields: record, custom_fields: record, name: string>, refunds: list<record>, shipping_address: record<additional_fields: record, address1: string, address2: string, city: string, company: string, country: record, custom_fields: record, default: bool, fax: string, first_name: string, gender: string, id: string, last_name: string, phone: string, postcode: string, region: string, state: record, type: string, website: string>, shipping_method: record<additional_fields: record, custom_fields: record, name: string>, shipping_methods: list<record>, status: record<additional_fields: record, custom_fields: record, history: list, id: string, name: string, refund_info: record>, store_id: string, total: record<additional_fields: record, custom_fields: record, shipping_ex_tax: float, subtotal_ex_tax: float, total: float, total_discount: float, total_paid: float, total_tax: float, wrapping_ex_tax: float>, totals: record<additional_fields: record, custom_fields: record, discount: float, shipping: float, subtotal: float, tax: float, total: float>, warehouses_ids: list<string>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "enable_cache" $enable_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.info.json" $qp)
@@ -2929,8 +2939,8 @@ export def "order-info-json get" [
 # operationId: OrderList
 export def "order-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2971,7 +2981,7 @@ export def "order-list-json list" [
   --ship-node-type: string # Retrieves order with ship node type
   --currency-id: string # Currency Id
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, order: list<record>, orders_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "customer_id" $customer_id "scalar") (serialize-qp "customer_email" $customer_email "scalar") (serialize-qp "phone" $phone "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "order_status_ids" $order_status_ids "csv") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "ebay_order_status" $ebay_order_status "scalar") (serialize-qp "basket_id" $basket_id "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "shipping_method" $shipping_method "scalar") (serialize-qp "skip_order_ids" $skip_order_ids "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "is_deleted" $is_deleted "scalar") (serialize-qp "shipping_country_iso3" $shipping_country_iso3 "scalar") (serialize-qp "enable_cache" $enable_cache "scalar") (serialize-qp "delivery_method" $delivery_method "scalar") (serialize-qp "ship_node_type" $ship_node_type "scalar") (serialize-qp "currency_id" $currency_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.list.json" $qp)
@@ -2987,8 +2997,8 @@ export def "order-list-json list" [
 # --order_item item shape: {order_item_id: string, order_item_model?: string, order_item_option?: list, order_item_quantity: int, order_item_variant_id?: string, order_item_weight?: float}
 export def "order-preestimate-shipping-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3009,7 +3019,7 @@ export def "order-preestimate-shipping-list-json list" [
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
 ]: any -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, preestimate_shippings: list<record>, preestimate_shippings_count: int>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.preestimate_shipping.list.json")
   let req_body = {"customer_email": $customer_email, "customer_id": $customer_id, "exclude": $exclude, "order_item": $order_item, "params": $params, "shipp_address_1": $shipp_address_1, "shipp_city": $shipp_city, "shipp_country": $shipp_country, "shipp_postcode": $shipp_postcode, "shipp_state": $shipp_state, "store_id": $store_id, "warehouse_id": $warehouse_id} | compact
@@ -3026,8 +3036,8 @@ export def "order-preestimate-shipping-list-json list" [
 # --items item shape: {order_product_id?: string, price?: float, quantity?: int}
 export def "order-refund-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3046,7 +3056,7 @@ export def "order-refund-add-json create" [
   --total-price: float # Defines order refund amount.
 ]: any -> record<result: record<refund_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.refund.add.json")
   let req_body = {"date": $date, "fee_price": $fee_price, "is_online": $is_online, "item_restock": $item_restock, "items": $items, "message": $message, "order_id": $order_id, "send_notifications": $send_notifications, "shipping_price": $shipping_price, "total_price": $total_price} | compact
@@ -3064,8 +3074,8 @@ export def "order-refund-add-json create" [
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
 export def "order-shipment-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3086,7 +3096,7 @@ export def "order-shipment-add-json create" [
   --warehouse-id: string # This parameter is used for selecting a warehouse where you need to set/modify a product quantity.
 ]: any -> record<result: record<shipment_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.add.json")
   let req_body = {"adjust_stock": $adjust_stock, "enable_cache": $enable_cache, "is_shipped": $is_shipped, "items": $items, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_provider": $shipment_provider, "shipping_method": $shipping_method, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers, "warehouse_id": $warehouse_id} | compact
@@ -3102,8 +3112,8 @@ export def "order-shipment-add-json create" [
 # operationId: OrderShipmentDelete
 export def "order-shipment-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3114,7 +3124,7 @@ export def "order-shipment-delete-json delete" [
   --order-id: string # Defines the order for which the shipment will be deleted
   --store-id: string # Store Id
 ]: nothing -> record<result: record<status: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "shipment_id" $shipment_id "scalar") (serialize-qp "order_id" $order_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.delete.json" $qp)
@@ -3129,8 +3139,8 @@ export def "order-shipment-delete-json delete" [
 # operationId: OrderShipmentInfo
 export def "order-shipment-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3145,7 +3155,7 @@ export def "order-shipment-info-json get" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --store-id: string # Store Id
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "order_id" $order_id "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.info.json" $qp)
@@ -3160,8 +3170,8 @@ export def "order-shipment-info-json get" [
 # operationId: OrderShipmentList
 export def "order-shipment-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3181,7 +3191,7 @@ export def "order-shipment-list-json list" [
   --modified-to: string # Retrieve entities to their modification date
   --store-id: string # Store Id
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, shipment: list<record>, shipment_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.shipment.list.json" $qp)
@@ -3196,8 +3206,8 @@ export def "order-shipment-list-json list" [
 # operationId: OrderShipmentTrackingAdd
 export def "order-shipment-tracking-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3214,7 +3224,7 @@ export def "order-shipment-tracking-add-json create" [
   --tracking-provider: string # Defines name of the company which provides shipment tracking
 ]: any -> record<result: record<tracking_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.tracking.add.json")
   let req_body = {"carrier_id": $carrier_id, "order_id": $order_id, "send_notifications": $send_notifications, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_number": $tracking_number, "tracking_provider": $tracking_provider} | compact
@@ -3231,8 +3241,8 @@ export def "order-shipment-tracking-add-json create" [
 # --tracking_numbers item shape: {carrier_id?: string, tracking_number?: string}
 export def "order-shipment-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3248,7 +3258,7 @@ export def "order-shipment-update-json update" [
   --tracking-numbers: list # Defines shipment's tracking numbers that have to be added How set tracking numbers to appropriate carrier:tracking_numbers[]=a2c.demo1,a2c.demo2 - set default carriertracking_numbers[carrier_id]=a2c.demo - set appropriate carrierTo get the list of carriers IDs that are available in your store, use the cart.info method — item shape: {carrier_id?: string, tracking_number?: string}
 ]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/order.shipment.update.json")
   let req_body = {"is_shipped": $is_shipped, "order_id": $order_id, "replace": $replace, "shipment_id": $shipment_id, "store_id": $store_id, "tracking_link": $tracking_link, "tracking_numbers": $tracking_numbers} | compact
@@ -3264,8 +3274,8 @@ export def "order-shipment-update-json update" [
 # operationId: OrderStatusList
 export def "order-status-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3274,7 +3284,7 @@ export def "order-status-list-json list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --store-id: string # Store Id
 ]: nothing -> record<result: record<cart_order_statuses: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.status.list.json" $qp)
@@ -3289,8 +3299,8 @@ export def "order-status-list-json list" [
 # operationId: OrderTransactionList
 export def "order-transaction-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3305,7 +3315,7 @@ export def "order-transaction-list-json list" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, transactions: list<record>, transactions_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "count" $count "scalar") (serialize-qp "order_ids" $order_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "page_cursor" $page_cursor "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.transaction.list.json" $qp)
@@ -3320,8 +3330,8 @@ export def "order-transaction-list-json list" [
 # operationId: OrderUpdate
 export def "order-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3341,7 +3351,7 @@ export def "order-update-json update" [
   --order-payment-method: string # Defines order payment method.Setting order_payment_method on Shopify will also change financial_status field value to 'paid'
   --send-notifications: oneof<nothing, bool> # Send notifications to customer after order was created (default: false)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "order_id" $order_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "order_status" $order_status "scalar") (serialize-qp "comment" $comment "scalar") (serialize-qp "admin_comment" $admin_comment "scalar") (serialize-qp "admin_private_comment" $admin_private_comment "scalar") (serialize-qp "date_modified" $date_modified "scalar") (serialize-qp "date_finished" $date_finished "scalar") (serialize-qp "financial_status" $financial_status "scalar") (serialize-qp "fulfillment_status" $fulfillment_status "scalar") (serialize-qp "order_payment_method" $order_payment_method "scalar") (serialize-qp "send_notifications" $send_notifications "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/order.update.json" $qp)
@@ -3361,8 +3371,8 @@ export def "order-update-json update" [
 # --tier_prices item shape: {price?: float, quantity?: float}
 export def "product-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3450,7 +3460,7 @@ export def "product-add-json create" [
   --width: float # Defines product's width
 ]: any -> record<result: record<product_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.add.json")
   let req_body = {"attribute_name": $attribute_name, "attribute_set_name": $attribute_set_name, "avail_from": $avail_from, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "backorder_status": $backorder_status, "barcode": $barcode, "best_offer": $best_offer, "brand_name": $brand_name, "categories_ids": $categories_ids, "category_id": $category_id, "clear_cache": $clear_cache, "condition": $condition, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "downloadable": $downloadable, "ean": $ean, "files": $files, "group_prices": $group_prices, "gtin": $gtin, "harmonized_system_code": $harmonized_system_code, "height": $height, "image_name": $image_name, "image_url": $image_url, "isbn": $isbn, "lang_id": $lang_id, "length": $length, "listing_duration": $listing_duration, "listing_type": $listing_type, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "marketplace_item_properties": $marketplace_item_properties, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "mpn": $mpn, "name": $name, "old_price": $old_price, "ordered_count": $ordered_count, "package_details": $package_details, "payment_methods": $payment_methods, "paypal_email": $paypal_email, "price": $price, "product_class": $product_class, "quantity": $quantity, "return_accepted": $return_accepted, "sales_tax": $sales_tax, "search_keywords": $search_keywords, "seller_profiles": $seller_profiles, "seo_url": $seo_url, "shipping_details": $shipping_details, "shipping_template_id": $shipping_template_id, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "specifics": $specifics, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "status": $status, "store_id": $store_id, "stores_ids": $stores_ids, "tags": $tags, "tax_class_id": $tax_class_id, "taxable": $taxable, "tier_prices": $tier_prices, "type": $type, "upc": $upc, "url": $url, "viewed_count": $viewed_count, "visible": $visible, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "wholesale_price": $wholesale_price, "width": $width} | compact
@@ -3466,8 +3476,8 @@ export def "product-add-json create" [
 # operationId: ProductAttributeList
 export def "product-attribute-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3490,7 +3500,7 @@ export def "product-attribute-list-json list" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, attribute: list<record>, custom_fields: record>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "variant_id" $variant_id "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "set_name" $set_name "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.list.json" $qp)
@@ -3505,8 +3515,8 @@ export def "product-attribute-list-json list" [
 # operationId: ProductAttributeValueSet
 export def "product-attribute-value-set-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3522,7 +3532,7 @@ export def "product-attribute-value-set-json update" [
   --lang-id: string # Language id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<attribute_id: string, product_id: string, value_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "attribute_group_id" $attribute_group_id "scalar") (serialize-qp "attribute_name" $attribute_name "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "value_id" $value_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.value.set.json" $qp)
@@ -3537,8 +3547,8 @@ export def "product-attribute-value-set-json update" [
 # operationId: ProductAttributeValueUnset
 export def "product-attribute-value-unset-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3552,7 +3562,7 @@ export def "product-attribute-value-unset-json create" [
   --reindex: oneof<nothing, bool> # Is reindex required (default: true)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<success: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "attribute_id" $attribute_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "include_default" $include_default "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.attribute.value.unset.json" $qp)
@@ -3567,8 +3577,8 @@ export def "product-attribute-value-unset-json create" [
 # operationId: ProductBrandList
 export def "product-brand-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3588,7 +3598,7 @@ export def "product-brand-list-json list" [
   --modified-to: string # Retrieve entities to their modification date
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<result: record<product: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "brand_ids" $brand_ids "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.brand.list.json" $qp)
@@ -3603,8 +3613,8 @@ export def "product-brand-list-json list" [
 # operationId: ProductChildItemFind
 export def "product-child-item-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3616,7 +3626,7 @@ export def "product-child-item-find-json find" [
   --find-params: string # Entity search that is specified by comma-separated parameters (default: whole_words)
   --store-id: string # Store Id
 ]: nothing -> record<result: record<children: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.find.json" $qp)
@@ -3631,8 +3641,8 @@ export def "product-child-item-find-json find" [
 # operationId: ProductChildItemInfo
 export def "product-child-item-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3648,7 +3658,7 @@ export def "product-child-item-info-json get" [
   --lang-id: string # Language id
   --currency-id: string # Currency Id
 ]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, allow_backorders: bool, avail_for_sale: bool, combination: list<record>, cost_price: float, created_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, default_price: float, default_qty_in_pack: float, dimensions_unit: string, ean: string, full_description: string, gtin: string, height: float, id: string, images: list<record>, in_stock: bool, inventory: list<record>, inventory_level: float, is_qty_in_pack_fixed: bool, isbn: string, length: float, list_price: float, manage_stock: bool, meta_description: string, meta_keywords: string, meta_title: string, min_quantity: float, modified_time: record<additional_fields: record, custom_fields: record, format: string, value: string>, mpn: string, name: string, parent_id: string, short_description: string, sku: string, sort_order: int, tax_class_id: string, upc: string, weight: float, weight_unit: string, wholesale_price: float, width: float>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.info.json" $qp)
@@ -3663,8 +3673,8 @@ export def "product-child-item-info-json get" [
 # operationId: ProductChildItemList
 export def "product-child-item-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3690,7 +3700,7 @@ export def "product-child-item-list-json list" [
   --report-request-id: string # Report request id
   --disable-report-cache: oneof<nothing, bool> # Disable report cache for current request (default: false)
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, children: list<record>, custom_fields: record, total_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.child_item.list.json" $qp)
@@ -3705,8 +3715,8 @@ export def "product-child-item-list-json list" [
 # operationId: ProductCount
 export def "product-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3730,7 +3740,7 @@ export def "product-count-json get" [
   --status: string # Defines product's status
   --type: string # Defines products's type
 ]: nothing -> record<result: record<products_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "category_id" $category_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail_view" $avail_view "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "brand_name" $brand_name "scalar") (serialize-qp "product_attributes" $product_attributes "csv") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.count.json" $qp)
@@ -3745,8 +3755,8 @@ export def "product-count-json get" [
 # operationId: ProductCurrencyAdd
 export def "product-currency-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3761,7 +3771,7 @@ export def "product-currency-add-json create" [
   --symbol-right: string # Defines the symbol that is located after the currency
   --default: oneof<nothing, bool> # Specifies currency's default meaning (default: false)
 ]: nothing -> record<result: record<currency_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "iso3" $iso3 "scalar") (serialize-qp "rate" $rate "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "symbol_left" $symbol_left "scalar") (serialize-qp "symbol_right" $symbol_right "scalar") (serialize-qp "default" $default "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.currency.add.json" $qp)
@@ -3776,8 +3786,8 @@ export def "product-currency-add-json create" [
 # operationId: ProductCurrencyList
 export def "product-currency-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3793,7 +3803,7 @@ export def "product-currency-list-json list" [
   --default: oneof<nothing, bool> # Specifies the set of default/not default currencies
   --avail: oneof<nothing, bool> # Specifies the set of available/not available currencies
 ]: nothing -> record<result: record<currency: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "default" $default "scalar") (serialize-qp "avail" $avail "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.currency.list.json" $qp)
@@ -3808,8 +3818,8 @@ export def "product-currency-list-json list" [
 # operationId: ProductDelete
 export def "product-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3818,7 +3828,7 @@ export def "product-delete-json delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Product id that will be removed
 ]: nothing -> record<result: record<delete_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.delete.json" $qp)
@@ -3833,8 +3843,8 @@ export def "product-delete-json delete" [
 # operationId: ProductFields
 export def "product-fields-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3842,7 +3852,7 @@ export def "product-fields-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.fields.json")
   let accept_val = "application/json"
@@ -3856,8 +3866,8 @@ export def "product-fields-json get" [
 # operationId: ProductFind
 export def "product-find-json find" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3871,7 +3881,7 @@ export def "product-find-json find" [
   --lang-id: string # Search products specified by language id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<product: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "find_value" $find_value "scalar") (serialize-qp "find_where" $find_where "scalar") (serialize-qp "find_params" $find_params "scalar") (serialize-qp "find_what" $find_what "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.find.json" $qp)
@@ -3886,8 +3896,8 @@ export def "product-find-json find" [
 # operationId: ProductImageAdd
 export def "product-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3908,7 +3918,7 @@ export def "product-image-add-json create" [
   --variant-ids: string # Defines product's variants ids
 ]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.image.add.json")
   let req_body = {"content": $content, "image_name": $image_name, "label": $label, "lang_id": $lang_id, "mime": $mime, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url, "variant_ids": $variant_ids} | compact
@@ -3924,8 +3934,8 @@ export def "product-image-add-json create" [
 # operationId: ProductImageDelete
 export def "product-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3936,7 +3946,7 @@ export def "product-image-delete-json delete" [
   --id: string # Entity id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.image.delete.json" $qp)
@@ -3951,8 +3961,8 @@ export def "product-image-delete-json delete" [
 # operationId: ProductImageUpdate
 export def "product-image-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3969,7 +3979,7 @@ export def "product-image-update-json update" [
   --lang-id: string # Language id
   --hidden: oneof<nothing, bool> # Define is hide image
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "image_name" $image_name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "position" $position "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "hidden" $hidden "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.image.update.json" $qp)
@@ -3984,8 +3994,8 @@ export def "product-image-update-json update" [
 # operationId: ProductInfo
 export def "product-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4002,7 +4012,7 @@ export def "product-info-json get" [
   --report-request-id: string # Report request id
   --disable-report-cache: oneof<nothing, bool> # Disable report cache for current request (default: false)
 ]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.info.json" $qp)
@@ -4017,8 +4027,8 @@ export def "product-info-json get" [
 # operationId: ProductList
 export def "product-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4054,7 +4064,7 @@ export def "product-list-json list" [
   --status: string # Defines product's status
   --type: string # Defines products's type
 ]: nothing -> record<additional_fields: record, custom_fields: record, pagination: record<additional_fields: record, custom_fields: record, next: string, previous: string>, result: record<additional_fields: record, custom_fields: record, product: list<record>, products_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "avail_view" $avail_view "scalar") (serialize-qp "avail_sale" $avail_sale "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "currency_id" $currency_id "scalar") (serialize-qp "product_ids" $product_ids "scalar") (serialize-qp "since_id" $since_id "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "disable_cache" $disable_cache "scalar") (serialize-qp "brand_name" $brand_name "scalar") (serialize-qp "product_attributes" $product_attributes "csv") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.list.json" $qp)
@@ -4069,8 +4079,8 @@ export def "product-list-json list" [
 # operationId: ProductManufacturerAdd
 export def "product-manufacturer-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4080,7 +4090,7 @@ export def "product-manufacturer-add-json create" [
   --product-id: string # Defines products specified by product id
   --manufacturer: string # Defines product’s manufacturer's name
 ]: nothing -> record<result: record<manufacturer_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "manufacturer" $manufacturer "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.manufacturer.add.json" $qp)
@@ -4095,8 +4105,8 @@ export def "product-manufacturer-add-json create" [
 # operationId: ProductOptionAdd
 export def "product-option-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4114,7 +4124,7 @@ export def "product-option-add-json create" [
   --required: oneof<nothing, bool> # Defines if the option is required (default: false)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<option_id: string, product_option_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "default_option_value" $default_option_value "scalar") (serialize-qp "option_values" $option_values "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "avail" $avail "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.add.json" $qp)
@@ -4129,8 +4139,8 @@ export def "product-option-add-json create" [
 # operationId: ProductOptionAssign
 export def "product-option-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4144,7 +4154,7 @@ export def "product-option-assign-json assign" [
   --option-values: string # Defines option values that has to be assigned
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<product_option_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "required" $required "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "option_values" $option_values "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.assign.json" $qp)
@@ -4159,8 +4169,8 @@ export def "product-option-assign-json assign" [
 # operationId: ProductOptionList
 export def "product-option-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4176,7 +4186,7 @@ export def "product-option-list-json list" [
   --lang-id: string # Language id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<option: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.list.json" $qp)
@@ -4191,8 +4201,8 @@ export def "product-option-list-json list" [
 # operationId: ProductOptionValueAdd
 export def "product-option-value-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4205,7 +4215,7 @@ export def "product-option-value-add-json create" [
   --sort-order: int # Sort number in the list (default: 0)
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<option_value_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "option_value" $option_value "scalar") (serialize-qp "sort_order" $sort_order "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.add.json" $qp)
@@ -4220,8 +4230,8 @@ export def "product-option-value-add-json create" [
 # operationId: ProductOptionValueAssign
 export def "product-option-value-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4232,7 +4242,7 @@ export def "product-option-value-assign-json assign" [
   --option-value-id: int # Defines value id that has to be assigned
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<product_option_value_id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_option_id" $product_option_id "scalar") (serialize-qp "option_value_id" $option_value_id "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.assign.json" $qp)
@@ -4247,8 +4257,8 @@ export def "product-option-value-assign-json assign" [
 # operationId: ProductOptionValueUpdate
 export def "product-option-value-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4263,7 +4273,7 @@ export def "product-option-value-update-json update" [
   --quantity: float # Defines new products' options quantity
   --clear-cache: oneof<nothing, bool> # Is cache clear required (default: true)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "option_id" $option_id "scalar") (serialize-qp "option_value_id" $option_value_id "scalar") (serialize-qp "option_value" $option_value "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "clear_cache" $clear_cache "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.option.value.update.json" $qp)
@@ -4279,8 +4289,8 @@ export def "product-option-value-update-json update" [
 # --group_prices item shape: {group_id?: string, price?: float}
 export def "product-price-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4291,7 +4301,7 @@ export def "product-price-add-json create" [
   --product-id: string # Defines the product to which the price has to be added
 ]: any -> record<result: record<status: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.add.json")
   let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
@@ -4307,8 +4317,8 @@ export def "product-price-add-json create" [
 # operationId: ProductPriceDelete
 export def "product-price-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4318,7 +4328,7 @@ export def "product-price-delete-json delete" [
   --product-id: string # Defines the product where the price has to be deleted
   --group-prices: string # Defines product's group prices
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "group_prices" $group_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.price.delete.json" $qp)
@@ -4334,8 +4344,8 @@ export def "product-price-delete-json delete" [
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
 export def "product-price-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4346,7 +4356,7 @@ export def "product-price-update-json update" [
   --product-id: string # Defines the product where the price has to be updated
 ]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.price.update.json")
   let req_body = {"group_prices": $group_prices, "product_id": $product_id} | compact
@@ -4362,8 +4372,8 @@ export def "product-price-update-json update" [
 # operationId: ProductReviewList
 export def "product-review-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4381,7 +4391,7 @@ export def "product-review-list-json list" [
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<result: record<reviews: list<record>, total_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.review.list.json" $qp)
@@ -4396,8 +4406,8 @@ export def "product-review-list-json list" [
 # operationId: ProductStoreAssign
 export def "product-store-assign-json assign" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4407,7 +4417,7 @@ export def "product-store-assign-json assign" [
   --product-id: string # Defines id of the product which should be assigned to a store
   --store-id: string # Defines id of the store product should be assigned to
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.store.assign.json" $qp)
@@ -4423,8 +4433,8 @@ export def "product-store-assign-json assign" [
 # --tax_rates item shape: {name?: string, type?: string, value?: float}
 export def "product-tax-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4436,7 +4446,7 @@ export def "product-tax-add-json create" [
   tax_rates: list # Defines tax rates of specified tax classes — item shape: {name?: string, type?: string, value?: float}
 ]: any -> record<result: record<tax_class_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.tax.add.json")
   let req_body = {"name": $name, "product_id": $product_id, "tax_rates": $tax_rates} | compact
@@ -4452,8 +4462,8 @@ export def "product-tax-add-json create" [
 # operationId: ProductUpdate
 export def "product-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4509,7 +4519,7 @@ export def "product-update-json update" [
   --search-keywords: string # Defines unique search keywords
   --barcode: string # A barcode is a unique code composed of numbers used as a product identifier.
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "old_price" $old_price "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "special_price" $special_price "scalar") (serialize-qp "sprice_create" $sprice_create "scalar") (serialize-qp "sprice_expire" $sprice_expire "scalar") (serialize-qp "cost_price" $cost_price "scalar") (serialize-qp "retail_price" $retail_price "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "weight" $weight "scalar") (serialize-qp "increase_quantity" $increase_quantity "scalar") (serialize-qp "reduce_quantity" $reduce_quantity "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "reserve_quantity" $reserve_quantity "scalar") (serialize-qp "manage_stock" $manage_stock "scalar") (serialize-qp "backorder_status" $backorder_status "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "manufacturer" $manufacturer "scalar") (serialize-qp "manufacturer_id" $manufacturer_id "scalar") (serialize-qp "categories_ids" $categories_ids "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "short_description" $short_description "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "in_stock" $in_stock "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "seo_url" $seo_url "scalar") (serialize-qp "report_request_id" $report_request_id "scalar") (serialize-qp "disable_report_cache" $disable_report_cache "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "clear_cache" $clear_cache "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "taxable" $taxable "scalar") (serialize-qp "product_class" $product_class "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "harmonized_system_code" $harmonized_system_code "scalar") (serialize-qp "country_of_origin" $country_of_origin "scalar") (serialize-qp "search_keywords" $search_keywords "scalar") (serialize-qp "barcode" $barcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.update.json" $qp)
@@ -4525,8 +4535,8 @@ export def "product-update-json update" [
 # --attributes item shape: {attribute_name?: string, attribute_price?: float, attribute_value?: string}
 export def "product-variant-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4572,7 +4582,7 @@ export def "product-variant-add-json create" [
   --width: float # Defines product's width
 ]: any -> record<result: record<product_variant_id: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.add.json")
   let req_body = {"attributes": $attributes, "available_for_sale": $available_for_sale, "available_for_view": $available_for_view, "barcode": $barcode, "clear_cache": $clear_cache, "cost_price": $cost_price, "country_of_origin": $country_of_origin, "created_at": $created_at, "description": $description, "harmonized_system_code": $harmonized_system_code, "height": $height, "lang_id": $lang_id, "length": $length, "manage_stock": $manage_stock, "manufacturer": $manufacturer, "meta_description": $meta_description, "meta_keywords": $meta_keywords, "meta_title": $meta_title, "model": $model, "name": $name, "price": $price, "product_id": $product_id, "quantity": $quantity, "short_description": $short_description, "sku": $sku, "special_price": $special_price, "sprice_create": $sprice_create, "sprice_expire": $sprice_expire, "sprice_modified": $sprice_modified, "store_id": $store_id, "tax_class_id": $tax_class_id, "taxable": $taxable, "url": $url, "warehouse_id": $warehouse_id, "weight": $weight, "weight_unit": $weight_unit, "width": $width} | compact
@@ -4588,8 +4598,8 @@ export def "product-variant-add-json create" [
 # operationId: ProductVariantCount
 export def "product-variant-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4604,7 +4614,7 @@ export def "product-variant-count-json get" [
   --product-id: string # Retrieves products' variants specified by product id
   --store-id: string # Retrieves variants specified by store id
 ]: nothing -> record<result: record<variants_count: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.count.json" $qp)
@@ -4619,8 +4629,8 @@ export def "product-variant-count-json get" [
 # operationId: ProductVariantDelete
 export def "product-variant-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4630,7 +4640,7 @@ export def "product-variant-delete-json delete" [
   --id: string # Defines variant removal, specified by variant id
   --product-id: string # Defines product's id where the variant has to be deleted
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.delete.json" $qp)
@@ -4645,8 +4655,8 @@ export def "product-variant-delete-json delete" [
 # operationId: ProductVariantImageAdd
 export def "product-variant-image-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4666,7 +4676,7 @@ export def "product-variant-image-add-json create" [
   --url: string # Defines URL of the image that has to be added
 ]: any -> record<result: record<id: string, image_path: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.image.add.json")
   let req_body = {"content": $content, "image_name": $image_name, "label": $label, "mime": $mime, "option_id": $option_id, "position": $position, "product_id": $product_id, "product_variant_id": $product_variant_id, "store_id": $store_id, "type": $type, "url": $url} | compact
@@ -4682,8 +4692,8 @@ export def "product-variant-image-add-json create" [
 # operationId: ProductVariantImageDelete
 export def "product-variant-image-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4695,7 +4705,7 @@ export def "product-variant-image-delete-json delete" [
   --id: string # Entity id
   --store-id: string # Store Id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "product_id" $product_id "scalar") (serialize-qp "product_variant_id" $product_variant_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.image.delete.json" $qp)
@@ -4710,8 +4720,8 @@ export def "product-variant-image-delete-json delete" [
 # operationId: ProductVariantInfo
 export def "product-variant-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4723,7 +4733,7 @@ export def "product-variant-info-json get" [
   --id: string # Retrieves variant's info specified by variant id
   --store-id: string # Retrieves variant info specified by store id
 ]: nothing -> record<result: record<additional_fields: record, advanced_price: list<record>, avail_sale: bool, avail_view: bool, backorders: string, categories_ids: list<string>, cost_price: float, create_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, custom_fields: record, description: string, dimensions_unit: string, group_items: list<record>, group_price: list<record>, height: float, id: string, images: list<record>, inventory: list<record>, is_downloadable: bool, is_stock_managed: bool, is_virtual: bool, length: float, manage_stock: string, meta_description: string, meta_keywords: string, meta_title: string, modified_at: record<additional_fields: record, custom_fields: record, format: string, value: string>, name: string, price: float, product_options: list<record>, quantity: float, related_products_ids: list<string>, seo_url: string, short_description: string, sort_order: int, special_price: record<additional_fields: record, avail: bool, created_at: record, custom_fields: record, expired_at: record, modified_at: record, value: float>, stores_ids: list<string>, tax_class_id: string, tier_price: list<record>, type: string, u_brand: string, u_brand_id: string, u_model: string, u_mpn: string, u_sku: string, u_upc: string, url: string, weight: float, weight_unit: string, width: float>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.info.json" $qp)
@@ -4738,8 +4748,8 @@ export def "product-variant-info-json get" [
 # operationId: ProductVariantList
 export def "product-variant-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4758,7 +4768,7 @@ export def "product-variant-list-json list" [
   --product-id: string # Retrieves products' variants specified by product id
   --store-id: string # Retrieves variants specified by store id
 ]: nothing -> record<result: record<variant: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "category_id" $category_id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.list.json" $qp)
@@ -4774,8 +4784,8 @@ export def "product-variant-list-json list" [
 # --group_prices item shape: {group_id?: string, price?: float}
 export def "product-variant-price-add-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4786,7 +4796,7 @@ export def "product-variant-price-add-json create" [
   --id: string # Defines the variant to which the price has to be added
 ]: any -> record<result: record<status: string>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.add.json")
   let req_body = {"group_prices": $group_prices, "id": $id} | compact
@@ -4802,8 +4812,8 @@ export def "product-variant-price-add-json create" [
 # operationId: ProductVariantPriceDelete
 export def "product-variant-price-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4813,7 +4823,7 @@ export def "product-variant-price-delete-json delete" [
   --id: string # Defines the variant where the price has to be deleted
   --group-prices: string # Defines variants's group prices
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "group_prices" $group_prices "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.price.delete.json" $qp)
@@ -4829,8 +4839,8 @@ export def "product-variant-price-delete-json delete" [
 # --group_prices item shape: {group_id?: string, id?: int, price?: float}
 export def "product-variant-price-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4841,7 +4851,7 @@ export def "product-variant-price-update-json update" [
   --id: string # Defines the variant where the price has to be updated
 ]: any -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/product.variant.price.update.json")
   let req_body = {"group_prices": $group_prices, "id": $id} | compact
@@ -4857,8 +4867,8 @@ export def "product-variant-price-update-json update" [
 # operationId: ProductVariantUpdate
 export def "product-variant-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4908,7 +4918,7 @@ export def "product-variant-update-json update" [
   --model: string # Specifies variant's model that has to be added
   --available-for-sale: oneof<nothing, bool> # Specifies the set of visible/invisible product's variants for sale (default: true)
 ]: nothing -> record<result: record<updated_items: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "store_id" $store_id "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "product_id" $product_id "scalar") (serialize-qp "warehouse_id" $warehouse_id "scalar") (serialize-qp "reserve_quantity" $reserve_quantity "scalar") (serialize-qp "quantity" $quantity "scalar") (serialize-qp "increase_quantity" $increase_quantity "scalar") (serialize-qp "reduce_quantity" $reduce_quantity "scalar") (serialize-qp "price" $price "scalar") (serialize-qp "special_price" $special_price "scalar") (serialize-qp "retail_price" $retail_price "scalar") (serialize-qp "old_price" $old_price "scalar") (serialize-qp "cost_price" $cost_price "scalar") (serialize-qp "sprice_create" $sprice_create "scalar") (serialize-qp "sprice_expire" $sprice_expire "scalar") (serialize-qp "manage_stock" $manage_stock "scalar") (serialize-qp "in_stock" $in_stock "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "sku" $sku "scalar") (serialize-qp "meta_title" $meta_title "scalar") (serialize-qp "meta_description" $meta_description "scalar") (serialize-qp "meta_keywords" $meta_keywords "scalar") (serialize-qp "short_description" $short_description "scalar") (serialize-qp "visible" $visible "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "backorder_status" $backorder_status "scalar") (serialize-qp "weight" $weight "scalar") (serialize-qp "barcode" $barcode "scalar") (serialize-qp "reindex" $reindex "scalar") (serialize-qp "taxable" $taxable "scalar") (serialize-qp "options" $options "csv") (serialize-qp "harmonized_system_code" $harmonized_system_code "scalar") (serialize-qp "country_of_origin" $country_of_origin "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "length" $length "scalar") (serialize-qp "gtin" $gtin "scalar") (serialize-qp "clear_cache" $clear_cache "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "available_for_sale" $available_for_sale "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/product.variant.update.json" $qp)
@@ -4923,8 +4933,8 @@ export def "product-variant-update-json update" [
 # operationId: SubscriberList
 export def "subscriber-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4945,7 +4955,7 @@ export def "subscriber-list-json list" [
   --page-cursor: string # Used to retrieve entities via cursor-based pagination (it can't be used with any other filtering parameter)
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
 ]: nothing -> record<result: record<subscribers: list<record>, total_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "subscribed" $subscribed "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "exclude" $exclude "scalar") (serialize-qp "created_from" $created_from "scalar") (serialize-qp "created_to" $created_to "scalar") (serialize-qp "modified_from" $modified_from "scalar") (serialize-qp "modified_to" $modified_to "scalar") (serialize-qp "page_cursor" $page_cursor "scalar") (serialize-qp "response_fields" $response_fields "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriber.list.json" $qp)
@@ -4960,8 +4970,8 @@ export def "subscriber-list-json list" [
 # operationId: TaxClassInfo
 export def "tax-class-info-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4975,7 +4985,7 @@ export def "tax-class-info-json get" [
   --response-fields: string # Set this parameter in order to choose which entity fields you want to retrieve
   --exclude: string # Set this parameter in order to choose which entity fields you want to ignore. Works only if parameter `params` equal force_all
 ]: nothing -> record<result: record<additional_fields: record, avail: bool, custom_fields: record, id: string, name: string, tax: float, tax_rates: list<record>, tax_type: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tax_class_id" $tax_class_id "scalar") (serialize-qp "store_id" $store_id "scalar") (serialize-qp "lang_id" $lang_id "scalar") (serialize-qp "params" $params "scalar") (serialize-qp "response_fields" $response_fields "scalar") (serialize-qp "exclude" $exclude "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tax.class.info.json" $qp)
@@ -4990,8 +5000,8 @@ export def "tax-class-info-json get" [
 # operationId: WebhookCount
 export def "webhook-count-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5002,7 +5012,7 @@ export def "webhook-count-json get" [
   --action: string # The action you want to filter webhooks by (e.g. order or product)
   --active: oneof<nothing, bool> # The webhook status you want to filter webhooks by
 ]: nothing -> record<result: record<webhook_count: int>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.count.json" $qp)
@@ -5017,8 +5027,8 @@ export def "webhook-count-json get" [
 # operationId: WebhookCreate
 export def "webhook-create-json create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5033,7 +5043,7 @@ export def "webhook-create-json create" [
   --active: oneof<nothing, bool> # Webhook status (default: true)
   --store-id: string # Defines store id where the webhook should be assigned
 ]: nothing -> record<result: record<id: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "store_id" $store_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.create.json" $qp)
@@ -5048,8 +5058,8 @@ export def "webhook-create-json create" [
 # operationId: WebhookDelete
 export def "webhook-delete-json delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5058,7 +5068,7 @@ export def "webhook-delete-json delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --id: string # Webhook id
 ]: nothing -> record<result: record<deleted: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.delete.json" $qp)
@@ -5073,8 +5083,8 @@ export def "webhook-delete-json delete" [
 # operationId: WebhookEvents
 export def "webhook-events-json get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5082,7 +5092,7 @@ export def "webhook-events-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<result: record<events: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook.events.json")
   let accept_val = "application/json"
@@ -5096,8 +5106,8 @@ export def "webhook-events-json get" [
 # operationId: WebhookList
 export def "webhook-list-json list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5112,7 +5122,7 @@ export def "webhook-list-json list" [
   --active: oneof<nothing, bool> # The webhook status you want to filter webhooks by
   --ids: string # List of сomma-separated webhook ids
 ]: nothing -> record<result: record<webhook: list<record>>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "params" $params "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "count" $count "scalar") (serialize-qp "entity" $entity "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.list.json" $qp)
@@ -5127,8 +5137,8 @@ export def "webhook-list-json list" [
 # operationId: WebhookUpdate
 export def "webhook-update-json update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-storekey: string # Auth token for store_key (x-store-key)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5141,7 +5151,7 @@ export def "webhook-update-json update" [
   --fields: string # Fields the webhook should send
   --active: oneof<nothing, bool> # Webhook status
 ]: nothing -> record<result: record<updated: string>, return_code: int, return_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o SWAGGER_API2CART_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_storekey | default ($env | get -o SWAGGER_API2CART_STOREKEY_TOKEN | default "")) "x-store-key")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "label" $label "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "active" $active "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/webhook.update.json" $qp)

@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -141,8 +151,8 @@ export def commands []: nothing -> table {
 export def "rating get-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -152,7 +162,7 @@ export def "rating get-product" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<average: float, totalCount: float> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
   let full_url = (build-url $base ({product_id: (encode-path-segment $product_id)} | format pattern "/rating/{product_id}"))
@@ -169,8 +179,8 @@ export def "rating get-product" [
 # operationId: SaveReview
 export def "review create-save" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -186,7 +196,7 @@ export def "review create-save" [
   title: string # Review's title.
 ]: any -> record<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/review")
   let req_body = {"productId": $product_id, "rating": $rating, "reviewerName": $reviewer_name, "text": $text, "title": $title} | compact
@@ -207,8 +217,8 @@ export def "review create-save" [
 export def "review delete" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -217,8 +227,8 @@ export def "review delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> oneof<bool, string, record, nothing> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}"))
@@ -236,8 +246,8 @@ export def "review delete" [
 export def "review get-reviewby" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -247,7 +257,7 @@ export def "review get-reviewby" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}"))
@@ -265,8 +275,8 @@ export def "review get-reviewby" [
 export def "review update-edit" [
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -285,7 +295,7 @@ export def "review update-edit" [
   --verified-purchaser: oneof<nothing, bool> # If the reviewer is a verified purchaser (`true`) or not (`false`).
 ]: any -> record<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
   let full_url = (build-url $base ({review_id: (encode-path-segment $review_id)} | format pattern "/review/{review_id}"))
@@ -306,8 +316,8 @@ export def "review update-edit" [
 # operationId: DeleteMultipleReviews
 export def "reviews delete-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -317,9 +327,9 @@ export def "reviews delete-multiple" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
   --body: list
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reviews")
   let req_body = $body
@@ -339,8 +349,8 @@ export def "reviews delete-multiple" [
 # operationId: GetalistofReviews
 export def "reviews get-alistof" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -356,7 +366,7 @@ export def "reviews get-alistof" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> record<data: table<approved: bool, id: string, locale: string, location: string, pastReviews: string, productId: string, rating: float, reviewDateTime: string, reviewerName: string, searchDate: string, shopperId: string, sku: string, text: string, title: string, verifiedPurchaser: bool>, range: record<from: float, to: float, total: float>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search_term" $search_term "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "order_by" $order_by "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "product_id" $product_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/reviews" $qp)
@@ -373,8 +383,8 @@ export def "reviews get-alistof" [
 # operationId: SaveMultipleReviews
 export def "reviews create-save-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -386,7 +396,7 @@ export def "reviews create-save-multiple" [
   --body: list
 ]: any -> list<string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o REVIEWS_AND_RATINGS_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o REVIEWS_AND_RATINGS_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/reviews")
   let req_body = $body

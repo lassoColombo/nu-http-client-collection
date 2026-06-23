@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -139,8 +149,8 @@ export def commands []: nothing -> table {
 # GET /categories
 export def "categories list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -150,7 +160,7 @@ export def "categories list" [
   --page-size: string # Provide the size of the page to fetch.
   --page: string # Provide the page number to fetch.
 ]: nothing -> record<categories: table<id: int, name: string, url: string>, noOfPages: int, page: int, pageSize: int, total: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/categories" $qp)
@@ -165,8 +175,8 @@ export def "categories list" [
 export def "categories get" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -174,7 +184,7 @@ export def "categories get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<category: record<id: int, name: string, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
   let full_url = (build-url $base ({category_id: (encode-path-segment $category_id)} | format pattern "/categories/{category_id}"))
@@ -189,8 +199,8 @@ export def "categories get" [
 export def "categories-podcasts get" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -202,7 +212,7 @@ export def "categories-podcasts get" [
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -217,8 +227,8 @@ export def "categories-podcasts get" [
 # GET /podcasts
 export def "podcasts list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -230,7 +240,7 @@ export def "podcasts list" [
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<noOfPages: int, page: int, pageSize: int, podcasts: table<author: string, category: record, categoryId: int, description: string, episodes: int, featured: record, featuredId: int, image: string, keywords: string, latestEpisodeTime: string, podcastId: int, title: string, url: string>, total: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/podcasts" $qp)
@@ -245,8 +255,8 @@ export def "podcasts list" [
 export def "podcasts get" [
   podcast_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -254,7 +264,7 @@ export def "podcasts get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<podcast: record<author: string, category: record<id: int, name: string>, categoryId: int, description: string, episodes: int, featured: record<id: int, name: string>, featuredId: int, image: string, keywords: string, latest_episode_time: string, podcastId: int, title: string, url: string, website: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($podcast_id | is-empty) { error make --unspanned { msg: "path parameter 'podcastId' must be non-empty" } }
   let full_url = (build-url $base ({podcast_id: (encode-path-segment $podcast_id)} | format pattern "/podcasts/{podcast_id}"))
@@ -269,8 +279,8 @@ export def "podcasts get" [
 export def "podcasts-episodes get" [
   podcast_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -282,7 +292,7 @@ export def "podcasts-episodes get" [
   --order: string # Order the items by 'newest' | 'random'
   --filters: string # Takes filters like 'lang' in a url encoded json. Example: 1)Single -> var filterJson = {"lang":["en"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson)); 2)Multiple -> var filterJson = {"lang":["en","hi"]}; var url = baseUrl+'?'+filters=enocdeURI(JSON.stringify(filterJson));
 ]: nothing -> record<episodes: table<author: string, description: string, episodeId: int, episodeUrl: string, image: string, isNew: bool, play: record, podcastId: int, podcastUrl: string, publishTime: string, publishedOn: int, title: string>, noOfPages: int, page: int, pageSize: int, total: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   if ($podcast_id | is-empty) { error make --unspanned { msg: "path parameter 'podcastId' must be non-empty" } }
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "order" $order "scalar") (serialize-qp "filters" $filters "scalar")] | flatten | str join "&"
@@ -295,8 +305,8 @@ export def "podcasts-episodes get" [
 # GET /util/languages
 export def "util-languages get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api_key (x-api-key)
+  --token-partnerid: string # Auth token for partner_id (hhPartnerId)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -306,7 +316,7 @@ export def "util-languages get" [
   --page-size: string # Provide the size of the page to fetch.
   --page: string # Provide the page number to fetch.
 ]: nothing -> record<languages: table<code: string, id: int, name: string>, noOfPages: int, page: int, pageSize: int, total: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_APIKEY_TOKEN | default "")) "x-api-key") (build-auth ($token_partnerid | default ($env | get -o HUBHOPPER_PARTNER_INTEGRATION_API_S_PRODUCTION_PARTNERID_TOKEN | default "")) "hhpartnerid")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/util/languages" $qp)

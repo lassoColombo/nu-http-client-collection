@@ -252,7 +252,7 @@ export def "containers-floating-ips-request create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-auth-token: string # The Bluemix JSON web token that you receive when logging into Bluemix. Run `cf oauth-token` to retrieve your access token.
   --x-auth-project-id: string # The unique ID of your organization space where you want to create or work with your containers. Run `cf space <space_name> --guid`, where `<space_name>` is the name of your space, to retrieve your space ID.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/containers/floating-ips/request")

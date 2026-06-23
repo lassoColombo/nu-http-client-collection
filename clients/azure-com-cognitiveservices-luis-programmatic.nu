@@ -181,7 +181,7 @@ export def "apps create" [
   --initial-version-id: string # The initial version ID. Optional. Default value is: "0.1"
   name: string # The name for the new application.
   --usage-scenario: string # Defines the scenario for the new application. Optional. E.g.: IoT.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -278,7 +278,7 @@ export def "apps-customprebuiltdomains create-custom-prebuilt-domain" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --culture: string # The culture of the new domain.
   --domain-name: string # The domain name.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -372,7 +372,7 @@ export def "apps-import import" [
   --regex-features: list # List of pattern features. — item shape: {activated?: bool, name?: string, pattern?: string}
   --utterances: list # List of sample utterances. — item shape: {entities?: list, intent?: string, text?: string}
   --version-id: string # The version ID of the application that was exported.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -798,7 +798,7 @@ export def "apps-versions-import import" [
   --regex-features: list # List of pattern features. — item shape: {activated?: bool, name?: string, pattern?: string}
   --utterances: list # List of sample utterances. — item shape: {entities?: list, intent?: string, text?: string}
   --version-id-body: string # The version ID of the application that was exported. (body field)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -914,7 +914,7 @@ export def "apps-versions-clone clone" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --version: string # The new version for the cloned model.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -977,7 +977,7 @@ export def "apps-versions-closedlists create-model-closed-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the closed list feature.
   --sub-lists: list # Sublists for the feature. — item shape: {canonicalForm?: string, list?: list<string>}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1137,7 +1137,7 @@ export def "apps-versions-closedlists-sublists create-model-sub-list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --canonical-form: string # The standard form that the list represents.
   --list: list<string> # List of synonym words.
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1267,7 +1267,7 @@ export def "apps-versions-compositeentities create-model-composite-entity" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --children: list<string> # Child entities.
   --name: string # Entity name.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1391,7 +1391,7 @@ export def "apps-versions-compositeentities-children create-model-composite-enti
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1542,7 +1542,7 @@ export def "apps-versions-customprebuiltentities create-model-custom-prebuilt-en
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
   --model-name: string # The intent name or entity name.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1601,7 +1601,7 @@ export def "apps-versions-customprebuiltintents create-model-custom-prebuilt-int
   --dry-run(-n) # Return the request that would be sent without executing it
   --domain-name: string # The domain name.
   --model-name: string # The intent name or entity name.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -1689,7 +1689,7 @@ export def "apps-versions-entities create-model-entity" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the new entity extractor.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2054,7 +2054,7 @@ export def "apps-versions-hierarchicalentities create-model-hierarchical-entity"
   --dry-run(-n) # Return the request that would be sent without executing it
   --children: list<string> # Child entities.
   --name: string # Entity name.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2178,7 +2178,7 @@ export def "apps-versions-hierarchicalentities-children create-model-hierarchica
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2337,7 +2337,7 @@ export def "apps-versions-intents create-model" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the new entity extractor.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2584,7 +2584,7 @@ export def "apps-versions-patterns create-features-feature" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name of the feature.
   --pattern: string # The Regular Expression to match.
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2746,7 +2746,7 @@ export def "apps-versions-phraselists create-features-phrase-list" [
   --is-exchangeable: oneof<nothing, bool> # An exchangeable phrase list feature are serves as single feature to the LUIS underlying training algorithm. It is used as a lexicon lookup feature where its value is 1 if the lexicon contains a given word or 0 if it doesn’t. Think of an exchangeable as a synonyms list. A non-exchangeable phrase list feature has all the phrases in the list serve as separate features to the underlying training algorithm. So, if you your phrase list feature contains 5 phrases, they will be mapped to 5 separate features. You can think of the non-exchangeable phrase list feature as an additional bag of words that you are willing to add to LUIS existing vocabulary features. Think of a non-exchangeable as set of different words. Default value is true. (default: true)
   --name: string # The Phraselist name.
   --phrases: string # List of comma-separated phrases that represent the Phraselist.
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

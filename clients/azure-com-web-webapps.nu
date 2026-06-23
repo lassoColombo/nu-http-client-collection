@@ -2273,7 +2273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-function
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -3826,7 +3826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-network-
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
   --api-version: string # API Version
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -7248,7 +7248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-fu
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # API Version
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -8812,7 +8812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-sites-slots-ne
   --max-frame-length: int # The maximum frame length in bytes (Optional). (format: int32)
   --sas-url: string # The Blob URL to store capture file.
   --api-version: string # API Version
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

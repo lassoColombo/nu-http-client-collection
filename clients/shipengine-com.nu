@@ -879,7 +879,7 @@ export def "downloads download-file" [
   --accept: string@accept-completer-1 # Response content type
   --download: string
   --rotation: int # format: int32
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($dir | is-empty) { error make --unspanned { msg: "path parameter 'dir' must be non-empty" } }

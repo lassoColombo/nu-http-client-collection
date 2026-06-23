@@ -308,7 +308,7 @@ export def "calculations-monte-carlo get-by-planid" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --plan-id: string # Id of the plan to retrieve data from (e.g. 1001-11-3).
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "planId" $plan_id "scalar")] | flatten | str join "&"

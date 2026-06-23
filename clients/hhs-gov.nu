@@ -506,7 +506,7 @@ export def "resources-media-content get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --called-by-build: oneof<nothing, bool> # The method that called this method (format: )
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -539,7 +539,7 @@ export def "resources-media-embed-json get" [
   --exclude-div: oneof<nothing, bool> # Should the div to insert content into be omitted? (format: , default: false)
   --div-id: string # Should the div to insert content into have a specific name? (format: )
   --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -975,7 +975,7 @@ export def "resources-tags-syndicate-format get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --display-method: string # Method used to render an html request. Accepts one: [mv, list, feed] (format: )
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

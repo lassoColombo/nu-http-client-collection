@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -148,8 +158,8 @@ export def commands []: nothing -> table {
 export def "v3p1beta1 delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -168,7 +178,7 @@ export def "v3p1beta1 delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -185,8 +195,8 @@ export def "v3p1beta1 delete" [
 export def "v3p1beta1 get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -205,7 +215,7 @@ export def "v3p1beta1 get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -223,8 +233,8 @@ export def "v3p1beta1 get" [
 export def "v3p1beta1 update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -246,7 +256,7 @@ export def "v3p1beta1 update" [
   --update-mask: string # Optional but strongly recommended to be provided for the best service experience. If update_mask is provided, only the specified fields in job are updated. Otherwise all the fields are updated. A field mask to restrict the fields that are updated. Only top level fields of Job are supported. (format: google-fieldmask)
 ]: any -> record<addresses: list<string>, applicationInfo: record<emails: list<string>, instruction: string, uris: list<string>>, companyDisplayName: string, companyName: string, compensationInfo: record<annualizedBaseCompensationRange: record<maxCompensation: record, minCompensation: record>, annualizedTotalCompensationRange: record<maxCompensation: record, minCompensation: record>, entries: list<record>>, customAttributes: record, degreeTypes: list<string>, department: string, derivedInfo: record<jobCategories: list<string>, locations: list<record>>, description: string, employmentTypes: list<string>, incentives: string, jobBenefits: list<string>, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record<disableStreetAddressResolution: bool, htmlSanitization: string>, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -265,8 +275,8 @@ export def "v3p1beta1 update" [
 export def "v3p1beta1 complete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -292,7 +302,7 @@ export def "v3p1beta1 complete" [
   --scope: string@scope-completer # Optional. The scope of the completion. The defaults is CompletionScope.PUBLIC.
   --type: string@type-completer # Optional. The completion topic. The default is CompletionType.COMBINED.
 ]: nothing -> record<completionResults: table<imageUri: string, suggestion: string, type: string>, metadata: record<requestId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "companyName" $company_name "scalar") (serialize-qp "languageCode" $language_code "scalar") (serialize-qp "languageCodes" $language_codes "multi") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -310,8 +320,8 @@ export def "v3p1beta1 complete" [
 export def "v3p1beta1-client-events create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -332,7 +342,7 @@ export def "v3p1beta1-client-events create" [
   --client-event: record # An event issued when an end user interacts with the application that implements Cloud Talent Solution. Providing this information improves the quality of search and recommendation for the API clients, enabling the service to perform optimally. The number of events sent must be consistent with other calls, such as job searches, issued to the service by the client. — shape: {createTime?: string, eventId?: string, extraInfo?: record, jobEvent?: record, parentEventId?: string, requestId?: string}
 ]: any -> record<createTime: string, eventId: string, extraInfo: record, jobEvent: record<jobs: list<string>, type: string>, parentEventId: string, requestId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -351,8 +361,8 @@ export def "v3p1beta1-client-events create" [
 export def "v3p1beta1-companies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -374,7 +384,7 @@ export def "v3p1beta1-companies list" [
   --page-token: string # Optional. The starting indicator from which to return results.
   --require-open-jobs: oneof<nothing, bool> # Optional. Set to true if the companies requested must have open jobs. Defaults to false. If true, at most page_size of companies are fetched, among which only those with open jobs are returned.
 ]: nothing -> record<companies: table<careerSiteUri: string, derivedInfo: record, displayName: string, eeoText: string, externalId: string, headquartersAddress: string, hiringAgency: bool, imageUri: string, keywordSearchableJobCustomAttributes: list, name: string, size: string, suspended: bool, websiteUri: string>, metadata: record<requestId: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "requireOpenJobs" $require_open_jobs "scalar")] | flatten | str join "&"
@@ -392,8 +402,8 @@ export def "v3p1beta1-companies list" [
 export def "v3p1beta1-companies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -414,7 +424,7 @@ export def "v3p1beta1-companies create" [
   --company: record # A Company resource represents a company in the service. A company is the entity that owns job postings, that is, the hiring entity responsible for employing applicants for the job position. — shape: {careerSiteUri?: string, derivedInfo?: record, displayName?: string, eeoText?: string, externalId?: string, headquartersAddress?: string, hiringAgency?: bool, imageUri?: string, keywordSearchableJobCustomAttributes?: list<string>, name?: string, size?: "COMPANY_SIZE_UNSPECIFIED"|"MINI"|"SMALL"|"SMEDIUM"|"MEDIUM"|"BIG"|"BIGGER"|"GIANT", suspended?: bool, websiteUri?: string}
 ]: any -> record<careerSiteUri: string, derivedInfo: record<headquartersLocation: record<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>>, displayName: string, eeoText: string, externalId: string, headquartersAddress: string, hiringAgency: bool, imageUri: string, keywordSearchableJobCustomAttributes: list<string>, name: string, size: string, suspended: bool, websiteUri: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -433,8 +443,8 @@ export def "v3p1beta1-companies create" [
 export def "v3p1beta1-jobs list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -457,7 +467,7 @@ export def "v3p1beta1-jobs list" [
   --page-size: int # Optional. The maximum number of jobs to be returned per page of results. If job_view is set to JobView.JOB_VIEW_ID_ONLY, the maximum allowed page size is 1000. Otherwise, the maximum allowed page size is 100. Default is 100 if empty or a number < 1 is specified.
   --page-token: string # Optional. The starting point of a query result.
 ]: nothing -> record<jobs: table<addresses: list, applicationInfo: record, companyDisplayName: string, companyName: string, compensationInfo: record, customAttributes: record, degreeTypes: list, department: string, derivedInfo: record, description: string, employmentTypes: list, incentives: string, jobBenefits: list, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string>, metadata: record<requestId: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "jobView" $job_view "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -475,8 +485,8 @@ export def "v3p1beta1-jobs list" [
 export def "v3p1beta1-jobs create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -497,7 +507,7 @@ export def "v3p1beta1-jobs create" [
   --job: record # A Job resource represents a job posting (also referred to as a "job listing" or "job requisition"). A job belongs to a Company, which is the hiring entity responsible for the job. — shape: {addresses?: list<string>, applicationInfo?: record, companyDisplayName?: string, companyName?: string, compensationInfo?: record, customAttributes?: record, degreeTypes?: list<string>, department?: string, derivedInfo?: record, description?: string, employmentTypes?: list<string>, incentives?: string, jobBenefits?: list<string>, jobEndTime?: string, jobLevel?: "JOB_LEVEL_UNSPECIFIED"|"ENTRY_LEVEL"|"EXPERIENCED"|"MANAGER"|"DIRECTOR"|"EXECUTIVE", jobStartTime?: string, languageCode?: string, ... (13 more fields)}
 ]: any -> record<addresses: list<string>, applicationInfo: record<emails: list<string>, instruction: string, uris: list<string>>, companyDisplayName: string, companyName: string, compensationInfo: record<annualizedBaseCompensationRange: record<maxCompensation: record, minCompensation: record>, annualizedTotalCompensationRange: record<maxCompensation: record, minCompensation: record>, entries: list<record>>, customAttributes: record, degreeTypes: list<string>, department: string, derivedInfo: record<jobCategories: list<string>, locations: list<record>>, description: string, employmentTypes: list<string>, incentives: string, jobBenefits: list<string>, jobEndTime: string, jobLevel: string, jobStartTime: string, languageCode: string, name: string, postingCreateTime: string, postingExpireTime: string, postingPublishTime: string, postingRegion: string, postingUpdateTime: string, processingOptions: record<disableStreetAddressResolution: bool, htmlSanitization: string>, promotionValue: int, qualifications: string, requisitionId: string, responsibilities: string, title: string, visibility: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -516,8 +526,8 @@ export def "v3p1beta1-jobs create" [
 export def "v3p1beta1-jobs-batch-delete delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -538,7 +548,7 @@ export def "v3p1beta1-jobs-batch-delete delete" [
   --filter: string # Required. The filter string specifies the jobs to be deleted. Supported operator: =, AND The fields eligible for filtering are: * `companyName` (Required) * `requisitionId` (Required) Sample Query: companyName = "projects/api-test-project/companies/123" AND requisitionId = "req-1"
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -562,8 +572,8 @@ export def "v3p1beta1-jobs-batch-delete delete" [
 export def "v3p1beta1-jobs-search list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -598,7 +608,7 @@ export def "v3p1beta1-jobs-search list" [
   --search-mode: string@search-mode-completer # Optional. Mode of a search. Defaults to SearchMode.JOB_SEARCH.
 ]: any -> record<broadenedQueryJobsCount: int, estimatedTotalSize: int, histogramQueryResults: table<histogram: record, histogramQuery: string>, histogramResults: record<compensationHistogramResults: list<record>, customAttributeHistogramResults: list<record>, simpleHistogramResults: list<record>>, locationFilters: table<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>, matchingJobs: table<commuteInfo: record, job: record, jobSummary: string, jobTitleSnippet: string, searchTextSnippet: string>, metadata: record<requestId: string>, nextPageToken: string, spellCorrection: record<corrected: bool, correctedText: string>, totalSize: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -622,8 +632,8 @@ export def "v3p1beta1-jobs-search list" [
 export def "v3p1beta1-jobs-search-for-alert list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -658,7 +668,7 @@ export def "v3p1beta1-jobs-search-for-alert list" [
   --search-mode: string@search-mode-completer # Optional. Mode of a search. Defaults to SearchMode.JOB_SEARCH.
 ]: any -> record<broadenedQueryJobsCount: int, estimatedTotalSize: int, histogramQueryResults: table<histogram: record, histogramQuery: string>, histogramResults: record<compensationHistogramResults: list<record>, customAttributeHistogramResults: list<record>, simpleHistogramResults: list<record>>, locationFilters: table<latLng: record, locationType: string, postalAddress: record, radiusInMiles: float>, matchingJobs: table<commuteInfo: record, job: record, jobSummary: string, jobTitleSnippet: string, searchTextSnippet: string>, metadata: record<requestId: string>, nextPageToken: string, spellCorrection: record<corrected: bool, correctedText: string>, totalSize: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TALENT_SOLUTION_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

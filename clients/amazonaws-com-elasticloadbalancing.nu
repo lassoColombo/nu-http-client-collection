@@ -189,7 +189,7 @@ export def "api get-create-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -225,7 +225,7 @@ export def "api create-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -265,7 +265,7 @@ export def "api get-apply-security-groups-to-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SecurityGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "SecurityGroups" $security_groups "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -301,7 +301,7 @@ export def "api create-apply-security-groups-to-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<SecurityGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -341,7 +341,7 @@ export def "api get-attach-load-balancer-to-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Subnets: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Subnets" $subnets "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -377,7 +377,7 @@ export def "api create-attach-load-balancer-to-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Subnets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -417,7 +417,7 @@ export def "api get-configure-health-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HealthCheck: record<Target: record, Interval: record, Timeout: record, UnhealthyThreshold: record, HealthyThreshold: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "HealthCheck" $health_check "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -453,7 +453,7 @@ export def "api create-configure-health-check" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HealthCheck: record<Target: record, Interval: record, Timeout: record, UnhealthyThreshold: record, HealthyThreshold: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -494,7 +494,7 @@ export def "api get-create-app-cookie-stickiness-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "CookieName" $cookie_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -530,7 +530,7 @@ export def "api create-app-cookie-stickiness-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +571,7 @@ export def "api get-create-lb-cookie-stickiness-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "CookieExpirationPeriod" $cookie_expiration_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -607,7 +607,7 @@ export def "api create-lb-cookie-stickiness-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -652,7 +652,7 @@ export def "api get-create-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DNSName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Listeners" $listeners "multi") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "Subnets" $subnets "multi") (serialize-qp "SecurityGroups" $security_groups "multi") (serialize-qp "Scheme" $scheme "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -688,7 +688,7 @@ export def "api create-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DNSName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -728,7 +728,7 @@ export def "api get-create-load-balancer-list-eners" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Listeners" $listeners "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -764,7 +764,7 @@ export def "api create-load-balancer-list-eners" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -806,7 +806,7 @@ export def "api get-create-load-balancer-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "PolicyTypeName" $policy_type_name "scalar") (serialize-qp "PolicyAttributes" $policy_attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -842,7 +842,7 @@ export def "api create-load-balancer-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -881,7 +881,7 @@ export def "api get-delete-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -917,7 +917,7 @@ export def "api create-delete-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -957,7 +957,7 @@ export def "api get-delete-load-balancer-list-eners" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerPorts" $load_balancer_ports "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -993,7 +993,7 @@ export def "api create-delete-load-balancer-list-eners" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1033,7 +1033,7 @@ export def "api get-delete-load-balancer-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1069,7 +1069,7 @@ export def "api create-delete-load-balancer-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1109,7 +1109,7 @@ export def "api get-deregister-instances-from-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Instances: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Instances" $instances "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1145,7 +1145,7 @@ export def "api create-deregister-instances-from-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Instances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1185,7 +1185,7 @@ export def "api get-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Limits: record, NextMarker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Marker" $marker "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1221,7 +1221,7 @@ export def "api create-get-account-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Limits: record, NextMarker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1261,7 +1261,7 @@ export def "api get-instance-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<InstanceStates: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Instances" $instances "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1297,7 +1297,7 @@ export def "api create-get-instance-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<InstanceStates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1336,7 +1336,7 @@ export def "api get-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1372,7 +1372,7 @@ export def "api create-get-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1412,7 +1412,7 @@ export def "api get-load-balancer-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PolicyDescriptions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1448,7 +1448,7 @@ export def "api create-get-load-balancer-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PolicyDescriptions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1487,7 +1487,7 @@ export def "api get-load-balancer-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PolicyTypeDescriptions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PolicyTypeNames" $policy_type_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1523,7 +1523,7 @@ export def "api create-get-load-balancer-policy-types" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PolicyTypeDescriptions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1564,7 +1564,7 @@ export def "api get-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoadBalancerDescriptions: record, NextMarker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "PageSize" $page_size "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1601,7 +1601,7 @@ export def "api create-get-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoadBalancerDescriptions: record, NextMarker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1640,7 +1640,7 @@ export def "api get-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TagDescriptions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1676,7 +1676,7 @@ export def "api create-get-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TagDescriptions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1716,7 +1716,7 @@ export def "api get-detach-load-balancer-from-subnets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Subnets: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Subnets" $subnets "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1752,7 +1752,7 @@ export def "api create-detach-load-balancer-from-subnets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Subnets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1792,7 +1792,7 @@ export def "api get-disable-availability-zones-for-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AvailabilityZones: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1828,7 +1828,7 @@ export def "api create-disable-availability-zones-for-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AvailabilityZones: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1868,7 +1868,7 @@ export def "api get-enable-availability-zones-for-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AvailabilityZones: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1904,7 +1904,7 @@ export def "api create-enable-availability-zones-for-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AvailabilityZones: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1944,7 +1944,7 @@ export def "api get-modify-load-balancer-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoadBalancerName: record, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerAttributes" $load_balancer_attributes "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1980,7 +1980,7 @@ export def "api create-modify-load-balancer-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoadBalancerName: record, LoadBalancerAttributes: record<CrossZoneLoadBalancing: record<Enabled: record>, AccessLog: record<Enabled: record, S3BucketName: record, EmitInterval: record, S3BucketPrefix: record>, ConnectionDraining: record<Enabled: record, Timeout: record>, ConnectionSettings: record<IdleTimeout: record>, AdditionalAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2020,7 +2020,7 @@ export def "api get-create-instances-with-load-balancer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Instances: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "Instances" $instances "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2056,7 +2056,7 @@ export def "api create-instances-with-load-balancer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Instances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2096,7 +2096,7 @@ export def "api get-delete-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2132,7 +2132,7 @@ export def "api create-delete-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2173,7 +2173,7 @@ export def "api get-update-load-balancer-listener-ssl-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerPort" $load_balancer_port "scalar") (serialize-qp "SSLCertificateId" $ssl_certificate_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2209,7 +2209,7 @@ export def "api create-update-load-balancer-listener-ssl-certificate" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2250,7 +2250,7 @@ export def "api get-update-load-balancer-policies-for-backend-server" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "InstancePort" $instance_port "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2286,7 +2286,7 @@ export def "api create-update-load-balancer-policies-for-backend-server" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2327,7 +2327,7 @@ export def "api get-update-load-balancer-policies-of-listener" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LoadBalancerName" $load_balancer_name "scalar") (serialize-qp "LoadBalancerPort" $load_balancer_port "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2363,7 +2363,7 @@ export def "api create-update-load-balancer-policies-of-listener" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

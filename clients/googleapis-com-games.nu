@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -147,8 +157,8 @@ export def commands []: nothing -> table {
 # operationId: games.achievementDefinitions.list
 export def "games-achievements list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -170,7 +180,7 @@ export def "games-achievements list" [
   --max-results: int # The maximum number of achievement resources to return in the response, used for paging. For any response, the actual number of achievement resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<achievementType: string, description: string, experiencePoints: string, formattedTotalSteps: string, id: string, initialState: string, isRevealedIconUrlDefault: bool, isUnlockedIconUrlDefault: bool, kind: string, name: string, revealedIconUrl: string, totalSteps: int, unlockedIconUrl: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/achievements" $qp)
@@ -186,8 +196,8 @@ export def "games-achievements list" [
 # --updates item shape: {achievementId?: string, incrementPayload?: record, kind?: string, setStepsAtLeastPayload?: record, updateType?: "ACHIEVEMENT_UPDATE_TYPE_UNSPECIFIED"|"REVEAL"|"UNLOCK"|"INCREMENT"|"SET_STEPS_AT_LEAST"}
 export def "games-achievements-update-multiple update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -209,7 +219,7 @@ export def "games-achievements-update-multiple update" [
   --updates: list # The individual achievement update requests. — item shape: {achievementId?: string, incrementPayload?: record, kind?: string, setStepsAtLeastPayload?: record, updateType?: "ACHIEVEMENT_UPDATE_TYPE_UNSPECIFIED"|"REVEAL"|"UNLOCK"|"INCREMENT"|"SET_STEPS_AT_LEAST"}
 ]: any -> record<kind: string, updatedAchievements: table<achievementId: string, currentState: string, currentSteps: int, kind: string, newlyUnlocked: bool, updateOccurred: bool>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/achievements/updateMultiple" $qp)
@@ -227,8 +237,8 @@ export def "games-achievements-update-multiple update" [
 export def "games-achievements-increment create" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -249,7 +259,7 @@ export def "games-achievements-increment create" [
   --steps-to-increment: int # The number of steps to increment.
   --request-id: string # A randomly generated numeric ID for each request specified by the caller. This number is used at the server to ensure that the request is handled correctly across retries.
 ]: nothing -> record<currentSteps: int, kind: string, newlyUnlocked: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "stepsToIncrement" $steps_to_increment "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -266,8 +276,8 @@ export def "games-achievements-increment create" [
 export def "games-achievements-reveal create" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -286,7 +296,7 @@ export def "games-achievements-reveal create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<currentState: string, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -303,8 +313,8 @@ export def "games-achievements-reveal create" [
 export def "games-achievements-set-steps-at-least update" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -324,7 +334,7 @@ export def "games-achievements-set-steps-at-least update" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --steps: int # The minimum value to set the steps to.
 ]: nothing -> record<currentSteps: int, kind: string, newlyUnlocked: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "steps" $steps "scalar")] | flatten | str join "&"
@@ -341,8 +351,8 @@ export def "games-achievements-set-steps-at-least update" [
 export def "games-achievements-unlock unlock" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -361,7 +371,7 @@ export def "games-achievements-unlock unlock" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, newlyUnlocked: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($achievement_id | is-empty) { error make --unspanned { msg: "path parameter 'achievementId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -377,8 +387,8 @@ export def "games-achievements-unlock unlock" [
 # operationId: games.applications.getEndPoint
 export def "games-applications-get-end-point get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -399,7 +409,7 @@ export def "games-applications-get-end-point get" [
   --application-id: string # The application ID from the Google Play developer console.
   --end-point-type: string@end-point-type-completer # Type of endpoint being requested.
 ]: nothing -> record<url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "endPointType" $end_point_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/applications/getEndPoint" $qp)
@@ -414,8 +424,8 @@ export def "games-applications-get-end-point get" [
 # operationId: games.applications.played
 export def "games-applications-played create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -434,7 +444,7 @@ export def "games-applications-played create" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/applications/played" $qp)
@@ -450,8 +460,8 @@ export def "games-applications-played create" [
 export def "games-applications get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -472,7 +482,7 @@ export def "games-applications get" [
   --language: string # The preferred language to use for strings returned by this method.
   --platform-type: string@platform-type-completer # Restrict application details returned to the specific platform.
 ]: nothing -> record<achievement_count: int, assets: table<height: int, kind: string, name: string, url: string, width: int>, author: string, category: record<kind: string, primary: string, secondary: string>, description: string, enabledFeatures: list<string>, id: string, instances: table<acquisitionUri: string, androidInstance: record, iosInstance: record, kind: string, name: string, platformType: string, realtimePlay: bool, turnBasedPlay: bool, webInstance: record>, kind: string, lastUpdatedTimestamp: string, leaderboard_count: int, name: string, themeColor: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "platformType" $platform_type "scalar")] | flatten | str join "&"
@@ -489,8 +499,8 @@ export def "games-applications get" [
 export def "games-applications-verify verify" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -509,7 +519,7 @@ export def "games-applications-verify verify" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<alternate_player_id: string, kind: string, player_id: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -525,8 +535,8 @@ export def "games-applications-verify verify" [
 # operationId: games.events.listDefinitions
 export def "games-event-definitions list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -548,7 +558,7 @@ export def "games-event-definitions list" [
   --max-results: int # The maximum number of event definitions to return in the response, used for paging. For any response, the actual number of event definitions to return may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<childEvents: list, description: string, displayName: string, id: string, imageUrl: string, isDefaultImageUrl: bool, kind: string, visibility: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/eventDefinitions" $qp)
@@ -563,8 +573,8 @@ export def "games-event-definitions list" [
 # operationId: games.events.listByPlayer
 export def "games-events list-by-player" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -586,7 +596,7 @@ export def "games-events list-by-player" [
   --max-results: int # The maximum number of events to return in the response, used for paging. For any response, the actual number of events to return may be less than the specified maxResults.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<definitionId: string, formattedNumEvents: string, kind: string, numEvents: string, playerId: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/events" $qp)
@@ -602,8 +612,8 @@ export def "games-events list-by-player" [
 # --timePeriods item shape: {kind?: string, timePeriod?: record, updates?: list}
 export def "games-events create-record" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -628,7 +638,7 @@ export def "games-events create-record" [
   --time-periods: list # A list of the time period updates being made in this request. — item shape: {kind?: string, timePeriod?: record, updates?: list}
 ]: any -> record<batchFailures: table<failureCause: string, kind: string, range: record>, eventFailures: table<eventId: string, failureCause: string, kind: string>, kind: string, playerEvents: table<definitionId: string, formattedNumEvents: string, kind: string, numEvents: string, playerId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/events" $qp)
@@ -645,8 +655,8 @@ export def "games-events create-record" [
 # operationId: games.leaderboards.list
 export def "games-leaderboards list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -668,7 +678,7 @@ export def "games-leaderboards list" [
   --max-results: int # The maximum number of leaderboards to return in the response. For any response, the actual number of leaderboards returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<iconUrl: string, id: string, isIconUrlDefault: bool, kind: string, name: string, order: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/leaderboards" $qp)
@@ -684,8 +694,8 @@ export def "games-leaderboards list" [
 # --scores item shape: {kind?: string, leaderboardId?: string, score?: string, scoreTag?: string, signature?: string}
 export def "games-leaderboards-scores submit-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -708,7 +718,7 @@ export def "games-leaderboards-scores submit-multiple" [
   --scores: list # The score submissions. — item shape: {kind?: string, leaderboardId?: string, score?: string, scoreTag?: string, signature?: string}
 ]: any -> record<kind: string, submittedScores: table<beatenScoreTimeSpans: list, formattedScore: string, kind: string, leaderboardId: string, scoreTag: string, unbeatenScores: list>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/leaderboards/scores" $qp)
@@ -726,8 +736,8 @@ export def "games-leaderboards-scores submit-multiple" [
 export def "games-leaderboards get" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -747,7 +757,7 @@ export def "games-leaderboards get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The preferred language to use for strings returned by this method.
 ]: nothing -> record<iconUrl: string, id: string, isIconUrlDefault: bool, kind: string, name: string, order: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -764,8 +774,8 @@ export def "games-leaderboards get" [
 export def "games-leaderboards-scores submit" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -787,7 +797,7 @@ export def "games-leaderboards-scores submit" [
   --language: string # The preferred language to use for strings returned by this method.
   --score-tag: string # Additional information about the score you're submitting. Values must contain no more than 64 URI-safe characters as defined by section 2.3 of RFC 3986.
 ]: nothing -> record<beatenScoreTimeSpans: list<string>, formattedScore: string, kind: string, leaderboardId: string, scoreTag: string, unbeatenScores: table<formattedScore: string, kind: string, score: string, scoreTag: string, timeSpan: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "score" $score "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "scoreTag" $score_tag "scalar")] | flatten | str join "&"
@@ -805,8 +815,8 @@ export def "games-leaderboards-scores list" [
   leaderboard_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -829,7 +839,7 @@ export def "games-leaderboards-scores list" [
   --max-results: int # The maximum number of leaderboard scores to return in the response. For any response, the actual number of leaderboard scores returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<formattedScore: string, formattedScoreRank: string, kind: string, player: record, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, kind: string, nextPageToken: string, numScores: string, playerScore: record<formattedScore: string, formattedScoreRank: string, kind: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, prevPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -848,8 +858,8 @@ export def "games-leaderboards-window list" [
   leaderboard_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -874,7 +884,7 @@ export def "games-leaderboards-window list" [
   --results-above: int # The preferred number of scores to return above the player's score. More scores may be returned if the player is at the bottom of the leaderboard; fewer may be returned if the player is at the top. Must be less than or equal to maxResults.
   --return-top-if-absent: oneof<nothing, bool> # True if the top scores should be returned when the player is not in the leaderboard. Defaults to true.
 ]: nothing -> record<items: table<formattedScore: string, formattedScoreRank: string, kind: string, player: record, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, kind: string, nextPageToken: string, numScores: string, playerScore: record<formattedScore: string, formattedScoreRank: string, kind: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, scoreRank: string, scoreTag: string, scoreValue: string, timeSpan: string, writeTimestampMillis: string>, prevPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -891,8 +901,8 @@ export def "games-leaderboards-window list" [
 # operationId: games.metagame.getMetagameConfig
 export def "games-metagame-config get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -911,7 +921,7 @@ export def "games-metagame-config get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<currentVersion: int, kind: string, playerLevels: table<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/metagameConfig" $qp)
@@ -926,8 +936,8 @@ export def "games-metagame-config get" [
 # operationId: games.players.getMultipleApplicationPlayerIds
 export def "games-players-me-multiple-application-player-ids get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -947,7 +957,7 @@ export def "games-players-me-multiple-application-player-ids get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --application-ids: list<string> # Required. The application IDs from the Google Play developer console for the games to return scoped ids for.
 ]: nothing -> record<playerIds: table<applicationId: string, playerId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "applicationIds" $application_ids "multi")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/players/me/multipleApplicationPlayerIds" $qp)
@@ -963,8 +973,8 @@ export def "games-players-me-multiple-application-player-ids get" [
 export def "games-players-me-players list" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -986,7 +996,7 @@ export def "games-players-me-players list" [
   --max-results: int # The maximum number of player resources to return in the response, used for paging. For any response, the actual number of player resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record, friendStatus: string, gamePlayerId: string, kind: string, name: record, originalPlayerId: string, playerId: string, profileSettings: record, title: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1002,8 +1012,8 @@ export def "games-players-me-players list" [
 # operationId: games.players.getScopedPlayerIds
 export def "games-players-me-scoped-ids get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1022,7 +1032,7 @@ export def "games-players-me-scoped-ids get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<developerPlayerKey: string, gamePlayerId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/players/me/scopedIds" $qp)
@@ -1038,8 +1048,8 @@ export def "games-players-me-scoped-ids get" [
 export def "games-players get" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1060,7 +1070,7 @@ export def "games-players get" [
   --language: string # The preferred language to use for strings returned by this method.
   --player-id-consistency-token: string # Consistency token of the player id. The call returns a 'not found' result when the token is present and invalid. Empty value is ignored. See also GlobalPlayerIdConsistencyTokenProto
 ]: nothing -> record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record<currentExperiencePoints: string, currentLevel: record<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>, kind: string, lastLevelUpTimestampMillis: string, nextLevel: record<kind: string, level: int, maxExperiencePoints: string, minExperiencePoints: string>>, friendStatus: string, gamePlayerId: string, kind: string, name: record<familyName: string, givenName: string>, originalPlayerId: string, playerId: string, profileSettings: record<friendsListVisibility: string, kind: string, profileVisible: bool>, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "playerIdConsistencyToken" $player_id_consistency_token "scalar")] | flatten | str join "&"
@@ -1077,8 +1087,8 @@ export def "games-players get" [
 export def "games-players-achievements list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1101,7 +1111,7 @@ export def "games-players-achievements list" [
   --page-token: string # The token returned by the previous request.
   --state: string@state-completer # Tells the server to return only achievements with the specified state. If this parameter isn't specified, all achievements are returned.
 ]: nothing -> record<items: table<achievementState: string, currentSteps: int, experiencePoints: string, formattedCurrentStepsString: string, id: string, kind: string, lastUpdatedTimestamp: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
@@ -1119,8 +1129,8 @@ export def "games-players-categories list" [
   player_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1142,7 +1152,7 @@ export def "games-players-categories list" [
   --max-results: int # The maximum number of category resources to return in the response, used for paging. For any response, the actual number of category resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<category: string, experiencePoints: string, kind: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
   if ($collection | is-empty) { error make --unspanned { msg: "path parameter 'collection' must be non-empty" } }
@@ -1162,8 +1172,8 @@ export def "games-players-leaderboards-scores get" [
   leaderboard_id: string
   time_span: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1186,7 +1196,7 @@ export def "games-players-leaderboards-scores get" [
   --max-results: int # The maximum number of leaderboard scores to return in the response. For any response, the actual number of leaderboard scores returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<friendsRank: record, kind: string, leaderboard_id: string, publicRank: record, scoreString: string, scoreTag: string, scoreValue: string, socialRank: record, timeSpan: string, writeTimestamp: string>, kind: string, nextPageToken: string, player: record<avatarImageUrl: string, bannerUrlLandscape: string, bannerUrlPortrait: string, displayName: string, experienceInfo: record<currentExperiencePoints: string, currentLevel: record, kind: string, lastLevelUpTimestampMillis: string, nextLevel: record>, friendStatus: string, gamePlayerId: string, kind: string, name: record<familyName: string, givenName: string>, originalPlayerId: string, playerId: string, profileSettings: record<friendsListVisibility: string, kind: string, profileVisible: bool>, title: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
   if ($leaderboard_id | is-empty) { error make --unspanned { msg: "path parameter 'leaderboardId' must be non-empty" } }
@@ -1205,8 +1215,8 @@ export def "games-players-leaderboards-scores get" [
 export def "games-players-snapshots list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1228,7 +1238,7 @@ export def "games-players-snapshots list" [
   --max-results: int # The maximum number of snapshot resources to return in the response, used for paging. For any response, the actual number of snapshot resources returned may be less than the specified `maxResults`.
   --page-token: string # The token returned by the previous request.
 ]: nothing -> record<items: table<coverImage: record, description: string, driveId: string, durationMillis: string, id: string, kind: string, lastModifiedMillis: string, progressValue: string, title: string, type: string, uniqueName: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($player_id | is-empty) { error make --unspanned { msg: "path parameter 'playerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1244,8 +1254,8 @@ export def "games-players-snapshots list" [
 # operationId: games.revisions.check
 export def "games-revisions-check check" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1265,7 +1275,7 @@ export def "games-revisions-check check" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --client-revision: string # The revision of the client SDK used by your application. Format: `[PLATFORM_TYPE]:[VERSION_NUMBER]`. Possible values of `PLATFORM_TYPE` are: * `ANDROID` - Client is running the Android SDK. * `IOS` - Client is running the iOS SDK. * `WEB_APP` - Client is running as a Web App.
 ]: nothing -> record<apiVersion: string, kind: string, revisionStatus: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "clientRevision" $client_revision "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/revisions/check" $qp)
@@ -1281,8 +1291,8 @@ export def "games-revisions-check check" [
 export def "games-snapshots get" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1302,7 +1312,7 @@ export def "games-snapshots get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --language: string # The preferred language to use for strings returned by this method.
 ]: nothing -> record<coverImage: record<height: int, kind: string, mime_type: string, url: string, width: int>, description: string, driveId: string, durationMillis: string, id: string, kind: string, lastModifiedMillis: string, progressValue: string, title: string, type: string, uniqueName: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($snapshot_id | is-empty) { error make --unspanned { msg: "path parameter 'snapshotId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "language" $language "scalar")] | flatten | str join "&"
@@ -1318,8 +1328,8 @@ export def "games-snapshots get" [
 # operationId: games.stats.get
 export def "games-stats get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1338,7 +1348,7 @@ export def "games-stats get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<avg_session_length_minutes: float, churn_probability: float, days_since_last_played: int, high_spender_probability: float, kind: string, num_purchases: int, num_sessions: int, num_sessions_percentile: float, spend_percentile: float, spend_probability: float, total_spend_next_28_days: float> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_GAME_SERVICES_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/games/v1/stats" $qp)

@@ -1108,7 +1108,7 @@ export def "characters-cspa create" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --body: list
-]: any -> any {
+]: any -> oneof<float, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1524,7 +1524,7 @@ export def "characters-mail create" [
   body: string # body string
   recipients: list # recipients array — item shape: {recipient_id: int, recipient_type: "alliance"|"character"|"corporation"|"mailing_list"}
   subject: string # subject string
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1588,7 +1588,7 @@ export def "characters-mail-labels create" [
   --qp-token: string # Access token to use if unable to set a header
   --color: string@color-completer # Hexadecimal string representing label color, in RGB format (default: #ffffff)
   name: string # name string
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2376,7 +2376,7 @@ export def "characters-wallet get" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> any {
+]: nothing -> oneof<float, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($character_id | is-empty) { error make --unspanned { msg: "path parameter 'character_id' must be non-empty" } }
@@ -3451,7 +3451,7 @@ export def "corporations-members-limit get" [
   --datasource: string@datasource-completer # The server name you would like data from (default: tranquility)
   --qp-token: string # Access token to use if unable to set a header
   --if-none-match: string # ETag from a previous request. A 304 will be returned if this matches the current ETag
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($corporation_id | is-empty) { error make --unspanned { msg: "path parameter 'corporation_id' must be non-empty" } }

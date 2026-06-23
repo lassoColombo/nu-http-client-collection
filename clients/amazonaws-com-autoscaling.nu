@@ -303,7 +303,7 @@ export def "api get-attach-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TargetGroupARNs" $target_group_ar_ns "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -339,7 +339,7 @@ export def "api create-attach-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -379,7 +379,7 @@ export def "api get-attach-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -415,7 +415,7 @@ export def "api create-attach-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -455,7 +455,7 @@ export def "api get-attach-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TrafficSources" $traffic_sources "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -491,7 +491,7 @@ export def "api create-attach-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -531,7 +531,7 @@ export def "api get-batch-delete-scheduled-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<FailedScheduledActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledActionNames" $scheduled_action_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -567,7 +567,7 @@ export def "api create-batch-delete-scheduled-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<FailedScheduledActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -607,7 +607,7 @@ export def "api get-batch-update-scheduled-group-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<FailedScheduledUpdateGroupActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledUpdateGroupActions" $scheduled_update_group_actions "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -643,7 +643,7 @@ export def "api create-batch-update-scheduled-group-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<FailedScheduledUpdateGroupActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -682,7 +682,7 @@ export def "api get-cancel-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<InstanceRefreshId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -718,7 +718,7 @@ export def "api create-cancel-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<InstanceRefreshId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -761,7 +761,7 @@ export def "api get-complete-lifecycle-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleActionToken" $lifecycle_action_token "scalar") (serialize-qp "LifecycleActionResult" $lifecycle_action_result "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -797,7 +797,7 @@ export def "api create-complete-lifecycle-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1257,7 +1257,7 @@ export def "api get-delete-lifecycle-hook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1293,7 +1293,7 @@ export def "api create-delete-lifecycle-hook" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1636,7 +1636,7 @@ export def "api get-delete-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ForceDelete" $force_delete "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1672,7 +1672,7 @@ export def "api create-delete-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1710,7 +1710,7 @@ export def "api get-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<MaxNumberOfAutoScalingGroups: record, MaxNumberOfLaunchConfigurations: record, NumberOfAutoScalingGroups: record, NumberOfLaunchConfigurations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1745,7 +1745,7 @@ export def "api create-get-account-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<MaxNumberOfAutoScalingGroups: record, MaxNumberOfLaunchConfigurations: record, NumberOfAutoScalingGroups: record, NumberOfLaunchConfigurations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1780,7 +1780,7 @@ export def "api get-adjustment-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AdjustmentTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1815,7 +1815,7 @@ export def "api create-get-adjustment-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AdjustmentTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1854,7 +1854,7 @@ export def "api get-auto-scaling-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AutoScalingGroups: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupNames" $auto_scaling_group_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1892,7 +1892,7 @@ export def "api create-get-auto-scaling-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AutoScalingGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1933,7 +1933,7 @@ export def "api get-auto-scaling-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AutoScalingInstances: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1971,7 +1971,7 @@ export def "api create-get-auto-scaling-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AutoScalingInstances: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2009,7 +2009,7 @@ export def "api get-auto-scaling-notification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AutoScalingNotificationTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2044,7 +2044,7 @@ export def "api create-get-auto-scaling-notification-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AutoScalingNotificationTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2083,7 +2083,7 @@ export def "api get-instance-refreshes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<InstanceRefreshes: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "InstanceRefreshIds" $instance_refresh_ids "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2119,7 +2119,7 @@ export def "api create-get-instance-refreshes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<InstanceRefreshes: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2160,7 +2160,7 @@ export def "api get-launch-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LaunchConfigurations: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LaunchConfigurationNames" $launch_configuration_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2198,7 +2198,7 @@ export def "api create-get-launch-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LaunchConfigurations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2236,7 +2236,7 @@ export def "api get-lifecycle-hook-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LifecycleHookTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2271,7 +2271,7 @@ export def "api create-get-lifecycle-hook-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LifecycleHookTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2308,7 +2308,7 @@ export def "api get-lifecycle-hooks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LifecycleHooks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleHookNames" $lifecycle_hook_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2344,7 +2344,7 @@ export def "api create-get-lifecycle-hooks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LifecycleHooks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2385,7 +2385,7 @@ export def "api get-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoadBalancerTargetGroups: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2421,7 +2421,7 @@ export def "api create-get-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoadBalancerTargetGroups: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2462,7 +2462,7 @@ export def "api get-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoadBalancers: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2498,7 +2498,7 @@ export def "api create-get-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoadBalancers: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2536,7 +2536,7 @@ export def "api get-metric-collection-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Metrics: record, Granularities: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2571,7 +2571,7 @@ export def "api create-get-metric-collection-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Metrics: record, Granularities: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2609,7 +2609,7 @@ export def "api get-notification-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<NotificationConfigurations: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupNames" $auto_scaling_group_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2647,7 +2647,7 @@ export def "api create-get-notification-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<NotificationConfigurations: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2690,7 +2690,7 @@ export def "api get-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScalingPolicies: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyNames" $policy_names "multi") (serialize-qp "PolicyTypes" $policy_types "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2728,7 +2728,7 @@ export def "api create-get-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScalingPolicies: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2771,7 +2771,7 @@ export def "api get-scaling-activities" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Activities: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ActivityIds" $activity_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "IncludeDeletedGroups" $include_deleted_groups "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2809,7 +2809,7 @@ export def "api create-get-scaling-activities" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Activities: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2847,7 +2847,7 @@ export def "api get-scaling-process-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Processes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2882,7 +2882,7 @@ export def "api create-get-scaling-process-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Processes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2923,7 +2923,7 @@ export def "api get-scheduled-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScheduledUpdateGroupActions: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ScheduledActionNames" $scheduled_action_names "multi") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2961,7 +2961,7 @@ export def "api create-get-scheduled-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScheduledUpdateGroupActions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3002,7 +3002,7 @@ export def "api get-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Tags: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Filters" $filters "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3040,7 +3040,7 @@ export def "api create-get-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Tags: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3078,7 +3078,7 @@ export def "api get-termination-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TerminationPolicyTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3113,7 +3113,7 @@ export def "api create-get-termination-policy-types" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TerminationPolicyTypes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3152,7 +3152,7 @@ export def "api get-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficSources: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TrafficSourceType" $traffic_source_type "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3190,7 +3190,7 @@ export def "api create-get-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TrafficSources: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3231,7 +3231,7 @@ export def "api get-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: record, MinSize: record, PoolState: record, Status: record, InstanceReusePolicy: record<ReuseOnScaleIn: record>>, Instances: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3267,7 +3267,7 @@ export def "api create-get-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<WarmPoolConfiguration: record<MaxGroupPreparedCapacity: record, MinSize: record, PoolState: record, Status: record, InstanceReusePolicy: record<ReuseOnScaleIn: record>>, Instances: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3308,7 +3308,7 @@ export def "api get-detach-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Activities: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ShouldDecrementDesiredCapacity" $should_decrement_desired_capacity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3344,7 +3344,7 @@ export def "api create-detach-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Activities: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3384,7 +3384,7 @@ export def "api get-detach-load-balancer-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TargetGroupARNs" $target_group_ar_ns "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3420,7 +3420,7 @@ export def "api create-detach-load-balancer-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3460,7 +3460,7 @@ export def "api get-detach-load-balancers" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LoadBalancerNames" $load_balancer_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3496,7 +3496,7 @@ export def "api create-detach-load-balancers" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3536,7 +3536,7 @@ export def "api get-detach-traffic-sources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "TrafficSources" $traffic_sources "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3572,7 +3572,7 @@ export def "api create-detach-traffic-sources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3766,7 +3766,7 @@ export def "api get-enter-standby" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Activities: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ShouldDecrementDesiredCapacity" $should_decrement_desired_capacity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3802,7 +3802,7 @@ export def "api create-enter-standby" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Activities: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3921,7 +3921,7 @@ export def "api get-exit-standby" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Activities: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3957,7 +3957,7 @@ export def "api create-exit-standby" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Activities: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3999,7 +3999,7 @@ export def "api get-predictive-scaling-forecast" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoadForecast: record, CapacityForecast: record<Timestamps: record, Values: record>, UpdateTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4035,7 +4035,7 @@ export def "api create-get-predictive-scaling-forecast" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoadForecast: record, CapacityForecast: record<Timestamps: record, Values: record>, UpdateTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4081,7 +4081,7 @@ export def "api get-update-lifecycle-hook" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleTransition" $lifecycle_transition "scalar") (serialize-qp "RoleARN" $role_arn "scalar") (serialize-qp "NotificationTargetARN" $notification_target_arn "scalar") (serialize-qp "NotificationMetadata" $notification_metadata "scalar") (serialize-qp "HeartbeatTimeout" $heartbeat_timeout "scalar") (serialize-qp "DefaultResult" $default_result "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4117,7 +4117,7 @@ export def "api create-update-lifecycle-hook" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4246,7 +4246,7 @@ export def "api get-update-scaling-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PolicyARN: record, Alarms: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "PolicyName" $policy_name "scalar") (serialize-qp "PolicyType" $policy_type "scalar") (serialize-qp "AdjustmentType" $adjustment_type "scalar") (serialize-qp "MinAdjustmentStep" $min_adjustment_step "scalar") (serialize-qp "MinAdjustmentMagnitude" $min_adjustment_magnitude "scalar") (serialize-qp "ScalingAdjustment" $scaling_adjustment "scalar") (serialize-qp "Cooldown" $cooldown "scalar") (serialize-qp "MetricAggregationType" $metric_aggregation_type "scalar") (serialize-qp "StepAdjustments" $step_adjustments "multi") (serialize-qp "EstimatedInstanceWarmup" $estimated_instance_warmup "scalar") (serialize-qp "TargetTrackingConfiguration" $target_tracking_configuration "multi") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "PredictiveScalingConfiguration" $predictive_scaling_configuration "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4282,7 +4282,7 @@ export def "api create-update-scaling-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PolicyARN: record, Alarms: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4409,7 +4409,7 @@ export def "api get-update-warm-pool" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "MaxGroupPreparedCapacity" $max_group_prepared_capacity "scalar") (serialize-qp "MinSize" $min_size "scalar") (serialize-qp "PoolState" $pool_state "scalar") (serialize-qp "InstanceReusePolicy" $instance_reuse_policy "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4445,7 +4445,7 @@ export def "api create-update-warm-pool" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4487,7 +4487,7 @@ export def "api get-record-lifecycle-action-heartbeat" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "LifecycleHookName" $lifecycle_hook_name "scalar") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "LifecycleActionToken" $lifecycle_action_token "scalar") (serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4523,7 +4523,7 @@ export def "api create-record-lifecycle-action-heartbeat" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4638,7 +4638,7 @@ export def "api get-rollback-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<InstanceRefreshId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4674,7 +4674,7 @@ export def "api create-rollback-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<InstanceRefreshId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4869,7 +4869,7 @@ export def "api get-update-instance-protection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "InstanceIds" $instance_ids "multi") (serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "ProtectedFromScaleIn" $protected_from_scale_in "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4905,7 +4905,7 @@ export def "api create-update-instance-protection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4947,7 +4947,7 @@ export def "api get-start-instance-refresh" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<InstanceRefreshId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AutoScalingGroupName" $auto_scaling_group_name "scalar") (serialize-qp "Strategy" $strategy "scalar") (serialize-qp "DesiredConfiguration" $desired_configuration "multi") (serialize-qp "Preferences" $preferences "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4983,7 +4983,7 @@ export def "api create-start-instance-refresh" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<InstanceRefreshId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5099,7 +5099,7 @@ export def "api get-terminate-instance-in-auto-scaling-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Activity: record<ActivityId: record, AutoScalingGroupName: record, Description: record, Cause: record, StartTime: record, EndTime: record, StatusCode: record, StatusMessage: record, Progress: record, Details: record, AutoScalingGroupState: record, AutoScalingGroupARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "InstanceId" $instance_id "scalar") (serialize-qp "ShouldDecrementDesiredCapacity" $should_decrement_desired_capacity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5135,7 +5135,7 @@ export def "api create-terminate-instance-in-auto-scaling-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Activity: record<ActivityId: record, AutoScalingGroupName: record, Description: record, Cause: record, StartTime: record, EndTime: record, StatusCode: record, StatusMessage: record, Progress: record, Details: record, AutoScalingGroupState: record, AutoScalingGroupARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

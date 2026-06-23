@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -140,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: Searchallaccounts
 export def "creditcontrol-accounts get-searchallaccounts" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -150,8 +160,8 @@ export def "creditcontrol-accounts get-searchallaccounts" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/accounts")
   let accept_val = "application/json; charset=utf-8"
@@ -167,8 +177,8 @@ export def "creditcontrol-accounts get-searchallaccounts" [
 # operationId: OpenanAccount
 export def "creditcontrol-accounts create-openan" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -183,9 +193,9 @@ export def "creditcontrol-accounts create-openan" [
   document_type: string # default: CPF
   email: string # default: email@domain.com
   tolerance: string # default: 1
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/accounts")
   let req_body = {"creditLimit": $credit_limit, "description": $description, "document": $document, "documentType": $document_type, "email": $email, "tolerance": $tolerance} | compact
@@ -206,8 +216,8 @@ export def "creditcontrol-accounts create-openan" [
 export def "creditcontrol-accounts update-openor-change" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -220,9 +230,9 @@ export def "creditcontrol-accounts update-openor-change" [
   --document: string # default: 00221292404
   email: string # default: email@email.com
   id: string # default: teste
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/api/creditcontrol/accounts/{account_id}"))
@@ -244,8 +254,8 @@ export def "creditcontrol-accounts update-openor-change" [
 export def "creditcontrol-accounts delete-closean" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -259,7 +269,7 @@ export def "creditcontrol-accounts delete-closean" [
   --email: string # default: email@domain.com
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
@@ -281,8 +291,8 @@ export def "creditcontrol-accounts delete-closean" [
 export def "creditcontrol-accounts get-retrievea-accountby" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -291,8 +301,8 @@ export def "creditcontrol-accounts get-retrievea-accountby" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<account: string, balance: float, creditLimit: float, description: string, email: string, lastUpdate: string> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
@@ -310,8 +320,8 @@ export def "creditcontrol-accounts get-retrievea-accountby" [
 export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -322,9 +332,9 @@ export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   description: string # default: example
   email: string # default: email@domain.com
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}"))
@@ -346,8 +356,8 @@ export def "creditcontrol-accounts update-emailanddescriptionofaaccount" [
 export def "creditcontrol-accounts-creditlimit update-changecreditlimitofan" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -357,9 +367,9 @@ export def "creditcontrol-accounts-creditlimit update-changecreditlimitofan" [
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: int # format: number, default: 500.0
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/creditlimit"))
@@ -382,8 +392,8 @@ export def "creditcontrol-accounts-creditlimit update-changecreditlimitofan" [
 export def "creditcontrol-accounts-holders create-addanaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -393,9 +403,9 @@ export def "creditcontrol-accounts-holders create-addanaccount" [
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   claims: record # e.g. {email: USER-EMAIL} — shape: {email: string}
-]: any -> any {
+]: any -> record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/holders"))
@@ -418,8 +428,8 @@ export def "creditcontrol-accounts-holders delete-anaccountholder" [
   credit_account_id: string
   holder_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -428,8 +438,8 @@ export def "creditcontrol-accounts-holders delete-anaccountholder" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<data: table<account: string, balance: float, creditLimit: float, description: string, document: string, documentType: string, email: string, lastUpdate: string>, summary: record<count: int>> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($holder_id | is-empty) { error make --unspanned { msg: "path parameter 'holderId' must be non-empty" } }
@@ -448,8 +458,8 @@ export def "creditcontrol-accounts-holders delete-anaccountholder" [
 export def "creditcontrol-accounts-invoices get-searchallinvoicesofa" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -458,8 +468,8 @@ export def "creditcontrol-accounts-invoices get-searchallinvoicesofa" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/invoices"))
@@ -478,8 +488,8 @@ export def "creditcontrol-accounts-invoices cancel" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -488,8 +498,8 @@ export def "creditcontrol-accounts-invoices cancel" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -509,8 +519,8 @@ export def "creditcontrol-accounts-invoices get-invoiceby" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -519,8 +529,8 @@ export def "creditcontrol-accounts-invoices get-invoiceby" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -540,8 +550,8 @@ export def "creditcontrol-accounts-invoices update-change" [
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -554,9 +564,9 @@ export def "creditcontrol-accounts-invoices update-change" [
   observation: string # default: example
   payment_link: string # default: example
   status: string # Invoice's status. It must be completed with "Paid", "Cancelled" or "Open" value. (default: Paid)
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -581,8 +591,8 @@ export def "creditcontrol-accounts-invoices-payments create-markaninvoiceas-paid
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -592,9 +602,9 @@ export def "creditcontrol-accounts-invoices-payments create-markaninvoiceas-paid
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: string # default: example
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -618,8 +628,8 @@ export def "creditcontrol-accounts-invoices-post-ponement create-poneaninvoice" 
   credit_account_id: string
   invoice_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -629,9 +639,9 @@ export def "creditcontrol-accounts-invoices-post-ponement create-poneaninvoice" 
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   due_days: string
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -654,8 +664,8 @@ export def "creditcontrol-accounts-invoices-post-ponement create-poneaninvoice" 
 export def "creditcontrol-accounts-statements get-accountstatements" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -664,8 +674,8 @@ export def "creditcontrol-accounts-statements get-accountstatements" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<currentBalance: float, intervalBalance: float, previousBalance: float, statements: table<date: string, description: string, value: float>> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/statements"))
@@ -684,8 +694,8 @@ export def "creditcontrol-accounts-statements update-decreasebalanceofanaccount"
   credit_account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -697,7 +707,7 @@ export def "creditcontrol-accounts-statements update-decreasebalanceofanaccount"
   value: string # default: -490.0
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
@@ -720,8 +730,8 @@ export def "creditcontrol-accounts-statements update-decreasebalanceofanaccount"
 export def "creditcontrol-accounts-tolerance update-changetoleranceofanaccount" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -731,9 +741,9 @@ export def "creditcontrol-accounts-tolerance update-changetoleranceofanaccount" 
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   value: float # default: 0.2
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/tolerance"))
@@ -755,8 +765,8 @@ export def "creditcontrol-accounts-tolerance update-changetoleranceofanaccount" 
 export def "creditcontrol-accounts-transaction create-createa-pre-authorization" [
   credit_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -771,7 +781,7 @@ export def "creditcontrol-accounts-transaction create-createa-pre-authorization"
   value: string # default: 490.0
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   let full_url = (build-url $base ({credit_account_id: (encode-path-segment $credit_account_id)} | format pattern "/api/creditcontrol/accounts/{credit_account_id}/transaction"))
@@ -794,8 +804,8 @@ export def "creditcontrol-accounts-transactions delete-cancela-pre-authorization
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -805,7 +815,7 @@ export def "creditcontrol-accounts-transactions delete-cancela-pre-authorization
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
@@ -825,8 +835,8 @@ export def "creditcontrol-accounts-transactions update-createa-pre-authorization
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -841,7 +851,7 @@ export def "creditcontrol-accounts-transactions update-createa-pre-authorization
   value: string # default: 20.0
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
@@ -865,8 +875,8 @@ export def "creditcontrol-accounts-transactions-refunds create-partialor-total-r
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -878,7 +888,7 @@ export def "creditcontrol-accounts-transactions-refunds create-partialor-total-r
   value: string # default: 20
 ]: any -> record<id: string, value: float> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
@@ -902,8 +912,8 @@ export def "creditcontrol-accounts-transactions-settlement update-createor" [
   credit_account_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -915,7 +925,7 @@ export def "creditcontrol-accounts-transactions-settlement update-createor" [
   value: string # default: 490.0
 ]: any -> record<id: string, value: float> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($credit_account_id | is-empty) { error make --unspanned { msg: "path parameter 'creditAccountId' must be non-empty" } }
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
@@ -937,8 +947,8 @@ export def "creditcontrol-accounts-transactions-settlement update-createor" [
 # operationId: Searchallinvoices
 export def "creditcontrol-invoices get-searchallinvoices" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -955,8 +965,8 @@ export def "creditcontrol-invoices get-searchallinvoices" [
   --credit-account-id: string # Credit account's identifier (default: B75F0)
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<data: table<checkingAccountId: string, createdAt: string, description: string, dueDate: string, id: string, observation: string, originalDueDate: string, paymentLink: string, status: string, updatedAt: string, value: float>, summary: record<count: int, total: float>> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar") (serialize-qp "createdDateFrom" $created_date_from "scalar") (serialize-qp "createdDateTo" $created_date_to "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "friendlyId" $friendly_id "scalar") (serialize-qp "creditAccountId" $credit_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/creditcontrol/invoices" $qp)
@@ -973,8 +983,8 @@ export def "creditcontrol-invoices get-searchallinvoices" [
 # operationId: Retrievestoreconfiguration
 export def "creditcontrol-storeconfig get-storeconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -983,8 +993,8 @@ export def "creditcontrol-storeconfig get-storeconfiguration" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   --hdr-accept: string # Media type(s) that is/are acceptable for the response. Default value for payment provider protocol is application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/storeconfig")
   let accept_val = "application/json; charset=utf-8"
@@ -1001,8 +1011,8 @@ export def "creditcontrol-storeconfig get-storeconfiguration" [
 # --notificationsSettings shape: {daysAfter?: list, daysPrior?: list}
 export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1022,9 +1032,9 @@ export def "creditcontrol-storeconfig create-orchangestoreconfiguration" [
   --postponement-enabled: oneof<nothing, bool> # default: false
   tax_rate: string # default: 0.4
   --tolerance-enabled: oneof<nothing, bool> # default: true
-]: any -> any {
+]: any -> record<dailyInterestRate: float, invoicePostponementLimit: int, taxRate: float, tolerancePercent: float> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o CUSTOMER_CREDIT_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o CUSTOMER_CREDIT_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/creditcontrol/storeconfig")
   let req_body = {"automaticCheckingAccountCreationEnabled": $automatic_checking_account_creation_enabled, "dailyInterestRate": $daily_interest_rate, "defaultCreditValue": $default_credit_value, "invoicePostponementLimit": $invoice_postponement_limit, "maxPostponementDays": $max_postponement_days, "maxPreAuthorizationGrowthRate": $max_pre_authorization_growth_rate, "myCreditsEnabled": $my_credits_enabled, "notificationsSettings": $notifications_settings, "postponementEnabled": $postponement_enabled, "taxRate": $tax_rate, "toleranceEnabled": $tolerance_enabled} | compact

@@ -333,7 +333,7 @@ export def "account-groups list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: int, created_by_email: string, description: string, expires_at: int, id: string, name: string, org_default_role: string, org_roles: record, role_summary: string, updated_at: int, user_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/groups")
@@ -361,7 +361,7 @@ export def "account-groups create" [
   --name: string # e.g. Viewers
   --org-default-role: string # e.g. admin
   --org-roles: record # e.g. {1a5e612e-4d64-45fe-aa3e-afba5cf3b9bf: viewer, fd6d6662-732b-4c4b-8331-051178994384: admin}
-]: any -> any {
+]: any -> record<created_at: int, created_by_email: string, description: string, expires_at: int, id: string, name: string, org_default_role: string, org_roles: record, role_summary: string, updated_at: int, user_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +393,7 @@ export def "account-groups update" [
   --name: string # e.g. Viewers
   --org-default-role: string # e.g. admin
   --org-roles: record # e.g. {1a5e612e-4d64-45fe-aa3e-afba5cf3b9bf: viewer, fd6d6662-732b-4c4b-8331-051178994384: admin}
-]: any -> any {
+]: any -> record<created_at: int, created_by_email: string, description: string, expires_at: int, id: string, name: string, org_default_role: string, org_roles: record, role_summary: string, updated_at: int, user_count: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -445,7 +445,7 @@ export def "account-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: int, created_by_email: string, description: string, expires_at: int, id: string, name: string, org_default_role: string, org_roles: record, role_summary: string, updated_at: int, user_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -546,7 +546,7 @@ export def "account-keys get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<client_id: string, comment: string, counter: int, created_at: int, created_by: string, id: string, inactive: bool, last_used_at: int, last_used_ip: string, last_used_ua: string, organization_id: string, token: string, type: string, usage_limit: int, usage_today: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($key_id | is-empty) { error make --unspanned { msg: "path parameter 'key_id' must be non-empty" } }
@@ -595,7 +595,7 @@ export def "account-license get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<activated_at: int, address_city: string, address_country: string, address_postal: string, address_region: string, address_street: string, created_at: int, id: string, license_expiration: int, license_live_asset_count: int, license_max_assets: int, license_project_asset_count: int, license_type: string, name: string, partner: string, phone: string, settings: record, sso_default_role: string, sso_domain: string, sso_login_issuer_url: string, sso_login_login_url: string, sso_login_logout_url: string, sso_login_message: string, sso_mode: string, sso_type: string, subscription_cancel_at: int, subscription_canceled_at: int, subscription_period_end: int, subscription_period_start: int, updated_at: int, via_reseller: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/license")
@@ -703,7 +703,7 @@ export def "account-orgs get-organization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<asset_count: int, client_id: string, created_at: int, deactivated_at: int, description: string, download_token: string, download_token_created_at: int, expiration_assets_offline: int, expiration_assets_stale: int, expiration_scans: int, export_token: string, export_token_counter: int, export_token_created_at: int, export_token_last_used_at: int, export_token_last_used_by: string, id: string, inactive: bool, name: string, parent_id: string, permanent: bool, project: bool, service_count: int, service_count_arp: int, service_count_icmp: int, service_count_tcp: int, service_count_udp: int, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'org_id' must be non-empty" } }
@@ -838,7 +838,7 @@ export def "account-sso-groups get-mappings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: int, created_by_email: string, description: string, group_id: string, group_name: string, id: string, sso_attribute: string, sso_value: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/sso/groups")
@@ -870,7 +870,7 @@ export def "account-sso-groups create-mapping" [
   sso_attribute: string # e.g. basic-attribute
   sso_value: string # e.g. basic-attribute-value
   --updated-at: int # format: int64, e.g. 1576300370
-]: any -> any {
+]: any -> record<created_at: int, created_by_email: string, description: string, group_id: string, group_name: string, id: string, sso_attribute: string, sso_value: string, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -905,7 +905,7 @@ export def "account-sso-groups update-mapping" [
   sso_attribute: string # e.g. basic-attribute
   sso_value: string # e.g. basic-attribute-value
   --updated-at: int # format: int64, e.g. 1576300370
-]: any -> any {
+]: any -> record<created_at: int, created_by_email: string, description: string, group_id: string, group_name: string, id: string, sso_attribute: string, sso_value: string, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -957,7 +957,7 @@ export def "account-sso-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: int, created_by_email: string, description: string, group_id: string, group_name: string, id: string, sso_attribute: string, sso_value: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'group_mapping_id' must be non-empty" } }
@@ -1288,7 +1288,7 @@ export def "account-users get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<client_admin: bool, client_id: string, created_at: int, email: string, first_name: string, id: string, invite_token_expiration: int, last_login_at: int, last_login_ip: string, last_login_ua: string, last_name: string, login_failures: int, org_default_role: string, org_roles: record, reset_token_expiration: int, sso_only: bool, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1319,7 +1319,7 @@ export def "account-users update" [
   --last-name: string # e.g. Smith
   --org-default-role: string # e.g. admin
   --org-roles: record
-]: any -> any {
+]: any -> record<client_admin: bool, client_id: string, created_at: int, email: string, first_name: string, id: string, invite_token_expiration: int, last_login_at: int, last_login_ip: string, last_login_ua: string, last_name: string, login_failures: int, org_default_role: string, org_roles: record, reset_token_expiration: int, sso_only: bool, updated_at: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1347,7 +1347,7 @@ export def "account-users-reset-lockout reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<client_admin: bool, client_id: string, created_at: int, email: string, first_name: string, id: string, invite_token_expiration: int, last_login_at: int, last_login_ip: string, last_login_ua: string, last_name: string, login_failures: int, org_default_role: string, org_roles: record, reset_token_expiration: int, sso_only: bool, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1372,7 +1372,7 @@ export def "account-users-reset-mfa reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<client_admin: bool, client_id: string, created_at: int, email: string, first_name: string, id: string, invite_token_expiration: int, last_login_at: int, last_login_ip: string, last_login_ua: string, last_name: string, login_failures: int, org_default_role: string, org_roles: record, reset_token_expiration: int, sso_only: bool, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1397,7 +1397,7 @@ export def "account-users-reset-password reset" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<client_admin: bool, client_id: string, created_at: int, email: string, first_name: string, id: string, invite_token_expiration: int, last_login_at: int, last_login_ip: string, last_login_ua: string, last_name: string, login_failures: int, org_default_role: string, org_roles: record, reset_token_expiration: int, sso_only: bool, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -1422,7 +1422,7 @@ export def "export-org-assets-cisco-csv export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1447,7 +1447,7 @@ export def "export-org-assets-csv export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1499,7 +1499,7 @@ export def "export-org-assets-jsonl export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
   --fields: string # an optional list of fields to export, comma-separated
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -1524,7 +1524,7 @@ export def "export-org-assets-nmap-xml export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1548,7 +1548,7 @@ export def "export-org-assets-servicenow-csv export-snow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export/org/assets.servicenow.csv")
@@ -1649,7 +1649,7 @@ export def "export-org-services-csv export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1701,7 +1701,7 @@ export def "export-org-services-jsonl export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
   --fields: string # an optional list of fields to export, comma-separated
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -1725,7 +1725,7 @@ export def "export-org-services-servicenow-csv export-snow" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export/org/services.servicenow.csv")
@@ -1748,7 +1748,7 @@ export def "export-org-sites-csv export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export/org/sites.csv")
@@ -1799,7 +1799,7 @@ export def "export-org-sites-jsonl export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
   --fields: string # an optional list of fields to export, comma-separated
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -1824,7 +1824,7 @@ export def "export-org-wireless-csv export" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -1876,7 +1876,7 @@ export def "export-org-wireless-jsonl export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --search: string # an optional search string for filtering results
   --fields: string # an optional list of fields to export, comma-separated
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "fields" $fields "scalar")] | flatten | str join "&"
@@ -2164,7 +2164,7 @@ export def "org-assets-top-hw-csv export-hwcsv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/assets/top.hw.csv")
@@ -2187,7 +2187,7 @@ export def "org-assets-top-os-csv export-oscsv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/assets/top.os.csv")
@@ -2210,7 +2210,7 @@ export def "org-assets-top-tags-csv export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/assets/top.tags.csv")
@@ -2233,7 +2233,7 @@ export def "org-assets-top-types-csv export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/assets/top.types.csv")
@@ -2459,7 +2459,7 @@ export def "org-services-subnet-stats-csv export-utilization" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --mask: string # an optional subnet mask size (ex:24)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "mask" $mask "scalar")] | flatten | str join "&"
@@ -2483,7 +2483,7 @@ export def "org-services-top-products-csv export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/services/top.products.csv")
@@ -2506,7 +2506,7 @@ export def "org-services-top-protocols-csv export" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/services/top.protocols.csv")
@@ -2529,7 +2529,7 @@ export def "org-services-top-tcp-csv export-tcpcsv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/services/top.tcp.csv")
@@ -2552,7 +2552,7 @@ export def "org-services-top-udp-csv export-udpcsv" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/org/services/top.udp.csv")
@@ -2953,7 +2953,7 @@ export def "org-tasks-changes get-report" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -2978,7 +2978,7 @@ export def "org-tasks-data get-scan" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -3003,7 +3003,7 @@ export def "org-tasks-hide create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<agent_id: string, client_id: string, created_at: int, created_by: string, created_by_user_id: string, cruncher_id: string, description: string, error: string, hidden: bool, id: string, name: string, organization_id: string, params: record, parent_id: string, recur: bool, recur_frequency: string, recur_last: int, recur_last_task_id: string, recur_next: int, site_id: string, start_time: int, stats: record, status: string, template_id: string, type: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -3028,7 +3028,7 @@ export def "org-tasks-log get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -3053,7 +3053,7 @@ export def "org-tasks-stop stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<agent_id: string, client_id: string, created_at: int, created_by: string, created_by_user_id: string, cruncher_id: string, description: string, error: string, hidden: bool, id: string, name: string, organization_id: string, params: record, parent_id: string, recur: bool, recur_frequency: string, recur_last: int, recur_last_task_id: string, recur_next: int, site_id: string, start_time: int, stats: record, status: string, template_id: string, type: string, updated_at: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }

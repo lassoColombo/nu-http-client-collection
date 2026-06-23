@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -145,8 +155,8 @@ export def commands []: nothing -> table {
 export def "androidpublisher-applications-internalappsharing-artifacts-apk create-uploadapk" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -165,7 +175,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-apk creat
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<certificateFingerprint: string, downloadUrl: string, sha256: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -182,8 +192,8 @@ export def "androidpublisher-applications-internalappsharing-artifacts-apk creat
 export def "androidpublisher-applications-internalappsharing-artifacts-bundle create-uploadbundle" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -202,7 +212,7 @@ export def "androidpublisher-applications-internalappsharing-artifacts-bundle cr
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<certificateFingerprint: string, downloadUrl: string, sha256: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -219,8 +229,8 @@ export def "androidpublisher-applications-internalappsharing-artifacts-bundle cr
 export def "androidpublisher-applications-device-tier-configs list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -241,7 +251,7 @@ export def "androidpublisher-applications-device-tier-configs list" [
   --page-size: int # The maximum number of device tier configs to return. The service may return fewer than this value. If unspecified, at most 10 device tier configs will be returned. The maximum value for this field is 100; values above 100 will be coerced to 100. Device tier configs will be ordered by descending creation time.
   --page-token: string # A page token, received from a previous `ListDeviceTierConfigs` call. Provide this to retrieve the subsequent page.
 ]: nothing -> record<deviceTierConfigs: table<deviceGroups: list, deviceTierConfigId: string, deviceTierSet: record, userCountrySets: list>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -261,8 +271,8 @@ export def "androidpublisher-applications-device-tier-configs list" [
 export def "androidpublisher-applications-device-tier-configs create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -286,7 +296,7 @@ export def "androidpublisher-applications-device-tier-configs create" [
   --user-country-sets: list # Definition of user country sets for the app. — item shape: {countryCodes?: list<string>, name?: string}
 ]: any -> record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "allowUnknownDevices" $allow_unknown_devices "scalar")] | flatten | str join "&"
@@ -306,8 +316,8 @@ export def "androidpublisher-applications-device-tier-configs get" [
   package_name: string
   device_tier_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -326,7 +336,7 @@ export def "androidpublisher-applications-device-tier-configs get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<deviceGroups: table<deviceSelectors: list, name: string>, deviceTierConfigId: string, deviceTierSet: record<deviceTiers: list<record>>, userCountrySets: table<countryCodes: list, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($device_tier_config_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceTierConfigId' must be non-empty" } }
@@ -344,8 +354,8 @@ export def "androidpublisher-applications-device-tier-configs get" [
 export def "androidpublisher-applications-edits create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -366,7 +376,7 @@ export def "androidpublisher-applications-edits create" [
   --body: record
 ]: any -> record<expiryTimeSeconds: string, id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -386,8 +396,8 @@ export def "androidpublisher-applications-edits delete" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -406,7 +416,7 @@ export def "androidpublisher-applications-edits delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -425,8 +435,8 @@ export def "androidpublisher-applications-edits get" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -445,7 +455,7 @@ export def "androidpublisher-applications-edits get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<expiryTimeSeconds: string, id: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -464,8 +474,8 @@ export def "androidpublisher-applications-edits-apks list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -484,7 +494,7 @@ export def "androidpublisher-applications-edits-apks list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<apks: table<binary: record, versionCode: int>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -503,8 +513,8 @@ export def "androidpublisher-applications-edits-apks upload" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -523,7 +533,7 @@ export def "androidpublisher-applications-edits-apks upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<binary: record<sha1: string, sha256: string>, versionCode: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -543,8 +553,8 @@ export def "androidpublisher-applications-edits-apks-externally-hosted create-ad
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -565,7 +575,7 @@ export def "androidpublisher-applications-edits-apks-externally-hosted create-ad
   --externally-hosted-apk: record # Defines an APK available for this application that is hosted externally and not uploaded to Google Play. This function is only available to organizations using Managed Play whose application is configured to restrict distribution to the organizations. — shape: {applicationLabel?: string, certificateBase64s?: list<string>, externallyHostedUrl?: string, fileSha1Base64?: string, fileSha256Base64?: string, fileSize?: string, iconBase64?: string, maximumSdk?: int, minimumSdk?: int, nativeCodes?: list<string>, packageName?: string, usesFeatures?: list<string>, usesPermissions?: list, versionCode?: int, versionName?: string}
 ]: any -> record<externallyHostedApk: record<applicationLabel: string, certificateBase64s: list<string>, externallyHostedUrl: string, fileSha1Base64: string, fileSha256Base64: string, fileSize: string, iconBase64: string, maximumSdk: int, minimumSdk: int, nativeCodes: list<string>, packageName: string, usesFeatures: list<string>, usesPermissions: list<record>, versionCode: int, versionName: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -588,8 +598,8 @@ export def "androidpublisher-applications-edits-apks-deobfuscation-files upload"
   apk_version_code: int
   deobfuscation_file_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -608,7 +618,7 @@ export def "androidpublisher-applications-edits-apks-deobfuscation-files upload"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<deobfuscationFile: record<symbolType: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -631,8 +641,8 @@ export def "androidpublisher-applications-edits-apks-expansion-files get" [
   apk_version_code: int
   expansion_file_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -651,7 +661,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<fileSize: string, referencesVersion: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -674,8 +684,8 @@ export def "androidpublisher-applications-edits-apks-expansion-files update-by-p
   apk_version_code: int
   expansion_file_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -697,7 +707,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files update-by-p
   --references-version: int # If set, this APK's expansion file references another APK's expansion file. The file_size field will not be set. (format: int32)
 ]: any -> record<fileSize: string, referencesVersion: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -722,8 +732,8 @@ export def "androidpublisher-applications-edits-apks-expansion-files upload" [
   apk_version_code: int
   expansion_file_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -742,7 +752,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<expansionFile: record<fileSize: string, referencesVersion: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -765,8 +775,8 @@ export def "androidpublisher-applications-edits-apks-expansion-files update-by-p
   apk_version_code: int
   expansion_file_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -788,7 +798,7 @@ export def "androidpublisher-applications-edits-apks-expansion-files update-by-p
   --references-version: int # If set, this APK's expansion file references another APK's expansion file. The file_size field will not be set. (format: int32)
 ]: any -> record<fileSize: string, referencesVersion: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -811,8 +821,8 @@ export def "androidpublisher-applications-edits-bundles list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -831,7 +841,7 @@ export def "androidpublisher-applications-edits-bundles list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<bundles: table<sha1: string, sha256: string, versionCode: int>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -850,8 +860,8 @@ export def "androidpublisher-applications-edits-bundles upload" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -872,7 +882,7 @@ export def "androidpublisher-applications-edits-bundles upload" [
   --ack-bundle-installation-warning: oneof<nothing, bool> # Must be set to true if the app bundle installation may trigger a warning on user devices (for example, if installation size may be over a threshold, typically 100 MB).
   --device-tier-config-id: string # Device tier config (DTC) to be used for generating deliverables (APKs). Contains id of the DTC or "LATEST" for last uploaded DTC.
 ]: nothing -> record<sha1: string, sha256: string, versionCode: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -892,8 +902,8 @@ export def "androidpublisher-applications-edits-country-availability get" [
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -912,7 +922,7 @@ export def "androidpublisher-applications-edits-country-availability get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<countries: table<countryCode: string>, restOfWorld: bool, syncWithProduction: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -932,8 +942,8 @@ export def "androidpublisher-applications-edits-details get" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -952,7 +962,7 @@ export def "androidpublisher-applications-edits-details get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -971,8 +981,8 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -996,7 +1006,7 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
   --default-language: string # Default language code, in BCP 47 format (eg "en-US").
 ]: any -> record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1017,8 +1027,8 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1042,7 +1052,7 @@ export def "androidpublisher-applications-edits-details update-by-package-name-e
   --default-language: string # Default language code, in BCP 47 format (eg "en-US").
 ]: any -> record<contactEmail: string, contactPhone: string, contactWebsite: string, defaultLanguage: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1063,8 +1073,8 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1083,7 +1093,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1102,8 +1112,8 @@ export def "androidpublisher-applications-edits-listings list-by-package-name-ed
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1122,7 +1132,7 @@ export def "androidpublisher-applications-edits-listings list-by-package-name-ed
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, listings: table<fullDescription: string, language: string, shortDescription: string, title: string, video: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1142,8 +1152,8 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   edit_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1162,7 +1172,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1183,8 +1193,8 @@ export def "androidpublisher-applications-edits-listings get" [
   edit_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1203,7 +1213,7 @@ export def "androidpublisher-applications-edits-listings get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<fullDescription: string, language: string, shortDescription: string, title: string, video: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1224,8 +1234,8 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
   edit_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1250,7 +1260,7 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
   --video: string # URL of a promotional YouTube video for the app.
 ]: any -> record<fullDescription: string, language: string, shortDescription: string, title: string, video: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1273,8 +1283,8 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
   edit_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1299,7 +1309,7 @@ export def "androidpublisher-applications-edits-listings update-by-package-name-
   --video: string # URL of a promotional YouTube video for the app.
 ]: any -> record<fullDescription: string, language: string, shortDescription: string, title: string, video: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1323,8 +1333,8 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   language: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1343,7 +1353,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<deleted: table<id: string, sha1: string, sha256: string, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1366,8 +1376,8 @@ export def "androidpublisher-applications-edits-listings list-by-package-name-ed
   language: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1386,7 +1396,7 @@ export def "androidpublisher-applications-edits-listings list-by-package-name-ed
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<images: table<id: string, sha1: string, sha256: string, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1409,8 +1419,8 @@ export def "androidpublisher-applications-edits-listings upload" [
   language: string
   image_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1429,7 +1439,7 @@ export def "androidpublisher-applications-edits-listings upload" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<image: record<id: string, sha1: string, sha256: string, url: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1453,8 +1463,8 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   image_type: string
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1473,7 +1483,7 @@ export def "androidpublisher-applications-edits-listings delete-by-package-name-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1496,8 +1506,8 @@ export def "androidpublisher-applications-edits-testers get" [
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1516,7 +1526,7 @@ export def "androidpublisher-applications-edits-testers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<googleGroups: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1537,8 +1547,8 @@ export def "androidpublisher-applications-edits-testers update-by-package-name-e
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1559,7 +1569,7 @@ export def "androidpublisher-applications-edits-testers update-by-package-name-e
   --google-groups: list<string> # All testing Google Groups, as email addresses.
 ]: any -> record<googleGroups: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1582,8 +1592,8 @@ export def "androidpublisher-applications-edits-testers update-by-package-name-e
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1604,7 +1614,7 @@ export def "androidpublisher-applications-edits-testers update-by-package-name-e
   --google-groups: list<string> # All testing Google Groups, as email addresses.
 ]: any -> record<googleGroups: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1626,8 +1636,8 @@ export def "androidpublisher-applications-edits-tracks list" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1646,7 +1656,7 @@ export def "androidpublisher-applications-edits-tracks list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, tracks: table<releases: list, track: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1666,8 +1676,8 @@ export def "androidpublisher-applications-edits-tracks get" [
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1686,7 +1696,7 @@ export def "androidpublisher-applications-edits-tracks get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1708,8 +1718,8 @@ export def "androidpublisher-applications-edits-tracks update-by-package-name-ed
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1731,7 +1741,7 @@ export def "androidpublisher-applications-edits-tracks update-by-package-name-ed
   --body-track: string # Identifier of the track. Form factor tracks have a special prefix as an identifier, for example `wear:production`, `automotive:production`. [More on track name](https://developers.google.com/android-publisher/tracks#ff-track-name)
 ]: any -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1755,8 +1765,8 @@ export def "androidpublisher-applications-edits-tracks update-by-package-name-ed
   edit_id: string
   track: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1778,7 +1788,7 @@ export def "androidpublisher-applications-edits-tracks update-by-package-name-ed
   --body-track: string # Identifier of the track. Form factor tracks have a special prefix as an identifier, for example `wear:production`, `automotive:production`. [More on track name](https://developers.google.com/android-publisher/tracks#ff-track-name)
 ]: any -> record<releases: table<countryTargeting: record, inAppUpdatePriority: int, name: string, releaseNotes: list, status: string, userFraction: float, versionCodes: list>, track: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1800,8 +1810,8 @@ export def "androidpublisher-applications-edits commit" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1821,7 +1831,7 @@ export def "androidpublisher-applications-edits commit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --changes-not-sent-for-review: oneof<nothing, bool> # Indicates that the changes in this edit will not be reviewed until they are explicitly sent for review from the Google Play Console UI. These changes will be added to any other changes that are not yet sent for review.
 ]: nothing -> record<expiryTimeSeconds: string, id: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1840,8 +1850,8 @@ export def "androidpublisher-applications-edits validate" [
   package_name: string
   edit_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1860,7 +1870,7 @@ export def "androidpublisher-applications-edits validate" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<expiryTimeSeconds: string, id: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($edit_id | is-empty) { error make --unspanned { msg: "path parameter 'editId' must be non-empty" } }
@@ -1879,8 +1889,8 @@ export def "androidpublisher-applications-generated-apks list" [
   package_name: string
   version_code: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1899,7 +1909,7 @@ export def "androidpublisher-applications-generated-apks list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<generatedApks: table<certificateSha256Hash: string, generatedAssetPackSlices: list, generatedSplitApks: list, generatedStandaloneApks: list, generatedUniversalApk: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($version_code | is-empty) { error make --unspanned { msg: "path parameter 'versionCode' must be non-empty" } }
@@ -1919,8 +1929,8 @@ export def "androidpublisher-applications-generated-apks-downloads download" [
   version_code: int
   download_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1939,7 +1949,7 @@ export def "androidpublisher-applications-generated-apks-downloads download" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($version_code | is-empty) { error make --unspanned { msg: "path parameter 'versionCode' must be non-empty" } }
@@ -1958,8 +1968,8 @@ export def "androidpublisher-applications-generated-apks-downloads download" [
 export def "androidpublisher-applications-inappproducts list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1981,7 +1991,7 @@ export def "androidpublisher-applications-inappproducts list" [
   --start-index: int # Deprecated and ignored. Set the `token` parameter to retrieve the next page.
   --qp-token: string # Pagination token. If empty, list starts at the first product.
 ]: nothing -> record<inappproduct: table<defaultLanguage: string, defaultPrice: record, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record, trialPeriod: string>, kind: string, pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, tokenPagination: record<nextPageToken: string, previousPageToken: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "token" $qp_token "scalar")] | flatten | str join "&"
@@ -2001,8 +2011,8 @@ export def "androidpublisher-applications-inappproducts list" [
 export def "androidpublisher-applications-inappproducts create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2036,7 +2046,7 @@ export def "androidpublisher-applications-inappproducts create" [
   --trial-period: string # Trial period, specified in ISO 8601 format. Acceptable values are anything between P7D (seven days) and P999D (999 days).
 ]: any -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "autoConvertMissingPrices" $auto_convert_missing_prices "scalar")] | flatten | str join "&"
@@ -2056,8 +2066,8 @@ export def "androidpublisher-applications-inappproducts delete" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2076,7 +2086,7 @@ export def "androidpublisher-applications-inappproducts delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -2095,8 +2105,8 @@ export def "androidpublisher-applications-inappproducts get" [
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2115,7 +2125,7 @@ export def "androidpublisher-applications-inappproducts get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -2137,8 +2147,8 @@ export def "androidpublisher-applications-inappproducts update-by-package-name-s
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2172,7 +2182,7 @@ export def "androidpublisher-applications-inappproducts update-by-package-name-s
   --trial-period: string # Trial period, specified in ISO 8601 format. Acceptable values are anything between P7D (seven days) and P999D (999 days).
 ]: any -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -2196,8 +2206,8 @@ export def "androidpublisher-applications-inappproducts update-by-package-name-s
   package_name: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2232,7 +2242,7 @@ export def "androidpublisher-applications-inappproducts update-by-package-name-s
   --trial-period: string # Trial period, specified in ISO 8601 format. Acceptable values are anything between P7D (seven days) and P999D (999 days).
 ]: any -> record<defaultLanguage: string, defaultPrice: record<currency: string, priceMicros: string>, gracePeriod: string, listings: record, managedProductTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, packageName: string, prices: record, purchaseType: string, sku: string, status: string, subscriptionPeriod: string, subscriptionTaxesAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>, trialPeriod: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($sku | is-empty) { error make --unspanned { msg: "path parameter 'sku' must be non-empty" } }
@@ -2253,8 +2263,8 @@ export def "androidpublisher-applications-orders create-refund" [
   package_name: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2274,7 +2284,7 @@ export def "androidpublisher-applications-orders create-refund" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --revoke: oneof<nothing, bool> # Whether to revoke the purchased item. If set to true, access to the subscription or in-app item will be terminated immediately. If the item is a recurring subscription, all future payments will also be terminated. Consumed in-app items need to be handled by developer's app. (optional).
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($order_id | is-empty) { error make --unspanned { msg: "path parameter 'orderId' must be non-empty" } }
@@ -2293,8 +2303,8 @@ export def "androidpublisher-applications-orders create-refund" [
 export def "androidpublisher-applications-pricing-convert-region-prices create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2315,7 +2325,7 @@ export def "androidpublisher-applications-pricing-convert-region-prices create" 
   --price: record # Represents an amount of money with its currency type. — shape: {currencyCode?: string, nanos?: int, units?: string}
 ]: any -> record<convertedOtherRegionsPrice: record<eurPrice: record<currencyCode: string, nanos: int, units: string>, usdPrice: record<currencyCode: string, nanos: int, units: string>>, convertedRegionPrices: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2336,8 +2346,8 @@ export def "androidpublisher-applications-purchases-products-tokens get" [
   product_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2356,7 +2366,7 @@ export def "androidpublisher-applications-purchases-products-tokens get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<acknowledgementState: int, consumptionState: int, developerPayload: string, kind: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string, orderId: string, productId: string, purchaseState: int, purchaseTimeMillis: string, purchaseToken: string, purchaseType: int, quantity: int, regionCode: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2377,8 +2387,8 @@ export def "androidpublisher-applications-purchases-products-tokens create-ackno
   product_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2399,7 +2409,7 @@ export def "androidpublisher-applications-purchases-products-tokens create-ackno
   --developer-payload: string # Payload to attach to the purchase.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2422,8 +2432,8 @@ export def "androidpublisher-applications-purchases-products-tokens create-consu
   product_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2442,7 +2452,7 @@ export def "androidpublisher-applications-purchases-products-tokens create-consu
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -2463,8 +2473,8 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens get" [
   subscription_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2483,7 +2493,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<acknowledgementState: int, autoRenewing: bool, autoResumeTimeMillis: string, cancelReason: int, cancelSurveyResult: record<cancelSurveyReason: int, userInputCancelReason: string>, countryCode: string, developerPayload: string, emailAddress: string, expiryTimeMillis: string, externalAccountId: string, familyName: string, givenName: string, introductoryPriceInfo: record<introductoryPriceAmountMicros: string, introductoryPriceCurrencyCode: string, introductoryPriceCycles: int, introductoryPricePeriod: string>, kind: string, linkedPurchaseToken: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string, orderId: string, paymentState: int, priceAmountMicros: string, priceChange: record<newPrice: record<currency: string, priceMicros: string>, state: int>, priceCurrencyCode: string, profileId: string, profileName: string, promotionCode: string, promotionType: int, purchaseType: int, startTimeMillis: string, userCancellationTimeMillis: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2504,8 +2514,8 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
   subscription_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2526,7 +2536,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
   --developer-payload: string # Payload to attach to the purchase.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2549,8 +2559,8 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens cancel"
   subscription_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2569,7 +2579,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens cancel"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2591,8 +2601,8 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
   subscription_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2613,7 +2623,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
   --deferral-info: record # A SubscriptionDeferralInfo contains the data needed to defer a subscription purchase to a future expiry time. — shape: {desiredExpiryTimeMillis?: string, expectedExpiryTimeMillis?: string}
 ]: any -> record<newExpiryTimeMillis: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2636,8 +2646,8 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
   subscription_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2656,7 +2666,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens create-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2677,8 +2687,8 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens delete"
   subscription_id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2697,7 +2707,7 @@ export def "androidpublisher-applications-purchases-subscriptions-tokens delete"
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -2717,8 +2727,8 @@ export def "androidpublisher-applications-purchases-subscriptionsv2-tokens get" 
   package_name: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2737,7 +2747,7 @@ export def "androidpublisher-applications-purchases-subscriptionsv2-tokens get" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<acknowledgementState: string, canceledStateContext: record<developerInitiatedCancellation: record, replacementCancellation: record, systemInitiatedCancellation: record, userInitiatedCancellation: record<cancelSurveyResult: record, cancelTime: string>>, externalAccountIdentifiers: record<externalAccountId: string, obfuscatedExternalAccountId: string, obfuscatedExternalProfileId: string>, kind: string, latestOrderId: string, lineItems: table<autoRenewingPlan: record, expiryTime: string, offerDetails: record, prepaidPlan: record, productId: string>, linkedPurchaseToken: string, pausedStateContext: record<autoResumeTime: string>, regionCode: string, startTime: string, subscribeWithGoogleInfo: record<emailAddress: string, familyName: string, givenName: string, profileId: string, profileName: string>, subscriptionState: string, testPurchase: record> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -2755,8 +2765,8 @@ export def "androidpublisher-applications-purchases-subscriptionsv2-tokens get" 
 export def "androidpublisher-applications-purchases-voidedpurchases list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2781,7 +2791,7 @@ export def "androidpublisher-applications-purchases-voidedpurchases list" [
   --qp-token: string # Defines the token of the page to return, usually taken from TokenPagination. This can only be used if token paging is enabled.
   --type: int # The type of voided purchases that you want to see in the response. Possible values are: 0. Only voided in-app product purchases will be returned in the response. This is the default value. 1. Both voided in-app purchases and voided subscription purchases will be returned in the response. Note: Before requesting to receive voided subscription purchases, you must switch to use orderId in the response which uniquely identifies one-time purchases and subscriptions. Otherwise, you will receive multiple subscription orders with the same PurchaseToken, because subscription renewal orders share the same PurchaseToken.
 ]: nothing -> record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, tokenPagination: record<nextPageToken: string, previousPageToken: string>, voidedPurchases: table<kind: string, orderId: string, purchaseTimeMillis: string, purchaseToken: string, voidedReason: int, voidedSource: int, voidedTimeMillis: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -2798,8 +2808,8 @@ export def "androidpublisher-applications-purchases-voidedpurchases list" [
 export def "androidpublisher-applications-reviews list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2822,7 +2832,7 @@ export def "androidpublisher-applications-reviews list" [
   --qp-token: string # Pagination token. If empty, list starts at the first review.
   --translation-language: string # Language localization code.
 ]: nothing -> record<pageInfo: record<resultPerPage: int, startIndex: int, totalResults: int>, reviews: table<authorName: string, comments: list, reviewId: string>, tokenPagination: record<nextPageToken: string, previousPageToken: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "token" $qp_token "scalar") (serialize-qp "translationLanguage" $translation_language "scalar")] | flatten | str join "&"
@@ -2840,8 +2850,8 @@ export def "androidpublisher-applications-reviews get" [
   package_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2861,7 +2871,7 @@ export def "androidpublisher-applications-reviews get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --translation-language: string # Language localization code.
 ]: nothing -> record<authorName: string, comments: table<developerComment: record, userComment: record>, reviewId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
@@ -2880,8 +2890,8 @@ export def "androidpublisher-applications-reviews create-reply" [
   package_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2902,7 +2912,7 @@ export def "androidpublisher-applications-reviews create-reply" [
   --reply-text: string # The text to set as the reply. Replies of more than approximately 350 characters will be rejected. HTML tags will be stripped.
 ]: any -> record<result: record<lastEdited: record<nanos: int, seconds: string>, replyText: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
@@ -2922,8 +2932,8 @@ export def "androidpublisher-applications-reviews create-reply" [
 export def "androidpublisher-applications-subscriptions list" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2945,7 +2955,7 @@ export def "androidpublisher-applications-subscriptions list" [
   --page-token: string # A page token, received from a previous `ListSubscriptions` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListSubscriptions` must match the call that provided the page token.
   --show-archived: oneof<nothing, bool> # Whether archived subscriptions should be included in the response. Defaults to false.
 ]: nothing -> record<nextPageToken: string, subscriptions: table<archived: bool, basePlans: list, listings: list, packageName: string, productId: string, taxAndComplianceSettings: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "showArchived" $show_archived "scalar")] | flatten | str join "&"
@@ -2965,8 +2975,8 @@ export def "androidpublisher-applications-subscriptions list" [
 export def "androidpublisher-applications-subscriptions create" [
   package_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2993,7 +3003,7 @@ export def "androidpublisher-applications-subscriptions create" [
   --tax-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 ]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "productId" $product_id "scalar") (serialize-qp "regionsVersion.version" $regions_version_version "scalar")] | flatten | str join "&"
@@ -3013,8 +3023,8 @@ export def "androidpublisher-applications-subscriptions delete" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3033,7 +3043,7 @@ export def "androidpublisher-applications-subscriptions delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3052,8 +3062,8 @@ export def "androidpublisher-applications-subscriptions get" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3072,7 +3082,7 @@ export def "androidpublisher-applications-subscriptions get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3094,8 +3104,8 @@ export def "androidpublisher-applications-subscriptions update" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3122,7 +3132,7 @@ export def "androidpublisher-applications-subscriptions update" [
   --tax-and-compliance-settings: record # Details about taxation, Google Play policy and legal compliance for subscription products. — shape: {eeaWithdrawalRightType?: "WITHDRAWAL_RIGHT_TYPE_UNSPECIFIED"|"WITHDRAWAL_RIGHT_DIGITAL_CONTENT"|"WITHDRAWAL_RIGHT_SERVICE", taxRateInfoByRegionCode?: record}
 ]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3144,8 +3154,8 @@ export def "androidpublisher-applications-subscriptions-base-plans delete" [
   product_id: string
   base_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3164,7 +3174,7 @@ export def "androidpublisher-applications-subscriptions-base-plans delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3185,8 +3195,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers list" 
   product_id: string
   base_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3207,7 +3217,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers list" 
   --page-size: int # The maximum number of subscriptions to return. The service may return fewer than this value. If unspecified, at most 50 subscriptions will be returned. The maximum value is 1000; values above 1000 will be coerced to 1000.
   --page-token: string # A page token, received from a previous `ListSubscriptionsOffers` call. Provide this to retrieve the subsequent page. When paginating, all other parameters provided to `ListSubscriptionOffers` must match the call that provided the page token.
 ]: nothing -> record<nextPageToken: string, subscriptionOffers: table<basePlanId: string, offerId: string, offerTags: list, otherRegionsConfig: record, packageName: string, phases: list, productId: string, regionalConfigs: list, state: string, targeting: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3233,8 +3243,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
   product_id: string
   base_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3265,7 +3275,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
   --targeting: record # Defines the rule a user needs to satisfy to receive this offer. — shape: {acquisitionRule?: record, upgradeRule?: record}
 ]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3289,8 +3299,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers delete
   base_plan_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3309,7 +3319,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers delete
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3332,8 +3342,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers get" [
   base_plan_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3352,7 +3362,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3380,8 +3390,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers update
   base_plan_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3412,7 +3422,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers update
   --targeting: record # Defines the rule a user needs to satisfy to receive this offer. — shape: {acquisitionRule?: record, upgradeRule?: record}
 ]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3437,8 +3447,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
   base_plan_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3459,7 +3469,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
   --body: record
 ]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3484,8 +3494,8 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
   base_plan_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3506,7 +3516,7 @@ export def "androidpublisher-applications-subscriptions-base-plans-offers create
   --body: record
 ]: any -> record<basePlanId: string, offerId: string, offerTags: table<tag: string>, otherRegionsConfig: record<otherRegionsNewSubscriberAvailability: bool>, packageName: string, phases: table<duration: string, otherRegionsConfig: record, recurrenceCount: int, regionalConfigs: list>, productId: string, regionalConfigs: table<newSubscriberAvailability: bool, regionCode: string>, state: string, targeting: record<acquisitionRule: record<scope: record>, upgradeRule: record<billingPeriodDuration: string, oncePerUser: bool, scope: record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3530,8 +3540,8 @@ export def "androidpublisher-applications-subscriptions-base-plans create-activa
   product_id: string
   base_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3552,7 +3562,7 @@ export def "androidpublisher-applications-subscriptions-base-plans create-activa
   --body: record
 ]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3575,8 +3585,8 @@ export def "androidpublisher-applications-subscriptions-base-plans create-deacti
   product_id: string
   base_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3597,7 +3607,7 @@ export def "androidpublisher-applications-subscriptions-base-plans create-deacti
   --body: record
 ]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3622,8 +3632,8 @@ export def "androidpublisher-applications-subscriptions-base-plans create-migrat
   product_id: string
   base_plan_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3645,7 +3655,7 @@ export def "androidpublisher-applications-subscriptions-base-plans create-migrat
   --regions-version: record # The version of the available regions being used for the specified resource. — shape: {version?: string}
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3667,8 +3677,8 @@ export def "androidpublisher-applications-subscriptions archive" [
   package_name: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3689,7 +3699,7 @@ export def "androidpublisher-applications-subscriptions archive" [
   --body: record
 ]: any -> record<archived: bool, basePlans: table<autoRenewingBasePlanType: record, basePlanId: string, offerTags: list, otherRegionsConfig: record, prepaidBasePlanType: record, regionalConfigs: list, state: string>, listings: table<benefits: list, description: string, languageCode: string, title: string>, packageName: string, productId: string, taxAndComplianceSettings: record<eeaWithdrawalRightType: string, taxRateInfoByRegionCode: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'productId' must be non-empty" } }
@@ -3710,8 +3720,8 @@ export def "androidpublisher-applications-system-apks-variants list" [
   package_name: string
   version_code: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3730,7 +3740,7 @@ export def "androidpublisher-applications-system-apks-variants list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<variants: table<deviceSpec: record, variantId: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($version_code | is-empty) { error make --unspanned { msg: "path parameter 'versionCode' must be non-empty" } }
@@ -3750,8 +3760,8 @@ export def "androidpublisher-applications-system-apks-variants create" [
   package_name: string
   version_code: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3772,7 +3782,7 @@ export def "androidpublisher-applications-system-apks-variants create" [
   --device-spec: record # The device spec used to generate a system APK. — shape: {screenDensity?: int, supportedAbis?: list<string>, supportedLocales?: list<string>}
 ]: any -> record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($version_code | is-empty) { error make --unspanned { msg: "path parameter 'versionCode' must be non-empty" } }
@@ -3794,8 +3804,8 @@ export def "androidpublisher-applications-system-apks-variants get" [
   version_code: string
   variant_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3814,7 +3824,7 @@ export def "androidpublisher-applications-system-apks-variants get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<deviceSpec: record<screenDensity: int, supportedAbis: list<string>, supportedLocales: list<string>>, variantId: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($version_code | is-empty) { error make --unspanned { msg: "path parameter 'versionCode' must be non-empty" } }
@@ -3835,8 +3845,8 @@ export def "androidpublisher-applications-system-apks-variants download" [
   version_code: string
   variant_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3855,7 +3865,7 @@ export def "androidpublisher-applications-system-apks-variants download" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($package_name | is-empty) { error make --unspanned { msg: "path parameter 'packageName' must be non-empty" } }
   if ($version_code | is-empty) { error make --unspanned { msg: "path parameter 'versionCode' must be non-empty" } }
@@ -3874,8 +3884,8 @@ export def "androidpublisher-applications-system-apks-variants download" [
 export def "androidpublisher delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3894,7 +3904,7 @@ export def "androidpublisher delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3911,8 +3921,8 @@ export def "androidpublisher delete" [
 export def "androidpublisher get-externaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3931,7 +3941,7 @@ export def "androidpublisher get-externaltransaction" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3949,8 +3959,8 @@ export def "androidpublisher get-externaltransaction" [
 export def "androidpublisher update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3975,7 +3985,7 @@ export def "androidpublisher update" [
   --body-name: string # Required. Resource name for this user, following the pattern "developers/{developer}/users/{email}".
 ]: any -> record<accessState: string, developerAccountPermissions: list<string>, email: string, expirationTime: string, grants: table<appLevelPermissions: list, name: string, packageName: string>, name: string, partial: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -3995,8 +4005,8 @@ export def "androidpublisher update" [
 export def "androidpublisher create-refundexternaltransaction" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4019,7 +4029,7 @@ export def "androidpublisher create-refundexternaltransaction" [
   --refund-time: string # Required. The time that the transaction was refunded. (format: google-datetime)
 ]: any -> record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4045,8 +4055,8 @@ export def "androidpublisher create-refundexternaltransaction" [
 export def "androidpublisher-external-transactions create-externaltransaction" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4076,7 +4086,7 @@ export def "androidpublisher-external-transactions create-externaltransaction" [
   --user-tax-address: record # User's address for the external transaction. — shape: {regionCode?: string}
 ]: any -> record<createTime: string, currentPreTaxAmount: record<currency: string, priceMicros: string>, currentTaxAmount: record<currency: string, priceMicros: string>, externalTransactionId: string, oneTimeTransaction: record<externalTransactionToken: string>, originalPreTaxAmount: record<currency: string, priceMicros: string>, originalTaxAmount: record<currency: string, priceMicros: string>, packageName: string, recurringTransaction: record<externalSubscription: record<subscriptionType: string>, externalTransactionToken: string, initialExternalTransactionId: string>, testPurchase: record, transactionState: string, transactionTime: string, userTaxAddress: record<regionCode: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "externalTransactionId" $external_transaction_id "scalar")] | flatten | str join "&"
@@ -4095,8 +4105,8 @@ export def "androidpublisher-external-transactions create-externaltransaction" [
 export def "androidpublisher-grants create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4119,7 +4129,7 @@ export def "androidpublisher-grants create" [
   --package-name: string # Immutable. The package name of the app. This will be empty for draft apps.
 ]: any -> record<appLevelPermissions: list<string>, name: string, packageName: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4138,8 +4148,8 @@ export def "androidpublisher-grants create" [
 export def "androidpublisher-users list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4160,7 +4170,7 @@ export def "androidpublisher-users list" [
   --page-size: int # The maximum number of results to return. This must be set to -1 to disable pagination.
   --page-token: string # A token received from a previous call to this method, in order to retrieve further results.
 ]: nothing -> record<nextPageToken: string, users: table<accessState: string, developerAccountPermissions: list, email: string, expirationTime: string, grants: list, name: string, partial: bool>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -4178,8 +4188,8 @@ export def "androidpublisher-users list" [
 export def "androidpublisher-users create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4203,7 +4213,7 @@ export def "androidpublisher-users create" [
   --name: string # Required. Resource name for this user, following the pattern "developers/{developer}/users/{email}".
 ]: any -> record<accessState: string, developerAccountPermissions: list<string>, email: string, expirationTime: string, grants: table<appLevelPermissions: list, name: string, packageName: string>, name: string, partial: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_PLAY_ANDROID_DEVELOPER_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

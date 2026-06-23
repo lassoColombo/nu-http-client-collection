@@ -1449,7 +1449,7 @@ export def "tier2-viewing-bookings create-controller-make" [
   staff_id: string # The unique ID of the staff member this booking is with
   staff_name: string # The name of the staff member this booking is with
   start: string # The start time of the booking (format: date-time)
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)

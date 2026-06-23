@@ -153,7 +153,7 @@ export def "account get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<api: record, credits: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
@@ -179,7 +179,7 @@ export def "improve create" [
   --image-filename: string # Filename of the image, if not provided it will be autodetected form the submitted data. (e.g. car.jpg)
   --image-url: string # Source image URL. (If this parameter is present, the other image source parameters must be empty.) (e.g. https://www.remove.bg/example-hd.jpg)
   --tag: string # Images with the same tag are grouped together. (e.g. batch_1_2020)
-]: any -> any {
+]: any -> record<id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)

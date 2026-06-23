@@ -146,7 +146,7 @@ export def "articlesmedia-type-extension get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<articles: table<bite: string, categories: list, content: string, date: string, excerpt: string, featured: bool, id: string, lang: string, layout: string, meta_description: string, meta_title: string, path: string, published: bool, related: list, seo_keywords: string, sort: float, tags: list, title: string, title_short: string, topics: list, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
@@ -170,7 +170,7 @@ export def "blogmedia-type-extension get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<blog: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
@@ -194,7 +194,7 @@ export def "glossarymedia-type-extension get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<glossary: table<categories: list, content: string, date: string, excerpt: string, id: string, lang: string, layout: string, path: string, published: bool, sort: float, tags: list, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
@@ -218,7 +218,7 @@ export def "questionsmedia-type-extension get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<questions: table<categories: list, content: string, date: string, excerpt: string, id: string, lang: string, path: string, published: bool, sort: float, tags: list, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
@@ -242,7 +242,7 @@ export def "statesmedia-type-extension get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<states: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
@@ -266,7 +266,7 @@ export def "topicsmedia-type-extension get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<topics: table<articleorder: list, categories: list, content: string, date: string, excerpt: string, id: string, lang: string, layout: string, meta_description: string, meta_title: string, order: float, path: string, published: bool, sort: float, tags: list, title: string, url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type_extension | is-empty) { error make --unspanned { msg: "path parameter 'mediaTypeExtension' must be non-empty" } }
@@ -291,7 +291,7 @@ export def "blog get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<list<string>>, content: string, date: string, excerpt: string, id: string, lang: string, layout: string, meta_description: string, meta_title: string, path: string, published: bool, seo_keywords: string, sort: float, tags: list<list<any>>, title: string, topics: list<list<string>>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -317,7 +317,7 @@ export def "es-blog get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<list<string>>, content: string, date: string, excerpt: string, id: string, lang: string, layout: string, meta_description: string, meta_title: string, path: string, published: bool, seo_keywords: string, sort: float, tags: list<list<any>>, title: string, topics: list<list<string>>, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -343,7 +343,7 @@ export def "es-glossary get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<string>, content: string, date: string, excerpt: string, id: string, lang: string, layout: string, path: string, published: bool, sort: float, tags: list<string>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -369,7 +369,7 @@ export def "es-question get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<string>, content: string, date: string, excerpt: string, id: string, lang: string, path: string, published: bool, sort: float, tags: list<string>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -395,7 +395,7 @@ export def "es get-by-page-name-media-type-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<list<any>>, content: string, date: string, excerpt: string, experience: string, id: string, lang: string, layout: string, path: string, published: bool, sort: float, tags: list<list<any>>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -421,7 +421,7 @@ export def "es get-by-state-name-media-type-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<list<any>>, content: string, date: string, excerpt: string, id: string, lang: string, path: string, sort: float, stateurl: string, tags: list<list<string>>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($state_name | is-empty) { error make --unspanned { msg: "path parameter 'stateName' must be non-empty" } }
@@ -447,7 +447,7 @@ export def "glossary get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<string>, content: string, date: string, excerpt: string, id: string, lang: string, layout: string, path: string, published: bool, sort: float, tags: list<string>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -473,7 +473,7 @@ export def "question get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<string>, content: string, date: string, excerpt: string, id: string, lang: string, path: string, published: bool, sort: float, tags: list<string>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -499,7 +499,7 @@ export def "api get-by-page-name-media-type-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<list<any>>, content: string, date: string, excerpt: string, experience: string, id: string, lang: string, layout: string, path: string, published: bool, sort: float, tags: list<list<any>>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($page_name | is-empty) { error make --unspanned { msg: "path parameter 'pageName' must be non-empty" } }
@@ -525,7 +525,7 @@ export def "api get-by-state-name-media-type-extension" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: list<list<any>>, content: string, date: string, excerpt: string, id: string, lang: string, path: string, sort: float, stateurl: string, tags: list<list<string>>, title: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($state_name | is-empty) { error make --unspanned { msg: "path parameter 'stateName' must be non-empty" } }

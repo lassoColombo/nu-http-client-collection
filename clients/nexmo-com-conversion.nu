@@ -20,6 +20,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -143,8 +153,8 @@ export def commands []: nothing -> table {
 # operationId: smsConversion
 export def "sms create-conversion" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -155,7 +165,7 @@ export def "sms create-conversion" [
   --delivered: string@delivered-completer # Set to _true_ if your user replied to the message you sent. Otherwise, set to _false_. **Note**: for curl, use 0 and 1. (e.g. true)
   --timestamp: string # When the user completed your call-to-action (e.g. visited your website, installed your app) in [UTC±00:00](https://en.wikipedia.org/wiki/UTC%C2%B100:00) format: _yyyy-MM-dd HH:mm:ss_. If you do not set this parameter, Nexmo uses the time it receives this request. (e.g. 2020-01-01 12:00:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEXMO_CONVERSION_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NEXMO_CONVERSION_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "message-id" $message_id "scalar") (serialize-qp "delivered" $delivered "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sms" $qp)
@@ -170,8 +180,8 @@ export def "sms create-conversion" [
 # operationId: voiceConversion
 export def "voice create-conversion" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -182,7 +192,7 @@ export def "voice create-conversion" [
   --delivered: string@delivered-completer # Set to _true_ if your user replied to the message you sent. Otherwise, set to _false_. **Note**: for curl, use 0 and 1. (e.g. true)
   --timestamp: string # When the user completed your call-to-action (e.g. visited your website, installed your app) in [UTC±00:00](https://en.wikipedia.org/wiki/UTC%C2%B100:00) format: _yyyy-MM-dd HH:mm:ss_. If you do not set this parameter, Nexmo uses the time it receives this request. (e.g. 2020-01-01 12:00:00)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEXMO_CONVERSION_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NEXMO_CONVERSION_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "message-id" $message_id "scalar") (serialize-qp "delivered" $delivered "scalar") (serialize-qp "timestamp" $timestamp "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/voice" $qp)

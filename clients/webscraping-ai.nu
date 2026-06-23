@@ -184,7 +184,7 @@ export def "html get" [
   --device: string@device-completer # Type of device emulation. (default: desktop, e.g. desktop)
   --error-on-404: oneof<nothing, bool> # Return error on 404 HTTP status on the target page (false by default). (default: false, e.g. false)
   --error-on-redirect: oneof<nothing, bool> # Return error on redirect on the target page (false by default). (default: false, e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"
@@ -219,7 +219,7 @@ export def "selected get" [
   --device: string@device-completer # Type of device emulation. (default: desktop, e.g. desktop)
   --error-on-404: oneof<nothing, bool> # Return error on 404 HTTP status on the target page (false by default). (default: false, e.g. false)
   --error-on-redirect: oneof<nothing, bool> # Return error on redirect on the target page (false by default). (default: false, e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "selector" $selector "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "headers" $headers "multi") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "js" $js "scalar") (serialize-qp "js_timeout" $js_timeout "scalar") (serialize-qp "proxy" $proxy "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "device" $device "scalar") (serialize-qp "error_on_404" $error_on_404 "scalar") (serialize-qp "error_on_redirect" $error_on_redirect "scalar")] | flatten | str join "&"

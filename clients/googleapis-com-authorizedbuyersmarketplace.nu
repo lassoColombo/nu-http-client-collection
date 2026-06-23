@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -144,8 +154,8 @@ export def commands []: nothing -> table {
 export def "buyers subscribe-clients" [
   auction_package: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -166,7 +176,7 @@ export def "buyers subscribe-clients" [
   --clients: list<string> # Optional. A list of client buyers to subscribe to the auction package, with client buyer in the format `buyers/{accountId}/clients/{clientAccountId}`. The current buyer will be subscribed to the auction package regardless of the list contents if not already.
 ]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($auction_package | is-empty) { error make --unspanned { msg: "path parameter 'auctionPackage' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -185,8 +195,8 @@ export def "buyers subscribe-clients" [
 export def "buyers unsubscribe-clients" [
   auction_package: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -207,7 +217,7 @@ export def "buyers unsubscribe-clients" [
   --clients: list<string> # Optional. A list of client buyers to unsubscribe from the auction package, with client buyer in the format `buyers/{accountId}/clients/{clientAccountId}`.
 ]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($auction_package | is-empty) { error make --unspanned { msg: "path parameter 'auctionPackage' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -232,8 +242,8 @@ export def "buyers unsubscribe-clients" [
 export def "proposals-send-rfp send" [
   buyer: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -265,7 +275,7 @@ export def "proposals-send-rfp send" [
   --publisher-profile: string # Required. The profile of the publisher who will receive this RFP in the format: `buyers/{accountId}/publisherProfiles/{publisherProfileId}`.
 ]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($buyer | is-empty) { error make --unspanned { msg: "path parameter 'buyer' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -284,8 +294,8 @@ export def "proposals-send-rfp send" [
 export def "buyers create-creative" [
   deal: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -306,7 +316,7 @@ export def "buyers create-creative" [
   --creative: string # Name of the creative to add to the finalized deal, in the format `buyers/{buyerAccountId}/creatives/{creativeId}`. See creative.name.
 ]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($deal | is-empty) { error make --unspanned { msg: "path parameter 'deal' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -325,8 +335,8 @@ export def "buyers create-creative" [
 export def "buyers update-ready-to-serve" [
   deal: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -347,7 +357,7 @@ export def "buyers update-ready-to-serve" [
   --body: record
 ]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($deal | is-empty) { error make --unspanned { msg: "path parameter 'deal' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -366,8 +376,8 @@ export def "buyers update-ready-to-serve" [
 export def "buyers delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -386,7 +396,7 @@ export def "buyers delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -403,8 +413,8 @@ export def "buyers delete" [
 export def "buyers get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -423,7 +433,7 @@ export def "buyers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<audienceDescription: string, directDealsContact: string, displayName: string, domains: list<string>, isParent: bool, logoUrl: string, mediaKitUrl: string, mobileApps: table<appStore: string, externalAppId: string, name: string>, name: string, overview: string, pitchStatement: string, programmaticDealsContact: string, publisherCode: string, samplePageUrl: string, topHeadlines: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -446,8 +456,8 @@ export def "buyers get" [
 export def "buyers update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -480,7 +490,7 @@ export def "buyers update" [
   --targeting: record # Targeting represents different criteria that can be used to target inventory. For example, they can choose to target inventory only if the user is in the US. Multiple types of targeting are always applied as a logical AND, unless noted otherwise. — shape: {daypartTargeting?: record, geoTargeting?: record, inventorySizeTargeting?: record, inventoryTypeTargeting?: record, placementTargeting?: record, technologyTargeting?: record, userListTargeting?: record, videoTargeting?: record}
 ]: any -> record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list<record>, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record<amount: record, type: string>>, privateAuctionTerms: record<floorPrice: record<amount: record, type: string>, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record<amount: record, type: string>, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record<dayParts: list, timeZoneType: string>, geoTargeting: record<excludedCriteriaIds: list, targetedCriteriaIds: list>, inventorySizeTargeting: record<excludedInventorySizes: list, targetedInventorySizes: list>, inventoryTypeTargeting: record<inventoryTypes: list>, placementTargeting: record<mobileApplicationTargeting: record, uriTargeting: record>, technologyTargeting: record<deviceCapabilityTargeting: record, deviceCategoryTargeting: record, operatingSystemTargeting: record>, userListTargeting: record<excludedCriteriaIds: list, targetedCriteriaIds: list>, videoTargeting: record<excludedPositionTypes: list, targetedPositionTypes: list>>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -499,8 +509,8 @@ export def "buyers update" [
 export def "buyers create-accept" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -521,7 +531,7 @@ export def "buyers create-accept" [
   --proposal-revision: string # The last known client revision number of the proposal. (format: int64)
 ]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -540,8 +550,8 @@ export def "buyers create-accept" [
 export def "buyers create-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -562,7 +572,7 @@ export def "buyers create-activate" [
   --body: record
 ]: any -> record<email: string, name: string, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -581,8 +591,8 @@ export def "buyers create-activate" [
 export def "buyers create-deactivate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -603,7 +613,7 @@ export def "buyers create-deactivate" [
   --body: record
 ]: any -> record<email: string, name: string, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -622,8 +632,8 @@ export def "buyers create-deactivate" [
 export def "buyers pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -644,7 +654,7 @@ export def "buyers pause" [
   --reason: string # The reason to pause the finalized deal, will be displayed to the seller. Maximum length is 1000 characters.
 ]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -663,8 +673,8 @@ export def "buyers pause" [
 export def "buyers create-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -685,7 +695,7 @@ export def "buyers create-resume" [
   --body: record
 ]: any -> record<deal: record<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record<creativeFormat: string, creativePreApprovalPolicy: string, creativeSafeFrameCompatibility: string, maxAdDurationMs: string, programmaticCreativeSource: string, skippableAdType: string>, dealType: string, deliveryControl: record<companionDeliveryType: string, creativeRotationType: string, deliveryRateType: string, frequencyCap: list, roadblockingType: string>, description: string, displayName: string, estimatedGrossSpend: record<currencyCode: string, nanos: int, units: string>, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record<fixedPrice: record>, privateAuctionTerms: record<floorPrice: record, openAuctionAllowed: bool>, programmaticGuaranteedTerms: record<fixedPrice: record, guaranteedLooks: string, impressionCap: string, minimumDailyLooks: string, percentShareOfVoice: string, reservationType: string>, proposalRevision: string, publisherProfile: string, sellerTimeZone: record<id: string, version: string>, targeting: record<daypartTargeting: record, geoTargeting: record, inventorySizeTargeting: record, inventoryTypeTargeting: record, placementTargeting: record, technologyTargeting: record, userListTargeting: record, videoTargeting: record>, updateTime: string>, dealPausingInfo: record<pauseReason: string, pauseRole: string, pausingConsented: bool>, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record<adImpressions7Days: string, bidRate7Days: float, bidRequests7Days: string, bids7Days: string, filteredBidRate7Days: float, mustBidRateCurrentMonth: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -704,8 +714,8 @@ export def "buyers create-resume" [
 export def "buyers subscribe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -726,7 +736,7 @@ export def "buyers subscribe" [
   --body: record
 ]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -745,8 +755,8 @@ export def "buyers subscribe" [
 export def "buyers unsubscribe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -767,7 +777,7 @@ export def "buyers unsubscribe" [
   --body: record
 ]: any -> record<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list<string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -786,8 +796,8 @@ export def "buyers unsubscribe" [
 export def "auction-packages list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -808,7 +818,7 @@ export def "auction-packages list" [
   --page-size: int # Requested page size. The server may return fewer results than requested. Max allowed page size is 500.
   --page-token: string # The page token as returned. ListAuctionPackagesResponse.nextPageToken
 ]: nothing -> record<auctionPackages: table<createTime: string, creator: string, description: string, displayName: string, name: string, subscribedClients: list, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -825,8 +835,8 @@ export def "auction-packages list" [
 export def "clients list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -848,7 +858,7 @@ export def "clients list" [
   --page-size: int # Requested page size. If left blank, a default page size of 500 will be applied.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of ListClientsResponse.nextPageToken returned from the previous call to the list method.
 ]: nothing -> record<clients: table<displayName: string, name: string, partnerClientId: string, role: string, sellerVisible: bool, state: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -865,8 +875,8 @@ export def "clients list" [
 export def "clients create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -890,7 +900,7 @@ export def "clients create" [
   --seller-visible: oneof<nothing, bool> # Whether the client will be visible to sellers.
 ]: any -> record<displayName: string, name: string, partnerClientId: string, role: string, sellerVisible: bool, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -909,8 +919,8 @@ export def "clients create" [
 export def "deals list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -931,7 +941,7 @@ export def "deals list" [
   --page-size: int # Requested page size. The server may return fewer results than requested. If requested more than 500, the server will return 500 results per page. If unspecified, the server will pick a default page size of 100.
   --page-token: string # The page token as returned from ListDealsResponse.
 ]: nothing -> record<deals: table<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record, dealType: string, deliveryControl: record, description: string, displayName: string, estimatedGrossSpend: record, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record, privateAuctionTerms: record, programmaticGuaranteedTerms: record, proposalRevision: string, publisherProfile: string, sellerTimeZone: record, targeting: record, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -949,8 +959,8 @@ export def "deals list" [
 export def "deals-batch-update update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -971,7 +981,7 @@ export def "deals-batch-update update" [
   --requests: list # Required. List of request messages to update deals. — item shape: {deal?: record, updateMask?: string}
 ]: any -> record<deals: table<billedBuyer: string, buyer: string, client: string, createTime: string, creativeRequirements: record, dealType: string, deliveryControl: record, description: string, displayName: string, estimatedGrossSpend: record, flightEndTime: string, flightStartTime: string, name: string, preferredDealTerms: record, privateAuctionTerms: record, programmaticGuaranteedTerms: record, proposalRevision: string, publisherProfile: string, sellerTimeZone: record, targeting: record, updateTime: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -990,8 +1000,8 @@ export def "deals-batch-update update" [
 export def "finalized-deals list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1014,7 +1024,7 @@ export def "finalized-deals list" [
   --page-size: int # Requested page size. The server may return fewer results than requested. If requested more than 500, the server will return 500 results per page. If unspecified, the server will pick a default page size of 100.
   --page-token: string # The page token as returned from ListFinalizedDealsResponse.
 ]: nothing -> record<finalizedDeals: table<deal: record, dealPausingInfo: record, dealServingStatus: string, name: string, readyToServe: bool, rtbMetrics: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1031,8 +1041,8 @@ export def "finalized-deals list" [
 export def "proposals list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1054,7 +1064,7 @@ export def "proposals list" [
   --page-size: int # Requested page size. The server may return fewer results than requested. If unspecified, the server will put a size of 500.
   --page-token: string # The page token as returned from ListProposalsResponse.
 ]: nothing -> record<nextPageToken: string, proposals: table<billedBuyer: string, buyer: string, buyerContacts: list, buyerPrivateData: record, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: list, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: list, state: string, termsAndConditions: string, updateTime: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1071,8 +1081,8 @@ export def "proposals list" [
 export def "publisher-profiles list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1094,7 +1104,7 @@ export def "publisher-profiles list" [
   --page-size: int # Requested page size. The server may return fewer results than requested. If requested more than 500, the server will return 500 results per page. If unspecified, the server will pick a default page size of 100.
   --page-token: string # The page token as returned from a previous ListPublisherProfilesResponse.
 ]: nothing -> record<nextPageToken: string, publisherProfiles: table<audienceDescription: string, directDealsContact: string, displayName: string, domains: list, isParent: bool, logoUrl: string, mediaKitUrl: string, mobileApps: list, name: string, overview: string, pitchStatement: string, programmaticDealsContact: string, publisherCode: string, samplePageUrl: string, topHeadlines: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1111,8 +1121,8 @@ export def "publisher-profiles list" [
 export def "users list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1133,7 +1143,7 @@ export def "users list" [
   --page-size: int # Requested page size. If left blank, a default page size of 500 will be applied.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of ListClientUsersResponse.nextPageToken returned from the previous call to the list method.
 ]: nothing -> record<clientUsers: table<email: string, name: string, state: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1150,8 +1160,8 @@ export def "users list" [
 export def "users create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1172,7 +1182,7 @@ export def "users create" [
   --email: string # Required. The client user's email address that has to be unique across all users for the same client.
 ]: any -> record<email: string, name: string, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1192,8 +1202,8 @@ export def "users create" [
 export def "buyers create-note" [
   proposal: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1214,7 +1224,7 @@ export def "buyers create-note" [
   --note: record # A text note attached to the proposal to facilitate the communication between buyers and sellers. — shape: {note?: string}
 ]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($proposal | is-empty) { error make --unspanned { msg: "path parameter 'proposal' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1233,8 +1243,8 @@ export def "buyers create-note" [
 export def "buyers cancel-negotiation" [
   proposal: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1255,7 +1265,7 @@ export def "buyers cancel-negotiation" [
   --body: record
 ]: any -> record<billedBuyer: string, buyer: string, buyerContacts: table<displayName: string, email: string>, buyerPrivateData: record<referenceId: string>, client: string, dealType: string, displayName: string, isRenegotiating: bool, lastUpdaterOrCommentorRole: string, name: string, notes: table<createTime: string, creatorRole: string, note: string>, originatorRole: string, pausingConsented: bool, proposalRevision: string, publisherProfile: string, sellerContacts: table<displayName: string, email: string>, state: string, termsAndConditions: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o AUTHORIZED_BUYERS_MARKETPLACE_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($proposal | is-empty) { error make --unspanned { msg: "path parameter 'proposal' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

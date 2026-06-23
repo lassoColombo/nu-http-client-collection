@@ -161,7 +161,7 @@ export def "2013-04-01-keysigningkey-activate create-key-signing-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hosted_zone_id | is-empty) { error make --unspanned { msg: "path parameter 'HostedZoneId' must be non-empty" } }
@@ -197,7 +197,7 @@ export def "2013-04-01-hostedzone-associatevpc create-associate-vpc-with-hosted-
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -235,7 +235,7 @@ export def "2013-04-01-cidrcollection create-change-cidr-collection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Id: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -272,7 +272,7 @@ export def "2013-04-01-cidrcollection delete-cidr-collection" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cidr_collection_id | is-empty) { error make --unspanned { msg: "path parameter 'CidrCollectionId' must be non-empty" } }
@@ -310,7 +310,7 @@ export def "2013-04-01-cidrcollection list-cidr-locations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<NextToken: record, CidrLocations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cidr_collection_id | is-empty) { error make --unspanned { msg: "path parameter 'CidrCollectionId' must be non-empty" } }
@@ -346,7 +346,7 @@ export def "2013-04-01-hostedzone-rrset create-change-resource-record-sets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -385,7 +385,7 @@ export def "2013-04-01-tags create-change-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -424,7 +424,7 @@ export def "2013-04-01-tags list-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ResourceTagSet: record<ResourceType: record, ResourceId: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($resource_type | is-empty) { error make --unspanned { msg: "path parameter 'ResourceType' must be non-empty" } }
@@ -459,7 +459,7 @@ export def "2013-04-01-cidrcollection create-cidr-collection" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Collection: record<Arn: record, Id: record, Name: record, Version: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -498,7 +498,7 @@ export def "2013-04-01-cidrcollection list-cidr-collections" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<NextToken: record, CidrCollections: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nexttoken" $nexttoken "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -532,7 +532,7 @@ export def "2013-04-01-healthcheck create-health-check" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HealthCheck: record<Id: record, CallerReference: record, LinkedService: record<ServicePrincipal: record, Description: record>, HealthCheckConfig: record<IPAddress: record, Port: record, Type: record, ResourcePath: record, FullyQualifiedDomainName: record, SearchString: record, RequestInterval: record, FailureThreshold: record, MeasureLatency: record, Inverted: record, Disabled: record, HealthThreshold: record, ChildHealthChecks: record, EnableSNI: record, Regions: record, AlarmIdentifier: record, InsufficientDataHealthStatus: record, RoutingControlArn: record>, HealthCheckVersion: record, CloudWatchAlarmConfiguration: record<EvaluationPeriods: record, Threshold: record, ComparisonOperator: record, Period: record, MetricName: record, Namespace: record, Statistic: record, Dimensions: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +571,7 @@ export def "2013-04-01-healthcheck list-health-checks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HealthChecks: record, Marker: record, IsTruncated: record, NextMarker: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "maxitems" $maxitems "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
@@ -605,7 +605,7 @@ export def "2013-04-01-hostedzone create-hosted-zone" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HostedZone: record<Id: record, Name: record, CallerReference: record, Config: record<Comment: record, PrivateZone: record>, ResourceRecordSetCount: record, LinkedService: record<ServicePrincipal: record, Description: record>>, ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>, DelegationSet: record<Id: record, CallerReference: record, NameServers: record>, VPC: record<VPCRegion: record, VPCId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -645,7 +645,7 @@ export def "2013-04-01-hostedzone list-hosted-zones" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HostedZones: record, Marker: record, IsTruncated: record, NextMarker: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "maxitems" $maxitems "scalar") (serialize-qp "delegationsetid" $delegationsetid "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Marker" $marker_2 "scalar")] | flatten | str join "&"
@@ -679,7 +679,7 @@ export def "2013-04-01-keysigningkey create-key-signing-key" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>, KeySigningKey: record<Name: record, KmsArn: record, Flag: record, SigningAlgorithmMnemonic: record, SigningAlgorithmType: record, DigestAlgorithmMnemonic: record, DigestAlgorithmType: record, KeyTag: record, DigestValue: record, PublicKey: record, DSRecord: record, DNSKEYRecord: record, Status: record, StatusMessage: record, CreatedDate: record, LastModifiedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -715,7 +715,7 @@ export def "2013-04-01-queryloggingconfig create-list-logging-config" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<QueryLoggingConfig: record<Id: record, HostedZoneId: record, CloudWatchLogsLogGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -755,7 +755,7 @@ export def "2013-04-01-queryloggingconfig list-logging-configs" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<QueryLoggingConfigs: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hostedzoneid" $hostedzoneid "scalar") (serialize-qp "nexttoken" $nexttoken "scalar") (serialize-qp "maxresults" $maxresults "scalar") (serialize-qp "MaxResults" $max_results "scalar") (serialize-qp "NextToken" $next_token "scalar")] | flatten | str join "&"
@@ -789,7 +789,7 @@ export def "2013-04-01-delegationset create-reusable-delegation-update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DelegationSet: record<Id: record, CallerReference: record, NameServers: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -826,7 +826,7 @@ export def "2013-04-01-delegationset list-reusable-delegation-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DelegationSets: record, Marker: record, IsTruncated: record, NextMarker: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "marker" $marker "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -860,7 +860,7 @@ export def "2013-04-01-trafficpolicy create-traffic-policy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TrafficPolicy: record<Id: record, Version: record, Name: record, Type: record, Document: record, Comment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -896,7 +896,7 @@ export def "2013-04-01-trafficpolicyinstance create-traffic-policy-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TrafficPolicyInstance: record<Id: record, HostedZoneId: record, Name: record, TTL: record, State: record, Message: record, TrafficPolicyId: record, TrafficPolicyVersion: record, TrafficPolicyType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -933,7 +933,7 @@ export def "2013-04-01-trafficpolicy create-traffic-policy-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TrafficPolicy: record<Id: record, Version: record, Name: record, Type: record, Document: record, Comment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -971,7 +971,7 @@ export def "2013-04-01-hostedzone-authorizevpcassociation create-vpc-association
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HostedZoneId: record, VPC: record<VPCRegion: record, VPCId: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1010,7 +1010,7 @@ export def "2013-04-01-hostedzone-authorizevpcassociation list-vpc-association-a
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HostedZoneId: record, NextToken: record, VPCs: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1046,7 +1046,7 @@ export def "2013-04-01-keysigningkey-deactivate create-key-signing-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hosted_zone_id | is-empty) { error make --unspanned { msg: "path parameter 'HostedZoneId' must be non-empty" } }
@@ -1081,7 +1081,7 @@ export def "2013-04-01-healthcheck delete-health-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($health_check_id | is-empty) { error make --unspanned { msg: "path parameter 'HealthCheckId' must be non-empty" } }
@@ -1115,7 +1115,7 @@ export def "2013-04-01-healthcheck get-health-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HealthCheck: record<Id: record, CallerReference: record, LinkedService: record<ServicePrincipal: record, Description: record>, HealthCheckConfig: record<IPAddress: record, Port: record, Type: record, ResourcePath: record, FullyQualifiedDomainName: record, SearchString: record, RequestInterval: record, FailureThreshold: record, MeasureLatency: record, Inverted: record, Disabled: record, HealthThreshold: record, ChildHealthChecks: record, EnableSNI: record, Regions: record, AlarmIdentifier: record, InsufficientDataHealthStatus: record, RoutingControlArn: record>, HealthCheckVersion: record, CloudWatchAlarmConfiguration: record<EvaluationPeriods: record, Threshold: record, ComparisonOperator: record, Period: record, MetricName: record, Namespace: record, Statistic: record, Dimensions: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($health_check_id | is-empty) { error make --unspanned { msg: "path parameter 'HealthCheckId' must be non-empty" } }
@@ -1150,7 +1150,7 @@ export def "2013-04-01-healthcheck update-health-check" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HealthCheck: record<Id: record, CallerReference: record, LinkedService: record<ServicePrincipal: record, Description: record>, HealthCheckConfig: record<IPAddress: record, Port: record, Type: record, ResourcePath: record, FullyQualifiedDomainName: record, SearchString: record, RequestInterval: record, FailureThreshold: record, MeasureLatency: record, Inverted: record, Disabled: record, HealthThreshold: record, ChildHealthChecks: record, EnableSNI: record, Regions: record, AlarmIdentifier: record, InsufficientDataHealthStatus: record, RoutingControlArn: record>, HealthCheckVersion: record, CloudWatchAlarmConfiguration: record<EvaluationPeriods: record, Threshold: record, ComparisonOperator: record, Period: record, MetricName: record, Namespace: record, Statistic: record, Dimensions: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1187,7 +1187,7 @@ export def "2013-04-01-hostedzone delete-hosted-zone" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1221,7 +1221,7 @@ export def "2013-04-01-hostedzone get-hosted-zone" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HostedZone: record<Id: record, Name: record, CallerReference: record, Config: record<Comment: record, PrivateZone: record>, ResourceRecordSetCount: record, LinkedService: record<ServicePrincipal: record, Description: record>>, DelegationSet: record<Id: record, CallerReference: record, NameServers: record>, VPCs: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1256,7 +1256,7 @@ export def "2013-04-01-hostedzone update-hosted-zone-comment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HostedZone: record<Id: record, Name: record, CallerReference: record, Config: record<Comment: record, PrivateZone: record>, ResourceRecordSetCount: record, LinkedService: record<ServicePrincipal: record, Description: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1294,7 +1294,7 @@ export def "2013-04-01-keysigningkey delete-key-signing-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($hosted_zone_id | is-empty) { error make --unspanned { msg: "path parameter 'HostedZoneId' must be non-empty" } }
@@ -1329,7 +1329,7 @@ export def "2013-04-01-queryloggingconfig delete-list-logging-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1363,7 +1363,7 @@ export def "2013-04-01-queryloggingconfig get-list-logging-config" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<QueryLoggingConfig: record<Id: record, HostedZoneId: record, CloudWatchLogsLogGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1397,7 +1397,7 @@ export def "2013-04-01-delegationset delete-reusable-delegation-update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1431,7 +1431,7 @@ export def "2013-04-01-delegationset get-reusable-delegation-update" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DelegationSet: record<Id: record, CallerReference: record, NameServers: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1466,7 +1466,7 @@ export def "2013-04-01-trafficpolicy delete-traffic-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1502,7 +1502,7 @@ export def "2013-04-01-trafficpolicy get-traffic-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicy: record<Id: record, Version: record, Name: record, Type: record, Document: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1539,7 +1539,7 @@ export def "2013-04-01-trafficpolicy update-traffic-policy-comment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TrafficPolicy: record<Id: record, Version: record, Name: record, Type: record, Document: record, Comment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1577,7 +1577,7 @@ export def "2013-04-01-trafficpolicyinstance delete-traffic-policy-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1611,7 +1611,7 @@ export def "2013-04-01-trafficpolicyinstance get-traffic-policy-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicyInstance: record<Id: record, HostedZoneId: record, Name: record, TTL: record, State: record, Message: record, TrafficPolicyId: record, TrafficPolicyVersion: record, TrafficPolicyType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1646,7 +1646,7 @@ export def "2013-04-01-trafficpolicyinstance update-traffic-policy-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TrafficPolicyInstance: record<Id: record, HostedZoneId: record, Name: record, TTL: record, State: record, Message: record, TrafficPolicyId: record, TrafficPolicyVersion: record, TrafficPolicyType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1684,7 +1684,7 @@ export def "2013-04-01-hostedzone-deauthorizevpcassociation delete-vpc-associati
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1721,7 +1721,7 @@ export def "2013-04-01-hostedzone-disable-dnssec disable-hosted-zone" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1756,7 +1756,7 @@ export def "2013-04-01-hostedzone-disassociatevpc create-disassociate-vpc-from-h
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1793,7 +1793,7 @@ export def "2013-04-01-hostedzone-enable-dnssec enable-hosted-zone" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1827,7 +1827,7 @@ export def "2013-04-01-accountlimit get-account-limit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Limit: record<Type: record, Value: record>, Count: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'Type' must be non-empty" } }
@@ -1861,7 +1861,7 @@ export def "2013-04-01-change get" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ChangeInfo: record<Id: record, Status: record, SubmittedAt: record, Comment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1894,7 +1894,7 @@ export def "2013-04-01-checkeripranges get-checker-ip-ranges" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CheckerIpRanges: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2013-04-01/checkeripranges")
@@ -1927,7 +1927,7 @@ export def "2013-04-01-hostedzone-dnssec get" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Status: record<ServeSignature: record, StatusMessage: record>, KeySigningKeys: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -1963,7 +1963,7 @@ export def "2013-04-01-geolocation get-geo-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GeoLocationDetails: record<ContinentCode: record, ContinentName: record, CountryCode: record, CountryName: record, SubdivisionCode: record, SubdivisionName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "continentcode" $continentcode "scalar") (serialize-qp "countrycode" $countrycode "scalar") (serialize-qp "subdivisioncode" $subdivisioncode "scalar")] | flatten | str join "&"
@@ -1996,7 +1996,7 @@ export def "2013-04-01-healthcheckcount get-health-check-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HealthCheckCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2013-04-01/healthcheckcount")
@@ -2029,7 +2029,7 @@ export def "2013-04-01-healthcheck-lastfailurereason get-health-check-last-failu
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HealthCheckObservations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($health_check_id | is-empty) { error make --unspanned { msg: "path parameter 'HealthCheckId' must be non-empty" } }
@@ -2063,7 +2063,7 @@ export def "2013-04-01-healthcheck-status get-health-check" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HealthCheckObservations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($health_check_id | is-empty) { error make --unspanned { msg: "path parameter 'HealthCheckId' must be non-empty" } }
@@ -2096,7 +2096,7 @@ export def "2013-04-01-hostedzonecount get-hosted-zone-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HostedZoneCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2013-04-01/hostedzonecount")
@@ -2130,7 +2130,7 @@ export def "2013-04-01-hostedzonelimit get-hosted-zone-limit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Limit: record<Type: record, Value: record>, Count: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2166,7 +2166,7 @@ export def "2013-04-01-reusabledelegationsetlimit get-reusable-delegation-update
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Limit: record<Type: record, Value: record>, Count: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2200,7 +2200,7 @@ export def "2013-04-01-trafficpolicyinstancecount get-traffic-policy-instance-co
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicyInstanceCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/2013-04-01/trafficpolicyinstancecount")
@@ -2238,7 +2238,7 @@ export def "2013-04-01-cidrcollection-cidrblocks list-cidr-blocks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<NextToken: record, CidrBlocks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cidr_collection_id | is-empty) { error make --unspanned { msg: "path parameter 'CidrCollectionId' must be non-empty" } }
@@ -2276,7 +2276,7 @@ export def "2013-04-01-geolocations list-geo-locations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GeoLocationDetailsList: record, IsTruncated: record, NextContinentCode: record, NextCountryCode: record, NextSubdivisionCode: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startcontinentcode" $startcontinentcode "scalar") (serialize-qp "startcountrycode" $startcountrycode "scalar") (serialize-qp "startsubdivisioncode" $startsubdivisioncode "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -2312,7 +2312,7 @@ export def "2013-04-01-hostedzonesbyname list-hosted-zones-by-name" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HostedZones: record, DNSName: record, HostedZoneId: record, IsTruncated: record, NextDNSName: record, NextHostedZoneId: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dnsname" $dnsname "scalar") (serialize-qp "hostedzoneid" $hostedzoneid "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -2349,7 +2349,7 @@ export def "2013-04-01-hostedzonesbyvpc list-hosted-zones-by-vpc" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HostedZoneSummaries: record, MaxItems: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "vpcid" $vpcid "scalar") (serialize-qp "vpcregion" $vpcregion "scalar") (serialize-qp "maxitems" $maxitems "scalar") (serialize-qp "nexttoken" $nexttoken "scalar")] | flatten | str join "&"
@@ -2391,7 +2391,7 @@ export def "2013-04-01-hostedzone-rrset list-resource-record-sets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ResourceRecordSets: record, IsTruncated: record, NextRecordName: record, NextRecordType: record, NextRecordIdentifier: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2427,7 +2427,7 @@ export def "2013-04-01-tags list-for-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ResourceTagSets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2465,7 +2465,7 @@ export def "2013-04-01-trafficpolicies list-traffic-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicySummaries: record, IsTruncated: record, TrafficPolicyIdMarker: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "trafficpolicyid" $trafficpolicyid "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -2502,7 +2502,7 @@ export def "2013-04-01-trafficpolicyinstances list-traffic-policy-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicyInstances: record, HostedZoneIdMarker: record, TrafficPolicyInstanceNameMarker: record, TrafficPolicyInstanceTypeMarker: record, IsTruncated: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hostedzoneid" $hostedzoneid "scalar") (serialize-qp "trafficpolicyinstancename" $trafficpolicyinstancename "scalar") (serialize-qp "trafficpolicyinstancetype" $trafficpolicyinstancetype "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -2539,7 +2539,7 @@ export def "2013-04-01-trafficpolicyinstances-hostedzone list-traffic-policy-ins
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicyInstances: record, TrafficPolicyInstanceNameMarker: record, TrafficPolicyInstanceTypeMarker: record, IsTruncated: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "trafficpolicyinstancename" $trafficpolicyinstancename "scalar") (serialize-qp "trafficpolicyinstancetype" $trafficpolicyinstancetype "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -2578,7 +2578,7 @@ export def "2013-04-01-trafficpolicyinstances-trafficpolicy list-traffic-policy-
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicyInstances: record, HostedZoneIdMarker: record, TrafficPolicyInstanceNameMarker: record, TrafficPolicyInstanceTypeMarker: record, IsTruncated: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "hostedzoneid" $hostedzoneid "scalar") (serialize-qp "trafficpolicyinstancename" $trafficpolicyinstancename "scalar") (serialize-qp "trafficpolicyinstancetype" $trafficpolicyinstancetype "scalar") (serialize-qp "maxitems" $maxitems "scalar")] | flatten | str join "&"
@@ -2614,7 +2614,7 @@ export def "2013-04-01-trafficpolicies-versions list-traffic-policy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TrafficPolicies: record, IsTruncated: record, TrafficPolicyVersionMarker: record, MaxItems: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'Id' must be non-empty" } }
@@ -2654,7 +2654,7 @@ export def "2013-04-01-testdnsanswer test-dns-answer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Nameserver: record, RecordName: record, RecordType: record, RecordData: record, ResponseCode: record, Protocol: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hostedzoneid" $hostedzoneid "scalar") (serialize-qp "recordname" $recordname "scalar") (serialize-qp "recordtype" $recordtype "scalar") (serialize-qp "resolverip" $resolverip "scalar") (serialize-qp "edns0clientsubnetip" $edns0clientsubnetip "scalar") (serialize-qp "edns0clientsubnetmask" $edns0clientsubnetmask "scalar")] | flatten | str join "&"

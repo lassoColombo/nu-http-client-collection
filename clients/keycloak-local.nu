@@ -2853,7 +2853,7 @@ export def "clients-certificates-download create" [
   --realm-alias: string
   --realm-certificate: oneof<nothing, bool>
   --store-password: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2918,7 +2918,7 @@ export def "clients-certificates-generate-and-download create" [
   --realm-alias: string
   --realm-certificate: oneof<nothing, bool>
   --store-password: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7388,7 +7388,7 @@ export def "users-count get" [
   --last-name: string # last name filter
   --search: string # arbitrary search string for all the fields below
   --username: string # username filter
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($realm | is-empty) { error make --unspanned { msg: "path parameter 'realm' must be non-empty" } }

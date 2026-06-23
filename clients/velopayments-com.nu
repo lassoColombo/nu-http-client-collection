@@ -2163,7 +2163,7 @@ export def "paymentaudit-transactions export-csvv3" [
   --payor-id: string # The Payor ID for whom you wish to run the report. For a Payor requesting the report, this could be their exact Payor, or it could be a child/descendant Payor. (format: uuid)
   --start-date: string # Start date, inclusive. Format is YYYY-MM-DD (format: date)
   --end-date: string # End date, inclusive. Format is YYYY-MM-DD (format: date)
-]: nothing -> any {
+]: nothing -> record<credit: int, creditCurrency: string, dateFundingRequested: string, debit: int, debitCurrency: string, fundingType: string, fxApplied: float, payeeType: string, paymentAmount: int, paymentCurrency: string, paymentMemo: string, paymentRails: string, paymentStatus: string, payorPaymentId: string, rejectReason: string, remoteId: string, reportTransactionType: string, returnCode: string, returnDescription: string, returnFee: string, returnFeeCurrency: string, returnFeeDescription: string, sourceAccount: string, transactionDate: string, transactionTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
@@ -3094,7 +3094,7 @@ export def "paymentaudit-transactions export-csvv4" [
   --start-date: string # Start date, inclusive. Format is YYYY-MM-DD (format: date)
   --end-date: string # End date, inclusive. Format is YYYY-MM-DD (format: date)
   --include: string@include-completer # Mode to determine whether to include other Payor's data in the results. May only be used if payorId is specified. Can be omitted or set to 'payorOnly' or 'payorAndDescendants'. payorOnly: Only include results for the specified Payor. This is the default if 'include' is omitted. payorAndDescendants: Aggregate results for all descendant Payors of the specified Payor. Should only be used if the Payor with the specified payorId has at least one child Payor. Note when a Payor requests the report and include=payorAndDescendants is used, the following additional columns are included in the CSV: Payor Name, Payor Id
-]: nothing -> any {
+]: nothing -> record<credit: int, creditCurrency: string, dateFundingRequested: string, debit: int, debitCurrency: string, fundingType: string, fxApplied: float, payeeEmail: string, payeeName: string, payeeType: string, paymentAmount: int, paymentCurrency: string, paymentMemo: string, paymentRails: string, paymentStatus: string, payorPaymentId: string, rejectReason: string, remoteId: string, reportTransactionType: string, returnCode: string, returnDescription: string, returnFee: string, returnFeeCurrency: string, returnFeeDescription: string, sourceAccount: string, transactionDate: string, transactionTime: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payorId" $payor_id "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"

@@ -310,7 +310,7 @@ export def "jobs-transcript get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --hdr-accept: string@accept-completer-1 # MIME type specifying the transcription output format
-]: nothing -> any {
+]: nothing -> record<monologues: table<elements: list, speaker: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

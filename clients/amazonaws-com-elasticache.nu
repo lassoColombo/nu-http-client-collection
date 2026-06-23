@@ -232,7 +232,7 @@ export def "api get-create-tags-to-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TagList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -268,7 +268,7 @@ export def "api create-tags-to-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TagList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -309,7 +309,7 @@ export def "api get-authorize-cache-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -345,7 +345,7 @@ export def "api create-authorize-cache-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -386,7 +386,7 @@ export def "api get-batch-apply-update-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupIds" $replication_group_ids "multi") (serialize-qp "CacheClusterIds" $cache_cluster_ids "multi") (serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -422,7 +422,7 @@ export def "api create-batch-apply-update-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -463,7 +463,7 @@ export def "api get-batch-stop-update-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupIds" $replication_group_ids "multi") (serialize-qp "CacheClusterIds" $cache_cluster_ids "multi") (serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -499,7 +499,7 @@ export def "api create-batch-stop-update-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ProcessedUpdateActions: record, UnprocessedUpdateActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -539,7 +539,7 @@ export def "api get-complete-migration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "Force" $force "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -575,7 +575,7 @@ export def "api create-complete-migration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -618,7 +618,7 @@ export def "api get-copy-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceSnapshotName" $source_snapshot_name "scalar") (serialize-qp "TargetSnapshotName" $target_snapshot_name "scalar") (serialize-qp "TargetBucket" $target_bucket "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -654,7 +654,7 @@ export def "api create-copy-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -722,7 +722,7 @@ export def "api get-create-cache" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "AZMode" $az_mode "scalar") (serialize-qp "PreferredAvailabilityZone" $preferred_availability_zone "scalar") (serialize-qp "PreferredAvailabilityZones" $preferred_availability_zones "multi") (serialize-qp "NumCacheNodes" $num_cache_nodes "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "SnapshotArns" $snapshot_arns "multi") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "OutpostMode" $outpost_mode "scalar") (serialize-qp "PreferredOutpostArn" $preferred_outpost_arn "scalar") (serialize-qp "PreferredOutpostArns" $preferred_outpost_arns "multi") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "TransitEncryptionEnabled" $transit_encryption_enabled "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -758,7 +758,7 @@ export def "api create-cache" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -800,7 +800,7 @@ export def "api get-create-cache-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheParameterGroup: record<CacheParameterGroupName: record, CacheParameterGroupFamily: record, Description: record, IsGlobal: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "CacheParameterGroupFamily" $cache_parameter_group_family "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -836,7 +836,7 @@ export def "api create-cache-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheParameterGroup: record<CacheParameterGroupName: record, CacheParameterGroupFamily: record, Description: record, IsGlobal: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -877,7 +877,7 @@ export def "api get-create-cache-security-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -913,7 +913,7 @@ export def "api create-cache-security-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -955,7 +955,7 @@ export def "api get-create-cache-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSubnetGroupDescription" $cache_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -991,7 +991,7 @@ export def "api create-cache-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1032,7 +1032,7 @@ export def "api get-create-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupIdSuffix" $global_replication_group_id_suffix "scalar") (serialize-qp "GlobalReplicationGroupDescription" $global_replication_group_description "scalar") (serialize-qp "PrimaryReplicationGroupId" $primary_replication_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1068,7 +1068,7 @@ export def "api create-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1143,7 +1143,7 @@ export def "api get-create-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "ReplicationGroupDescription" $replication_group_description "scalar") (serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "PrimaryClusterId" $primary_cluster_id "scalar") (serialize-qp "AutomaticFailoverEnabled" $automatic_failover_enabled "scalar") (serialize-qp "MultiAZEnabled" $multi_az_enabled "scalar") (serialize-qp "NumCacheClusters" $num_cache_clusters "scalar") (serialize-qp "PreferredCacheClusterAZs" $preferred_cache_cluster_a_zs "multi") (serialize-qp "NumNodeGroups" $num_node_groups "scalar") (serialize-qp "ReplicasPerNodeGroup" $replicas_per_node_group "scalar") (serialize-qp "NodeGroupConfiguration" $node_group_configuration "multi") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "SnapshotArns" $snapshot_arns "multi") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "TransitEncryptionEnabled" $transit_encryption_enabled "scalar") (serialize-qp "AtRestEncryptionEnabled" $at_rest_encryption_enabled "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "UserGroupIds" $user_group_ids "multi") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "DataTieringEnabled" $data_tiering_enabled "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "TransitEncryptionMode" $transit_encryption_mode "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1179,7 +1179,7 @@ export def "api create-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1222,7 +1222,7 @@ export def "api get-create-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1258,7 +1258,7 @@ export def "api create-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1304,7 +1304,7 @@ export def "api get-create-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "UserName" $user_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "Passwords" $passwords "multi") (serialize-qp "AccessString" $access_string "scalar") (serialize-qp "NoPasswordRequired" $no_password_required "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "AuthenticationMode" $authentication_mode "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1340,7 +1340,7 @@ export def "api create-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1382,7 +1382,7 @@ export def "api get-create-user-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "UserIds" $user_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1418,7 +1418,7 @@ export def "api create-user-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1461,7 +1461,7 @@ export def "api get-decrease-node-groups-in-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "NodeGroupCount" $node_group_count "scalar") (serialize-qp "GlobalNodeGroupsToRemove" $global_node_groups_to_remove "multi") (serialize-qp "GlobalNodeGroupsToRetain" $global_node_groups_to_retain "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1497,7 +1497,7 @@ export def "api create-decrease-node-groups-in-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1540,7 +1540,7 @@ export def "api get-decrease-replica-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NewReplicaCount" $new_replica_count "scalar") (serialize-qp "ReplicaConfiguration" $replica_configuration "multi") (serialize-qp "ReplicasToRemove" $replicas_to_remove "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1576,7 +1576,7 @@ export def "api create-decrease-replica-count" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1616,7 +1616,7 @@ export def "api get-delete-cache" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "FinalSnapshotIdentifier" $final_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1652,7 +1652,7 @@ export def "api create-delete-cache" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1917,7 +1917,7 @@ export def "api get-delete-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "RetainPrimaryReplicationGroup" $retain_primary_replication_group "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1953,7 +1953,7 @@ export def "api create-delete-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1994,7 +1994,7 @@ export def "api get-delete-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "RetainPrimaryCluster" $retain_primary_cluster "scalar") (serialize-qp "FinalSnapshotIdentifier" $final_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2030,7 +2030,7 @@ export def "api create-delete-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2069,7 +2069,7 @@ export def "api get-delete-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2105,7 +2105,7 @@ export def "api create-delete-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotName: record, ReplicationGroupId: record, ReplicationGroupDescription: record, CacheClusterId: record, SnapshotStatus: record, SnapshotSource: record, CacheNodeType: record, Engine: record, EngineVersion: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, TopicArn: record, Port: record, CacheParameterGroupName: record, CacheSubnetGroupName: record, VpcId: record, AutoMinorVersionUpgrade: record, SnapshotRetentionLimit: record, SnapshotWindow: record, NumNodeGroups: record, AutomaticFailover: record, NodeSnapshots: record, KmsKeyId: record, ARN: record, DataTiering: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2144,7 +2144,7 @@ export def "api get-delete-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2180,7 +2180,7 @@ export def "api create-delete-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2219,7 +2219,7 @@ export def "api get-delete-user-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2255,7 +2255,7 @@ export def "api create-delete-user-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2298,7 +2298,7 @@ export def "api get-cache-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, CacheClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "ShowCacheNodeInfo" $show_cache_node_info "scalar") (serialize-qp "ShowCacheClustersNotInReplicationGroups" $show_cache_clusters_not_in_replication_groups "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2336,7 +2336,7 @@ export def "api create-get-cache-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, CacheClusters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2380,7 +2380,7 @@ export def "api get-cache-engine-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, CacheEngineVersions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupFamily" $cache_parameter_group_family "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "DefaultOnly" $default_only "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2418,7 +2418,7 @@ export def "api create-get-cache-engine-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, CacheEngineVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2459,7 +2459,7 @@ export def "api get-cache-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, CacheParameterGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2497,7 +2497,7 @@ export def "api create-get-cache-parameter-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, CacheParameterGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2539,7 +2539,7 @@ export def "api get-cache-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2577,7 +2577,7 @@ export def "api create-get-cache-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2618,7 +2618,7 @@ export def "api get-cache-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, CacheSecurityGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2656,7 +2656,7 @@ export def "api create-get-cache-security-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, CacheSecurityGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2697,7 +2697,7 @@ export def "api get-cache-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, CacheSubnetGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2735,7 +2735,7 @@ export def "api create-get-cache-subnet-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, CacheSubnetGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2776,7 +2776,7 @@ export def "api get-engine-default-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EngineDefaults: record<CacheParameterGroupFamily: record, Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheParameterGroupFamily" $cache_parameter_group_family "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2814,7 +2814,7 @@ export def "api create-get-engine-default-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EngineDefaults: record<CacheParameterGroupFamily: record, Marker: record, Parameters: record, CacheNodeTypeSpecificParameters: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2859,7 +2859,7 @@ export def "api get-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Events: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2897,7 +2897,7 @@ export def "api create-get-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Events: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2939,7 +2939,7 @@ export def "api get-global-replication-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, GlobalReplicationGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "ShowMemberInfo" $show_member_info "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2977,7 +2977,7 @@ export def "api create-get-global-replication-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, GlobalReplicationGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3018,7 +3018,7 @@ export def "api get-replication-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReplicationGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3056,7 +3056,7 @@ export def "api create-get-replication-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReplicationGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3102,7 +3102,7 @@ export def "api get-reserved-cache-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedCacheNodes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedCacheNodeId" $reserved_cache_node_id "scalar") (serialize-qp "ReservedCacheNodesOfferingId" $reserved_cache_nodes_offering_id "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "ProductDescription" $product_description "scalar") (serialize-qp "OfferingType" $offering_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3140,7 +3140,7 @@ export def "api create-get-reserved-cache-nodes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedCacheNodes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3185,7 +3185,7 @@ export def "api get-reserved-cache-nodes-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedCacheNodesOfferings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedCacheNodesOfferingId" $reserved_cache_nodes_offering_id "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "ProductDescription" $product_description "scalar") (serialize-qp "OfferingType" $offering_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3223,7 +3223,7 @@ export def "api create-get-reserved-cache-nodes-offerings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedCacheNodesOfferings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3265,7 +3265,7 @@ export def "api get-service-updates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ServiceUpdates: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "ServiceUpdateStatus" $service_update_status "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3303,7 +3303,7 @@ export def "api create-get-service-updates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ServiceUpdates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3348,7 +3348,7 @@ export def "api get-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Snapshots: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "SnapshotName" $snapshot_name "scalar") (serialize-qp "SnapshotSource" $snapshot_source "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "ShowNodeGroupConfig" $show_node_group_config "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3386,7 +3386,7 @@ export def "api create-get-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Snapshots: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3434,7 +3434,7 @@ export def "api get-update-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, UpdateActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ServiceUpdateName" $service_update_name "scalar") (serialize-qp "ReplicationGroupIds" $replication_group_ids "multi") (serialize-qp "CacheClusterIds" $cache_cluster_ids "multi") (serialize-qp "Engine" $engine "scalar") (serialize-qp "ServiceUpdateStatus" $service_update_status "multi") (serialize-qp "ServiceUpdateTimeRange" $service_update_time_range "multi") (serialize-qp "UpdateActionStatus" $update_action_status "multi") (serialize-qp "ShowNodeLevelUpdateStatus" $show_node_level_update_status "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3472,7 +3472,7 @@ export def "api create-get-update-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, UpdateActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3513,7 +3513,7 @@ export def "api get-user-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserGroups: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3551,7 +3551,7 @@ export def "api create-get-user-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserGroups: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3594,7 +3594,7 @@ export def "api get-users" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Users: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "UserId" $user_id "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3632,7 +3632,7 @@ export def "api create-get-users" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Users: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3673,7 +3673,7 @@ export def "api get-disassociate-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "ReplicationGroupRegion" $replication_group_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3709,7 +3709,7 @@ export def "api create-disassociate-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3750,7 +3750,7 @@ export def "api get-failover-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "PrimaryRegion" $primary_region "scalar") (serialize-qp "PrimaryReplicationGroupId" $primary_replication_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3786,7 +3786,7 @@ export def "api create-failover-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3828,7 +3828,7 @@ export def "api get-increase-node-groups-in-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "NodeGroupCount" $node_group_count "scalar") (serialize-qp "RegionalConfigurations" $regional_configurations "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3864,7 +3864,7 @@ export def "api create-increase-node-groups-in-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3906,7 +3906,7 @@ export def "api get-increase-replica-count" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NewReplicaCount" $new_replica_count "scalar") (serialize-qp "ReplicaConfiguration" $replica_configuration "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3942,7 +3942,7 @@ export def "api create-increase-replica-count" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3982,7 +3982,7 @@ export def "api get-list-allowed-node-type-modifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScaleUpModifications: record, ScaleDownModifications: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4018,7 +4018,7 @@ export def "api create-list-allowed-node-type-modifications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScaleUpModifications: record, ScaleDownModifications: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4057,7 +4057,7 @@ export def "api get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TagList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4093,7 +4093,7 @@ export def "api create-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TagList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4152,7 +4152,7 @@ export def "api get-modify-cache" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "NumCacheNodes" $num_cache_nodes "scalar") (serialize-qp "CacheNodeIdsToRemove" $cache_node_ids_to_remove "multi") (serialize-qp "AZMode" $az_mode "scalar") (serialize-qp "NewAvailabilityZones" $new_availability_zones "multi") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "NotificationTopicStatus" $notification_topic_status "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "AuthTokenUpdateStrategy" $auth_token_update_strategy "scalar") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4188,7 +4188,7 @@ export def "api create-modify-cache" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4228,7 +4228,7 @@ export def "api get-modify-cache-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheParameterGroupName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "ParameterNameValues" $parameter_name_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4264,7 +4264,7 @@ export def "api create-modify-cache-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheParameterGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4305,7 +4305,7 @@ export def "api get-modify-cache-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSubnetGroupName" $cache_subnet_group_name "scalar") (serialize-qp "CacheSubnetGroupDescription" $cache_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4341,7 +4341,7 @@ export def "api create-modify-cache-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheSubnetGroup: record<CacheSubnetGroupName: record, CacheSubnetGroupDescription: record, VpcId: record, Subnets: record, ARN: record, SupportedNetworkTypes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4386,7 +4386,7 @@ export def "api get-modify-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "GlobalReplicationGroupDescription" $global_replication_group_description "scalar") (serialize-qp "AutomaticFailoverEnabled" $automatic_failover_enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4422,7 +4422,7 @@ export def "api create-modify-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4488,7 +4488,7 @@ export def "api get-modify-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "ReplicationGroupDescription" $replication_group_description "scalar") (serialize-qp "PrimaryClusterId" $primary_cluster_id "scalar") (serialize-qp "SnapshottingClusterId" $snapshotting_cluster_id "scalar") (serialize-qp "AutomaticFailoverEnabled" $automatic_failover_enabled "scalar") (serialize-qp "MultiAZEnabled" $multi_az_enabled "scalar") (serialize-qp "NodeGroupId" $node_group_id "scalar") (serialize-qp "CacheSecurityGroupNames" $cache_security_group_names "multi") (serialize-qp "SecurityGroupIds" $security_group_ids "multi") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "NotificationTopicArn" $notification_topic_arn "scalar") (serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "NotificationTopicStatus" $notification_topic_status "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "SnapshotRetentionLimit" $snapshot_retention_limit "scalar") (serialize-qp "SnapshotWindow" $snapshot_window "scalar") (serialize-qp "CacheNodeType" $cache_node_type "scalar") (serialize-qp "AuthToken" $auth_token "scalar") (serialize-qp "AuthTokenUpdateStrategy" $auth_token_update_strategy "scalar") (serialize-qp "UserGroupIdsToAdd" $user_group_ids_to_add "multi") (serialize-qp "UserGroupIdsToRemove" $user_group_ids_to_remove "multi") (serialize-qp "RemoveUserGroups" $remove_user_groups "scalar") (serialize-qp "LogDeliveryConfigurations" $log_delivery_configurations "multi") (serialize-qp "IpDiscovery" $ip_discovery "scalar") (serialize-qp "TransitEncryptionEnabled" $transit_encryption_enabled "scalar") (serialize-qp "TransitEncryptionMode" $transit_encryption_mode "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4524,7 +4524,7 @@ export def "api create-modify-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4568,7 +4568,7 @@ export def "api get-modify-replication-group-shard-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NodeGroupCount" $node_group_count "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "ReshardingConfiguration" $resharding_configuration "multi") (serialize-qp "NodeGroupsToRemove" $node_groups_to_remove "multi") (serialize-qp "NodeGroupsToRetain" $node_groups_to_retain "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4604,7 +4604,7 @@ export def "api create-modify-replication-group-shard-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4648,7 +4648,7 @@ export def "api get-modify-user" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserId" $user_id "scalar") (serialize-qp "AccessString" $access_string "scalar") (serialize-qp "AppendAccessString" $append_access_string "scalar") (serialize-qp "Passwords" $passwords "multi") (serialize-qp "NoPasswordRequired" $no_password_required "scalar") (serialize-qp "AuthenticationMode" $authentication_mode "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4684,7 +4684,7 @@ export def "api create-modify-user" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserId: record, UserName: record, Status: record, Engine: record, MinimumEngineVersion: record, AccessString: record, UserGroupIds: record, Authentication: record<Type: record, PasswordCount: record>, ARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4725,7 +4725,7 @@ export def "api get-modify-user-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UserGroupId" $user_group_id "scalar") (serialize-qp "UserIdsToAdd" $user_ids_to_add "multi") (serialize-qp "UserIdsToRemove" $user_ids_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4761,7 +4761,7 @@ export def "api create-modify-user-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserGroupId: record, Status: record, Engine: record, UserIds: record, MinimumEngineVersion: record, PendingChanges: record<UserIdsToRemove: record, UserIdsToAdd: record>, ReplicationGroups: record, ARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4803,7 +4803,7 @@ export def "api get-purchase-reserved-cache-nodes-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReservedCacheNode: record<ReservedCacheNodeId: record, ReservedCacheNodesOfferingId: record, CacheNodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CacheNodeCount: record, ProductDescription: record, OfferingType: record, State: record, RecurringCharges: record, ReservationARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedCacheNodesOfferingId" $reserved_cache_nodes_offering_id "scalar") (serialize-qp "ReservedCacheNodeId" $reserved_cache_node_id "scalar") (serialize-qp "CacheNodeCount" $cache_node_count "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4839,7 +4839,7 @@ export def "api create-purchase-reserved-cache-nodes-offering" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReservedCacheNode: record<ReservedCacheNodeId: record, ReservedCacheNodesOfferingId: record, CacheNodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CacheNodeCount: record, ProductDescription: record, OfferingType: record, State: record, RecurringCharges: record, ReservationARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4879,7 +4879,7 @@ export def "api get-rebalance-slots-in-global-replication-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalReplicationGroupId" $global_replication_group_id "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4915,7 +4915,7 @@ export def "api create-rebalance-slots-in-global-replication-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalReplicationGroup: record<GlobalReplicationGroupId: record, GlobalReplicationGroupDescription: record, Status: record, CacheNodeType: record, Engine: record, EngineVersion: record, Members: record, ClusterEnabled: record, GlobalNodeGroups: record, AuthTokenEnabled: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4955,7 +4955,7 @@ export def "api get-reboot-cache" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheClusterId" $cache_cluster_id "scalar") (serialize-qp "CacheNodeIdsToReboot" $cache_node_ids_to_reboot "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4991,7 +4991,7 @@ export def "api create-reboot-cache" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheCluster: record<CacheClusterId: record, ConfigurationEndpoint: record<Address: record, Port: record>, ClientDownloadLandingPage: record, CacheNodeType: record, Engine: record, EngineVersion: record, CacheClusterStatus: record, NumCacheNodes: record, PreferredAvailabilityZone: record, PreferredOutpostArn: record, CacheClusterCreateTime: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<NumCacheNodes: record, CacheNodeIdsToRemove: record, EngineVersion: record, CacheNodeType: record, AuthTokenStatus: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, NotificationConfiguration: record<TopicArn: record, TopicStatus: record>, CacheSecurityGroups: record, CacheParameterGroup: record<CacheParameterGroupName: record, ParameterApplyStatus: record, CacheNodeIdsToReboot: record>, CacheSubnetGroupName: record, CacheNodes: record, AutoMinorVersionUpgrade: record, SecurityGroups: record, ReplicationGroupId: record, SnapshotRetentionLimit: record, SnapshotWindow: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, ARN: record, ReplicationGroupLogDeliveryEnabled: record, LogDeliveryConfigurations: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5031,7 +5031,7 @@ export def "api get-delete-tags-from-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TagList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5067,7 +5067,7 @@ export def "api create-delete-tags-from-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TagList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5108,7 +5108,7 @@ export def "api get-reset-cache-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheParameterGroupName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheParameterGroupName" $cache_parameter_group_name "scalar") (serialize-qp "ResetAllParameters" $reset_all_parameters "scalar") (serialize-qp "ParameterNameValues" $parameter_name_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5144,7 +5144,7 @@ export def "api create-reset-cache-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheParameterGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5185,7 +5185,7 @@ export def "api get-delete-cache-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CacheSecurityGroupName" $cache_security_group_name "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5221,7 +5221,7 @@ export def "api create-delete-cache-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<CacheSecurityGroup: record<OwnerId: record, CacheSecurityGroupName: record, Description: record, EC2SecurityGroups: record, ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5261,7 +5261,7 @@ export def "api get-start-migration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "CustomerNodeEndpointList" $customer_node_endpoint_list "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5297,7 +5297,7 @@ export def "api create-start-migration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5337,7 +5337,7 @@ export def "api get-test-failover" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReplicationGroupId" $replication_group_id "scalar") (serialize-qp "NodeGroupId" $node_group_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5373,7 +5373,7 @@ export def "api create-test-failover" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReplicationGroup: record<ReplicationGroupId: record, Description: record, GlobalReplicationGroupInfo: record<GlobalReplicationGroupId: record, GlobalReplicationGroupMemberRole: record>, Status: record, PendingModifiedValues: record<PrimaryClusterId: record, AutomaticFailoverStatus: record, Resharding: record, AuthTokenStatus: record, UserGroups: record, LogDeliveryConfigurations: record, TransitEncryptionEnabled: record, TransitEncryptionMode: record>, MemberClusters: record, NodeGroups: record, SnapshottingClusterId: record, AutomaticFailover: record, MultiAZ: record, ConfigurationEndpoint: record<Address: record, Port: record>, SnapshotRetentionLimit: record, SnapshotWindow: record, ClusterEnabled: record, CacheNodeType: record, AuthTokenEnabled: record, AuthTokenLastModifiedDate: record, TransitEncryptionEnabled: record, AtRestEncryptionEnabled: record, MemberClustersOutpostArns: record, KmsKeyId: record, ARN: record, UserGroupIds: record, LogDeliveryConfigurations: record, ReplicationGroupCreateTime: record, DataTiering: record, AutoMinorVersionUpgrade: record, NetworkType: record, IpDiscovery: record, TransitEncryptionMode: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

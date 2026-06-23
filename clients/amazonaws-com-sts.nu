@@ -177,7 +177,7 @@ export def "api get-assume-role" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, AssumedRoleUser: record<AssumedRoleId: record, Arn: record>, PackedPolicySize: record, SourceIdentity: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "RoleArn" $role_arn "scalar") (serialize-qp "RoleSessionName" $role_session_name "scalar") (serialize-qp "PolicyArns" $policy_arns "multi") (serialize-qp "Policy" $policy "scalar") (serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "TransitiveTagKeys" $transitive_tag_keys "multi") (serialize-qp "ExternalId" $external_id "scalar") (serialize-qp "SerialNumber" $serial_number "scalar") (serialize-qp "TokenCode" $token_code "scalar") (serialize-qp "SourceIdentity" $source_identity "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -213,7 +213,7 @@ export def "api create-assume-role" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, AssumedRoleUser: record<AssumedRoleId: record, Arn: record>, PackedPolicySize: record, SourceIdentity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -257,7 +257,7 @@ export def "api get-assume-role-with-saml" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, AssumedRoleUser: record<AssumedRoleId: record, Arn: record>, PackedPolicySize: record, Subject: record, SubjectType: record, Issuer: record, Audience: record, NameQualifier: record, SourceIdentity: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "RoleArn" $role_arn "scalar") (serialize-qp "PrincipalArn" $principal_arn "scalar") (serialize-qp "SAMLAssertion" $saml_assertion "scalar") (serialize-qp "PolicyArns" $policy_arns "multi") (serialize-qp "Policy" $policy "scalar") (serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -293,7 +293,7 @@ export def "api create-assume-role-with-saml" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, AssumedRoleUser: record<AssumedRoleId: record, Arn: record>, PackedPolicySize: record, Subject: record, SubjectType: record, Issuer: record, Audience: record, NameQualifier: record, SourceIdentity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -338,7 +338,7 @@ export def "api get-assume-role-with-web-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, SubjectFromWebIdentityToken: record, AssumedRoleUser: record<AssumedRoleId: record, Arn: record>, PackedPolicySize: record, Provider: record, Audience: record, SourceIdentity: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "RoleArn" $role_arn "scalar") (serialize-qp "RoleSessionName" $role_session_name "scalar") (serialize-qp "WebIdentityToken" $web_identity_token "scalar") (serialize-qp "ProviderId" $provider_id "scalar") (serialize-qp "PolicyArns" $policy_arns "multi") (serialize-qp "Policy" $policy "scalar") (serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -374,7 +374,7 @@ export def "api create-assume-role-with-web-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, SubjectFromWebIdentityToken: record, AssumedRoleUser: record<AssumedRoleId: record, Arn: record>, PackedPolicySize: record, Provider: record, Audience: record, SourceIdentity: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -413,7 +413,7 @@ export def "api get-decode-authorization-message" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DecodedMessage: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EncodedMessage" $encoded_message "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -449,7 +449,7 @@ export def "api create-decode-authorization-message" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DecodedMessage: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +488,7 @@ export def "api get-access-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Account: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AccessKeyId" $access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -524,7 +524,7 @@ export def "api create-get-access-key" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Account: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -562,7 +562,7 @@ export def "api get-caller-identity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UserId: record, Account: record, Arn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -598,7 +598,7 @@ export def "api create-get-caller-identity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UserId: record, Account: record, Arn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -641,7 +641,7 @@ export def "api get-federation-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, FederatedUser: record<FederatedUserId: record, Arn: record>, PackedPolicySize: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Name" $name "scalar") (serialize-qp "Policy" $policy "scalar") (serialize-qp "PolicyArns" $policy_arns "multi") (serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -677,7 +677,7 @@ export def "api create-get-federation-token" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>, FederatedUser: record<FederatedUserId: record, Arn: record>, PackedPolicySize: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -718,7 +718,7 @@ export def "api get-session-token" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "SerialNumber" $serial_number "scalar") (serialize-qp "TokenCode" $token_code "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -754,7 +754,7 @@ export def "api create-get-session-token" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Credentials: record<AccessKeyId: record, SecretAccessKey: record, SessionToken: record, Expiration: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

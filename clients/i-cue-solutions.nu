@@ -209,7 +209,7 @@ export def "administration-entity create" [
   --address: string # nullable
   --email: string # nullable
   --name: string # nullable
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -503,7 +503,7 @@ export def "administration-token create" [
   --entity-token: string # format: uuid
   --expiration-date: string # format: date-time
   --user-token: string # format: uuid
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -537,7 +537,7 @@ export def "administration-user create" [
   --firstname: string # nullable
   --lastname: string # nullable
   --phone: string # nullable
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

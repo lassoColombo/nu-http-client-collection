@@ -162,7 +162,7 @@ export def "hardware-actions-collect-now create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --monitor-class: string # The Monitor Class of the device. (e.g. MS_HW_FAN)
-]: nothing -> any {
+]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -188,7 +188,7 @@ export def "hardware-actions-rediscover create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -222,7 +222,7 @@ export def "hardware-actions-reinitialize create" [
   --reset-removed-paused-object-list: int@reset-removed-paused-object-list-completer # When set to 1, reactivates the monitoring of all paused or removed objects. (format: int32, e.g. 1)
   --reset-report-settings: int@reset-report-settings-completer # When set to 1, clears the report schedule. (format: int32, e.g. 1)
   --reset-thresholds: int@reset-thresholds-completer # When set to 1, resets all thresholds. (format: int32, e.g. 1)
-]: any -> any {
+]: any -> record<pslOutput: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
@@ -252,7 +252,7 @@ export def "hardware-actions-remove delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --monitor-class: string # The Monitor Class of the device. (e.g. MS_HW_FAN)
   --monitor-sid: string # The Monitor SID of the device. (e.g. cisco-c240-imc)
-]: nothing -> any {
+]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -280,7 +280,7 @@ export def "hardware-actions-reset-error-count reset" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --monitor-class: string # The Monitor Class of the device. (e.g. MS_HW_FAN)
   --monitor-sid: string # The Monitor SID of the device. (e.g. cisco-c240-imc)
-]: nothing -> any {
+]: nothing -> record<pslOutput: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -309,7 +309,7 @@ export def "hardware-applications get" [
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
   --qp-sort: string # The column to sort by (case insensitive). (default: name)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -334,7 +334,7 @@ export def "hardware-applications get-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, emittedCo2Unit: string, energyConsumptionUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -390,7 +390,7 @@ export def "hardware-devices list" [
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
@@ -414,7 +414,7 @@ export def "hardware-devices-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<co2Emission: float, co2EmissionUnit: string, editable: bool, energyCost: float, energyCostUnit: string, groupNameFilter: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, id: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hardware/devices-summary")
@@ -438,7 +438,7 @@ export def "hardware-devices get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -463,7 +463,7 @@ export def "hardware-devices-agent get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<connectionStatus: string, id: string, name: string, os: string, port: string, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -488,7 +488,7 @@ export def "hardware-devices-agent-devices get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -518,7 +518,7 @@ export def "hardware-devices-parameter-history get" [
   --qp-from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --qp-to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --monitor-sid: string # The Monitor SID (to filter the list of Monitors). (e.g. cisco-c240-imc)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -546,7 +546,7 @@ export def "hardware-energy-usage get-device" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --roll-period: string@roll-period-completer # The period for which you wish to retrieve energy usage data. (default: ONE_DAY)
   --basis: string@basis-completer # Subdivision of the period for which you wish to retrieve energy usage data. (default: HOURLY)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($device_id | is-empty) { error make --unspanned { msg: "path parameter 'deviceId' must be non-empty" } }
@@ -575,7 +575,7 @@ export def "hardware-groups get" [
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
   --qp-sort: string # The column to sort by (case insensitive). (default: name)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -600,7 +600,7 @@ export def "hardware-groups get-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<ambientTemperature: float, ambientTemperatureUnit: string, co2Emission: float, co2EmissionUnit: string, costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, editable: bool, emittedCo2Unit: string, energyConsumptionUnit: string, energyCost: float, energyCostUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, serverId: int, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -628,7 +628,7 @@ export def "hardware-groups update-energy-cost" [
   --co2-emission: float # Updates the CO2 emission (unit: kg/kWh). (format: double, e.g. 0.3)
   --energy-cost: float # Updates the electricity rate (unit: $/kWh). (format: double, e.g. 0.3)
   --group-name-filter: string # Updates the regular expression used to filter the groups for which the power consumption should be reported. (e.g. Group [0-9]+)
-]: any -> any {
+]: any -> record<co2Emission: float, co2EmissionUnit: string, editable: bool, energyCost: float, energyCostUnit: string, groupNameFilter: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, id: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
@@ -663,7 +663,7 @@ export def "hardware-heating-margin-devices get-coverage" [
   --group-id: string # The ID of the group. (e.g. 0)
   --application-id: string # The ID of the application. (e.g. 0)
   --service-id: string # The ID of the service. (e.g. 0)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "covered" $covered "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar")] | flatten | str join "&"
@@ -692,7 +692,7 @@ export def "hardware-history get" [
   --service-id: string # The ID of the service. (e.g. 0)
   --qp-from: int # Beginning of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
   --qp-to: int # End of the period (Epoch time, in seconds). (format: int64, e.g. 1608850800)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "to" $qp_to "scalar")] | flatten | str join "&"
@@ -722,7 +722,7 @@ export def "hardware-search-devices list" [
   --service-id: string # The ID of the service. (e.g. 0)
   --page: string # The page number to retrieve (first page is 0). (format: int32, default: 0)
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "searchTerms" $search_terms "scalar") (serialize-qp "groupId" $group_id "scalar") (serialize-qp "applicationId" $application_id "scalar") (serialize-qp "serviceId" $service_id "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -750,7 +750,7 @@ export def "hardware-services get" [
   --limit: int # The maximum number of entries per page. (format: int32, default: 100)
   --direction: string@direction-completer # The sorting order (case insensitive). (default: asc)
   --qp-sort: string # The column to sort by (case insensitive). (default: name)
-]: nothing -> any {
+]: nothing -> record<items: list<record>, restrictedRights: bool, total: int> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -775,7 +775,7 @@ export def "hardware-services get-one" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<costUnit: string, deviceSummaries: table<agentId: int, agentName: string, ambientTemperature: float, collectTime: string, deviceTSMOKey: string, deviceUrl: string, heatingMargin: float, heatingMarginUnit: string, id: int, name: string, powerConsumption: float, powerConsumptionUnit: string, productVersion: string, serverId: int, serverName: string, sid: string, type: string, updateTimestamp: int>, emittedCo2Unit: string, energyConsumptionUnit: string, heatingMargin: float, heatingMarginCoverage: float, heatingMarginDeviceName: string, heatingMarginDeviceUrl: string, heatingMarginUnit: string, historyParentIdKey: string, id: string, name: string, numberOfDevices: int, oneDayConfidence: float, oneDayCost: float, oneDayEmittedCo2: float, oneDayEnergyConsumption: float, oneMonthConfidence: float, oneMonthCost: float, oneMonthEmittedCo2: float, oneMonthEnergyConsumption: float, oneYearConfidence: float, oneYearCost: float, oneYearEmittedCo2: float, oneYearEnergyConsumption: float, providerId: string, totalPowerConsumption: float, totalPowerConsumptionUnit: string, updateTimestamp: int, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "cookie"))
   let base = ($base_url | default $BASE_URL)
   if ($service_id | is-empty) { error make --unspanned { msg: "path parameter 'serviceId' must be non-empty" } }

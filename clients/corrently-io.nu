@@ -270,7 +270,7 @@ export def "gsi-best-hour get-besthour" [
   --key: string # Any valid Stromkonto account (address).
   --timeframe: int # Number of hours to check (default 24 hours from now).
   --hours: int # How many hours in row do you need the device turned on?
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "zip" $zip "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "timeframe" $timeframe "scalar") (serialize-qp "hours" $hours "scalar")] | flatten | str join "&"
@@ -429,7 +429,7 @@ export def "quittung-commit create-comit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -456,7 +456,7 @@ export def "quittung-create create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --email: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -483,7 +483,7 @@ export def "quittung-prepare create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --account: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

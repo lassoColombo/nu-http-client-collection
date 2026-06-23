@@ -155,7 +155,7 @@ export def "account-aadhaar-generate-otp create-generatere-kyc-aadhar-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> record<txnId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/aadhaar/generateOTP")
@@ -185,7 +185,7 @@ export def "account-aadhaar-verify-otp create-aadhar-only-using" [
   --otp: string
   --restrictions: string
   --txn-id: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -215,7 +215,7 @@ export def "account-benefits get-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer XToken)
-]: nothing -> any {
+]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/benefits")
@@ -245,7 +245,7 @@ export def "account-change-passwd-by-aadhaar create-password-via-aadhar-using" [
   --new-password: string
   --otp: string
   --txn-id: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -278,7 +278,7 @@ export def "account-change-passwd-by-mobile create-password-via-using" [
   --new-password: string
   --otp: string
   --txn-id: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -308,7 +308,7 @@ export def "account-change-passwd-generate-aadhaar-otp get-aadhar-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/passwd/generateAadhaarOTP")
@@ -335,7 +335,7 @@ export def "account-change-passwd-generate-mobile-otp get-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/change/passwd/generateMobileOTP")
@@ -364,7 +364,7 @@ export def "account-change-password create-via-using" [
   --x-token: string # Auth Token (e.g. Bearer X-Token)
   --new-password: string
   --old-password: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -394,7 +394,7 @@ export def "account-get-card generate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/getCard")
@@ -421,7 +421,7 @@ export def "account-get-png-card generate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/getPngCard")
@@ -448,7 +448,7 @@ export def "account-get-svg-card generate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/getSvgCard")
@@ -475,7 +475,7 @@ export def "account-profile delete-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/profile")
@@ -502,7 +502,7 @@ export def "account-profile get-information-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer XToken)
-]: nothing -> any {
+]: nothing -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/profile")
@@ -547,7 +547,7 @@ export def "account-profile update-information-using-create" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -578,7 +578,7 @@ export def "account-qr-code get-using" [
   --accept: string@accept-completer # Response content type
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer XToken)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/account/qrCode")
@@ -605,7 +605,7 @@ export def "account-token validate-using-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --auth-token: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -636,7 +636,7 @@ export def "auth-auth-password create-authenticate-with-using" [
   --accept-language: string
   --health-id: string
   --password: string
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -666,7 +666,7 @@ export def "auth-auth-with-mobile create-authenticate-user-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --healthid: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -701,7 +701,7 @@ export def "auth-auth-with-mobile-token create-using" [
   --body-token: string
   txn_id: string
   --year-of-birth: string
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -730,7 +730,7 @@ export def "auth-cert get-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/auth/cert")
@@ -760,7 +760,7 @@ export def "auth-confirm-with-aadhaar-bio create-using" [
   --bio-type: string
   --pid: string
   --txn-id: string # format: uuid
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -791,7 +791,7 @@ export def "auth-confirm-with-aadhaar-otp create-using" [
   --accept-language: string
   otp: string
   txn_id: string # format: uuid
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -824,7 +824,7 @@ export def "auth-confirm-with-demographics create-using" [
   --name: string
   txn_id: string # format: uuid
   --year-of-birth: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -855,7 +855,7 @@ export def "auth-confirm-with-mobile-otp create-using" [
   --accept-language: string
   --otp: string
   --txn-id: string
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -886,7 +886,7 @@ export def "auth-confirm-with-password request-account-using-create" [
   --accept-language: string
   password: string
   txn_id: string # format: uuid
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -917,7 +917,7 @@ export def "auth-init create-initiate-using" [
   --accept-language: string
   auth_method: string@auth-method-completer
   --healthid: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -947,7 +947,7 @@ export def "auth-resend-auth-otp create-mobile-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   txn_id: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -978,7 +978,7 @@ export def "forgot-health-id-aadhaar create-retrieval-by-aadhar-using" [
   --accept-language: string
   otp: string
   txn_id: string # format: uuid
-]: any -> any {
+]: any -> record<healthId: string, healthIdNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1008,7 +1008,7 @@ export def "forgot-health-id-aadhaar-generate-otp create-aadhar-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --aadhaar: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1047,7 +1047,7 @@ export def "forgot-health-id-mobile create-retrieval-by-using" [
   --otp: string
   txn_id: string
   --year-of-birth: string
-]: any -> any {
+]: any -> record<healthId: string, healthIdNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1077,7 +1077,7 @@ export def "forgot-health-id-mobile-generate-otp create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --mobile: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1107,7 +1107,7 @@ export def "ha-lgd-districts get-in-state-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --state-code: string # stateCode
   --accept-language: string
-]: nothing -> any {
+]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "stateCode" $state_code "scalar")] | flatten | str join "&"
@@ -1134,7 +1134,7 @@ export def "ha-lgd-states get-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
-]: nothing -> any {
+]: nothing -> table<code: string, districts: list<record>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/lgd/states")
@@ -1161,7 +1161,7 @@ export def "ha-tags delete-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --body: any
-]: any -> any {
+]: any -> table<healthId: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1191,7 +1191,7 @@ export def "ha-tags get-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/ha/tags")
@@ -1219,7 +1219,7 @@ export def "ha-tags create-using" [
   --accept-language: string
   --health-id: string
   --tags: record
-]: any -> any {
+]: any -> table<healthId: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1250,7 +1250,7 @@ export def "health-facility-authenticate create-using" [
   --accept-language: string
   --hfr-uid: string
   --password: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1282,7 +1282,7 @@ export def "health-facility-change-password create-using" [
   --hfr-uid: string
   --new-password: string
   --old-password: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1319,7 +1319,7 @@ export def "health-facility-create-health-id-with-pre-verified create-aadhaar-ac
   --password: string
   --profile-photo: string
   --txn-id: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1349,7 +1349,7 @@ export def "health-facility-generate-password create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --hfr-uid: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1380,7 +1380,7 @@ export def "health-facility-generate-otp create-using" [
   --accept-language: string
   --x-token: string # Auth Token (e.g. Bearer XToken)
   --aadhaar: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1411,7 +1411,7 @@ export def "health-facility-get-svg-card generate" [
   --accept-language: string
   --health-id: string # Your health id (e.g. demo@ndhm)
   --x-token: string # Auth Token (e.g. Bearer X-Token)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/health/facility/getSvgCard")
@@ -1438,7 +1438,7 @@ export def "health-facility-reset-password create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --hfr-uid: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1468,7 +1468,7 @@ export def "hid-benefit-aadhaar-generate-otp create-aadhar-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --aadhaar: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1505,7 +1505,7 @@ export def "hid-benefit-aadhaar-verify-aadhar-otp create-using" [
   --otp: string
   --txn-id: string
   --validity: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1543,7 +1543,7 @@ export def "hid-benefit-aadhaar-verify-bio create-using" [
   --mobile-number: string
   --pid: string
   --validity: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1582,7 +1582,7 @@ export def "hid-benefit-create-health-id-demo-auth create-by-using" [
   --mobile-number: string
   --name: string
   --validity: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1613,7 +1613,7 @@ export def "hid-benefit-delink create-using" [
   --accept-language: string
   --benefit-name: string
   --uid-token: string
-]: any -> any {
+]: any -> record<benefitName: string, healthId: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1647,7 +1647,7 @@ export def "hid-benefit-link create-using" [
   --state-code: string
   --uid-token: string
   --validity: string
-]: any -> any {
+]: any -> record<benefitName: string, healthId: string, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1690,7 +1690,7 @@ export def "hid-benefit-mobile-create-health-id create-by-using" [
   --txn-id: string
   --uploaded-doc: string
   --validity: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1720,7 +1720,7 @@ export def "hid-benefit-mobile-generate-otp create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --mobile: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1760,7 +1760,7 @@ export def "hid-benefit-notify-benefit create-using" [
   --name: string
   --state-code: string
   --validity: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, benefitId: string, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, status: string, subDistrictCode: string, subdistrictName: string, tags: record, token: string, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1790,7 +1790,7 @@ export def "hid-benefit-search-aadhaar find-by-aadhar-using-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --aadhaar: string
-]: any -> any {
+]: any -> list<record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1821,7 +1821,7 @@ export def "hid-benefit-search-health-id-number find-by-using-create" [
   --accept-language: string
   --benefit-id: string
   --health-id: string
-]: any -> any {
+]: any -> table<benefitId: string, benefitName: string, healthIdNumber: string, stateCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1852,7 +1852,7 @@ export def "hid-benefit-update-mobile create-information-using" [
   --accept-language: string
   --health-id-number: string
   --mobile: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1900,7 +1900,7 @@ export def "hid-benefit-update-profile create-account-information-using" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> any {
+]: any -> record<address: string, authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, kycVerified: bool, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, pincode: string, profilePhoto: string, stateCode: string, stateName: string, subDistrictCode: string, subdistrictName: string, tags: record, townCode: string, townName: string, villageCode: string, villageName: string, wardCode: string, wardName: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1930,7 +1930,7 @@ export def "hid-benefit-update-status create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --health-id-number: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1970,7 +1970,7 @@ export def "registration-aadhaar-create-health-id-with-aadhaar-otp verify-aadhar
   --restrictions: string
   --txn-id: string
   --username: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2007,7 +2007,7 @@ export def "registration-aadhaar-create-health-id-with-pre-verified create-accou
   --password: string
   --profile-photo: string
   --txn-id: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2038,7 +2038,7 @@ export def "registration-aadhaar-generate-mobile-otp create-for-txn-using" [
   --accept-language: string
   --mobile: string
   --txn-id: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2068,7 +2068,7 @@ export def "registration-aadhaar-generate-otp create-aadhar-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --aadhaar: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2098,7 +2098,7 @@ export def "registration-aadhaar-resend-aadhaar-otp create-aadhar-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   txn_id: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2128,7 +2128,7 @@ export def "registration-aadhaar-search-aadhar get-health-numbers-by-using-creat
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --aadhaar: string
-]: any -> any {
+]: any -> list<record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2161,7 +2161,7 @@ export def "registration-aadhaar-verify-bio create-aadhar-using" [
   --bio-type: string
   --pid: string
   --restrictions: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2192,7 +2192,7 @@ export def "registration-aadhaar-verify-mobile-otp create-for-txn-using" [
   --accept-language: string
   --otp: string
   --txn-id: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2224,7 +2224,7 @@ export def "registration-aadhaar-verify-otp create-aadhar-only-using" [
   --otp: string
   --restrictions: string
   --txn-id: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2276,7 +2276,7 @@ export def "registration-mobile-create-health-id verify-user-via-using-create" [
   --village-code: string
   --ward-code: string
   --year-of-birth: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, dayOfBirth: string, districtCode: string, districtName: string, email: string, firstName: string, gender: string, healthId: string, healthIdNumber: string, kycPhoto: string, lastName: string, middleName: string, mobile: string, monthOfBirth: string, name: string, new: bool, stateCode: string, stateName: string, tags: record, token: string, yearOfBirth: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2306,7 +2306,7 @@ export def "registration-mobile-generate-otp create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --mobile: string
-]: any -> any {
+]: any -> record<txnId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2336,7 +2336,7 @@ export def "registration-mobile-resend-otp create-resent-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   txn_id: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2367,7 +2367,7 @@ export def "registration-mobile-verify-otp create-using" [
   --accept-language: string
   --otp: string
   --txn-id: string
-]: any -> any {
+]: any -> record<token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2397,7 +2397,7 @@ export def "search-exists-by-health-id create-user-userid-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --health-id: string
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2427,7 +2427,7 @@ export def "search-search-by-health-id create-user-account-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept-language: string
   --health-id: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2460,7 +2460,7 @@ export def "search-search-by-mobile create-user-using" [
   --mobile: string
   --name: string
   --year-of-birth: string
-]: any -> any {
+]: any -> record<authMethods: list<string>, healthId: string, healthIdNumber: string, name: string, tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

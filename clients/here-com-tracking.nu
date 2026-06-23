@@ -2865,7 +2865,7 @@ export def "largedata-data get" [
   --offset: int
   --count: int
   --x-request-id: string # ID used for correlating requests within HERE Tracking. Used for logging and error reporting. Must be a valid UUIDv4.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($data_id | is-empty) { error make --unspanned { msg: "path parameter 'dataId' must be non-empty" } }

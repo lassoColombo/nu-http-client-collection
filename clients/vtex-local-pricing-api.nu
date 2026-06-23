@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -140,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: GetPricingConfig
 export def "pricing-config get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -150,8 +160,8 @@ export def "pricing-config get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<blockAccount: bool, blockedRoutes: list<string>, defaultMarkup: int, hasMigrated: bool, hasOptionalBasePrice: bool, hasPriceInheritance: bool, migrationStatus: string, minimumMarkups: record, priceInheritance: string, priceTableLimit: int, priceTableSelectionStrategy: string, priceVariation: record<lowerLimit: int, upperLimit: int>, sellersToOverride: list<any>, tradePolicyConfigs: table<minimumMarkup: int, rulesShouldAffectListPrice: bool, tradePolicyId: string>> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   let full_url = (build-url $base "/pricing/config")
   let accept_val = "application/json; charset=utf-8"
@@ -167,8 +177,8 @@ export def "pricing-config get" [
 # operationId: GetPricingv2Status
 export def "pricing-migration get-pricingv2-status" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -177,8 +187,8 @@ export def "pricing-migration get-pricingv2-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<hasMigrated: bool, isActive: bool> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   let full_url = (build-url $base "/pricing/migration")
   let accept_val = "application/json; charset=utf-8"
@@ -194,8 +204,8 @@ export def "pricing-migration get-pricingv2-status" [
 # operationId: getallpricetablesandrules
 export def "pricing-pipeline-catalog get-allpricetablesandrules" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -205,7 +215,7 @@ export def "pricing-pipeline-catalog get-allpricetablesandrules" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> table<percentualModifier: int, rules: list<record>, tradePolicyId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   let full_url = (build-url $base "/pricing/pipeline/catalog")
   let accept_val = "application/json"
@@ -222,8 +232,8 @@ export def "pricing-pipeline-catalog get-allpricetablesandrules" [
 export def "pricing-pipeline-catalog get-rulesforapricetable" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -233,7 +243,7 @@ export def "pricing-pipeline-catalog get-rulesforapricetable" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record<percentualModifier: int, rules: table<context: record, id: float>, tradePolicyId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
   let full_url = (build-url $base ({price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
@@ -251,8 +261,8 @@ export def "pricing-pipeline-catalog get-rulesforapricetable" [
 export def "pricing-pipeline-catalog update" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -264,7 +274,7 @@ export def "pricing-pipeline-catalog update" [
   rules: list # Array of rules for the price table. — item shape: {context: record, id: int, percentualModifier: float}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
   let full_url = (build-url $base ({price_table_id: (encode-path-segment $price_table_id)} | format pattern "/pricing/pipeline/catalog/{price_table_id}"))
@@ -286,8 +296,8 @@ export def "pricing-pipeline-catalog update" [
 export def "pricing-prices delete" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -297,7 +307,7 @@ export def "pricing-prices delete" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}"))
@@ -315,8 +325,8 @@ export def "pricing-prices delete" [
 export def "pricing-prices get" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -326,7 +336,7 @@ export def "pricing-prices get" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> record<basePrice: int, costPrice: int, fixedPrices: table<dateRange: record, listPrice: float, minQuantity: int, tradePolicyId: string, value: float>, itemId: string, listPrice: int, markup: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}"))
@@ -345,8 +355,8 @@ export def "pricing-prices get" [
 export def "pricing-prices create-update-or-fixed" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -362,7 +372,7 @@ export def "pricing-prices create-update-or-fixed" [
   markup: int # The profit percentage that is to be obtained from the sale of that SKU. If you decide to fill the `markup` item, you must also fill the `costPrice`. The `basePrice` will be automatically generated based on both values. (default: 30)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}"))
@@ -385,8 +395,8 @@ export def "pricing-prices-computed get-pricebypricetable" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -398,8 +408,8 @@ export def "pricing-prices-computed get-pricebypricetable" [
   --quantity: int # SKU quantity. (e.g. 2)
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record<costPrice: float, listPrice: int, priceValidUntil: string, sellingPrice: float, tradePolicyId: string> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
@@ -419,8 +429,8 @@ export def "pricing-prices-computed get-pricebypricetable" [
 export def "pricing-prices-fixed get" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -429,8 +439,8 @@ export def "pricing-prices-fixed get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
   --content-type: string # Describes the type of the content being sent.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> table<dateRange: record<from: string, to: string>, listPrice: float, minQuantity: int, tradePolicyId: string, value: float> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let full_url = (build-url $base ({item_id: (encode-path-segment $item_id)} | format pattern "/pricing/prices/{item_id}/fixed"))
@@ -449,8 +459,8 @@ export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -460,7 +470,7 @@ export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
@@ -480,8 +490,8 @@ export def "pricing-prices-fixed get-pricesonapricetable" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -490,8 +500,8 @@ export def "pricing-prices-fixed get-pricesonapricetable" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # e.g. application/json
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> table<dateRange: record<from: string, to: string>, listPrice: float, minQuantity: int, tradePolicyId: string, value: float> {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
@@ -511,8 +521,8 @@ export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepo
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -524,7 +534,7 @@ export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepo
   --body: list
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($price_table_id | is-empty) { error make --unspanned { msg: "path parameter 'priceTableId' must be non-empty" } }
@@ -546,8 +556,8 @@ export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepo
 # operationId: Listpricetables
 export def "pricing-tables list-pricetables" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -557,7 +567,7 @@ export def "pricing-tables list-pricetables" [
   --content-type: string # Describes the type of the content being sent.
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand. (e.g. application/json)
 ]: nothing -> list<string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o PRICING_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o PRICING_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default "https://api.vtex.com/DefaultParameterValue/pricing")
   let full_url = (build-url $base "/pricing/tables")
   let accept_val = "application/json"

@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-peering-check-service-provider-ava
   --api-version: string # The client API version.
   --peering-service-location: string # Gets or sets the PeeringServiceLocation
   --peering-service-provider: string # Gets or sets the PeeringServiceProvider
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

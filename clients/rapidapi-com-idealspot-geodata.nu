@@ -148,7 +148,7 @@ export def "data-insights get-available" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: table<description: string, id: string, name: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/data/insights")
@@ -176,7 +176,7 @@ export def "data-insights get-list-parameters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: record<description: string, groups: list<string>, id: string, name: string, parameters: record<category: list>, periods: list<string>, slug: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'insight_id:' must be non-empty" } }
@@ -207,7 +207,7 @@ export def "data-insights-query list-insightat-location" [
   --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used. For more detail, see https://idealspot.gitlab.io/developer-docs/#location
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: table<data: list, location: record, location_index: int, metadata: record>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($insight_id | is-empty) { error make --unspanned { msg: "path parameter 'insight_id:' must be non-empty" } }
@@ -237,7 +237,7 @@ export def "geometries-geometry get" [
   --location: string # (Required) Represents a buffer, region, or custom polygon specification. Accepts the `Location` model (as a `Buffer`, `Region`, or `Custom Polygon`) formatted as a JSON string. Multiple `location` query parameters are allowed. NOTE: When requesting multiple locations, you must include brackets(i.e. `?location[]=...&location[]=...`). If not included, only the last location will be used.
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: record<features: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "location[]" $location "scalar")] | flatten | str join "&"
@@ -267,7 +267,7 @@ export def "geometries-regions-intersecting get-administrative-regionsusing-lat-
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: table<geometry: record, properties: record, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }
@@ -297,7 +297,7 @@ export def "traffic-counts get-vehicle-countsfor-road" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: table<data: list, metadata: record, roadsegment: record, stats: record>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
@@ -328,7 +328,7 @@ export def "traffic-roads-nearest get-segments" [
   --n: int # Number of road segments to return (between 1 and 20) (format: int32)
   --x-rapid-api-key: string # (Required) Rapid API Key. See https://rapidapi.com/idealspot-inc-idealspot-inc-default/api/idealspot-geodata
   --x-rapid-api-host: string
-]: nothing -> any {
+]: nothing -> record<data: record<crs: record<properties: record, type: string>, features: list<record>, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   if ($latitude | is-empty) { error make --unspanned { msg: "path parameter 'latitude' must be non-empty" } }

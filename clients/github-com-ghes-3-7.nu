@@ -4509,7 +4509,7 @@ export def "markdown create-render" [
   --context: string # The repository context to use when creating references in `gfm` mode. For example, setting `context` to `octo-org/octo-repo` will change the text `#42` into an HTML link to issue 42 in the `octo-org/octo-repo` repository.
   --mode: string@mode-completer # The rendering mode. (default: markdown, e.g. markdown)
   text: string # The Markdown text to render in HTML.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4537,7 +4537,7 @@ export def "markdown-raw create-render" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4814,7 +4814,7 @@ export def "octocat get-meta" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --s: string # The words to show in Octocat's speech bubble
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "s" $s "scalar")] | flatten | str join "&"
@@ -21642,7 +21642,7 @@ export def "scim-groups list-enterprise-admin-provisioned-enterprise" [
   --excluded-attributes: string # Excludes the specified attribute from being returned in the results. Using this parameter can speed up response time. (e.g. members)
   --start-index: int # Used for pagination: the starting index of the first result to return when paginating through values. (format: int32, default: 1, e.g. 1)
   --count: int # Used for pagination: the number of results to return per page. (format: int32, default: 30, e.g. 1)
-]: nothing -> any {
+]: nothing -> record<Resources: table<displayName: string, externalId: string, members: list, schemas: list, id: string, meta: record>, itemsPerPage: int, schemas: list<string>, startIndex: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "excludedAttributes" $excluded_attributes "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -21672,7 +21672,7 @@ export def "scim-groups create-enterprise-admin-provision-enterprise" [
   external_id: string # A unique identifier for the resource as defined by the provisioning client. (e.g. 8aa1a0c0-c4c3-4bc0-b4a5-2ef676900159)
   members: list # The group members. — item shape: {displayName: string, value: string}
   schemas: list<string> # The URIs that are used to indicate the namespaces of the SCIM schemas. (e.g. [urn:ietf:params:scim:schemas:core:2.0:Group])
-]: any -> any {
+]: any -> record<displayName: string, externalId: string, members: table<_ref: string, display: string, value: string>, schemas: list<string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21727,7 +21727,7 @@ export def "scim-groups get-enterprise-admin-provisioning-information-for-enterp
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --excluded-attributes: string # Excludes the specified attribute from being returned in the results. Using this parameter can speed up response time. (e.g. members)
-]: nothing -> any {
+]: nothing -> record<displayName: string, externalId: string, members: table<_ref: string, display: string, value: string>, schemas: list<string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scim_group_id | is-empty) { error make --unspanned { msg: "path parameter 'scim_group_id' must be non-empty" } }
@@ -21757,7 +21757,7 @@ export def "scim-groups update-enterprise-admin-attribute-for-enterprise" [
   --dry-run(-n) # Return the request that would be sent without executing it
   operations: list # patch operations list — item shape: {op: "add"|"replace"|"remove", path?: string, value?: string}
   schemas: list<string>
-]: any -> any {
+]: any -> record<displayName: string, externalId: string, members: table<_ref: string, display: string, value: string>, schemas: list<string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21791,7 +21791,7 @@ export def "scim-groups update-enterprise-admin-information-for-provisioned-ente
   external_id: string # A unique identifier for the resource as defined by the provisioning client. (e.g. 8aa1a0c0-c4c3-4bc0-b4a5-2ef676900159)
   members: list # The group members. — item shape: {displayName: string, value: string}
   schemas: list<string> # The URIs that are used to indicate the namespaces of the SCIM schemas. (e.g. [urn:ietf:params:scim:schemas:core:2.0:Group])
-]: any -> any {
+]: any -> record<displayName: string, externalId: string, members: table<_ref: string, display: string, value: string>, schemas: list<string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21823,7 +21823,7 @@ export def "scim-users list-enterprise-admin-provisioned-identities-enterprise" 
   --excluded-attributes: string # Excludes the specified attribute from being returned in the results. Using this parameter can speed up response time. (e.g. members)
   --start-index: int # Used for pagination: the starting index of the first result to return when paginating through values. (format: int32, default: 1, e.g. 1)
   --count: int # Used for pagination: the number of results to return per page. (format: int32, default: 30, e.g. 1)
-]: nothing -> any {
+]: nothing -> record<Resources: table<active: bool, displayName: string, emails: list, externalId: string, name: record, roles: list, schemas: list, userName: string, groups: list, id: string, meta: record>, itemsPerPage: int, schemas: list<string>, startIndex: int, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "excludedAttributes" $excluded_attributes "scalar") (serialize-qp "startIndex" $start_index "scalar") (serialize-qp "count" $count "scalar")] | flatten | str join "&"
@@ -21859,7 +21859,7 @@ export def "scim-users create-enterprise-admin-provision-enterprise" [
   --roles: list # The roles assigned to the user. — item shape: {display?: string, primary?: bool, type?: string, value: "User"|"user"|"27d9891d-2c17-4f45-a262-781a0e55c80a"|"Restricted User"|"restricted_user"|"1ebc4a02-e56c-43a6-92a5-02ee09b90824"|"Enterprise Owner"|"enterprise_owner"|"981df190-8801-4618-a08a-d91f6206c954"|"ba4987ab-a1c3-412a-b58c-360fc407cb10"|"Billing Manager"|"billing_manager"|"0e338b8c-cc7f-498a-928d-ea3470d7e7e3"|"e6be2762-e4ad-4108-b72d-1bbe884a0f91"}
   schemas: list<string> # The URIs that are used to indicate the namespaces of the SCIM schemas. (e.g. [urn:ietf:params:scim:schemas:core:2.0:User])
   user_name: string # The username for the user. (e.g. E012345)
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, name: record<familyName: string, formatted: string, givenName: string, middleName: string>, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string, groups: table<_ref: string, display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21913,7 +21913,7 @@ export def "scim-users get-enterprise-admin-provisioning-information-for-enterpr
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, name: record<familyName: string, formatted: string, givenName: string, middleName: string>, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string, groups: table<_ref: string, display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scim_user_id | is-empty) { error make --unspanned { msg: "path parameter 'scim_user_id' must be non-empty" } }
@@ -21942,7 +21942,7 @@ export def "scim-users update-enterprise-admin-attribute-for-enterprise" [
   --dry-run(-n) # Return the request that would be sent without executing it
   operations: list # patch operations list — item shape: {op: "add"|"replace"|"remove", path?: string, value?: string}
   schemas: list<string>
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, name: record<familyName: string, formatted: string, givenName: string, middleName: string>, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string, groups: table<_ref: string, display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21982,7 +21982,7 @@ export def "scim-users update-enterprise-admin-information-for-provisioned-enter
   --roles: list # The roles assigned to the user. — item shape: {display?: string, primary?: bool, type?: string, value: "User"|"user"|"27d9891d-2c17-4f45-a262-781a0e55c80a"|"Restricted User"|"restricted_user"|"1ebc4a02-e56c-43a6-92a5-02ee09b90824"|"Enterprise Owner"|"enterprise_owner"|"981df190-8801-4618-a08a-d91f6206c954"|"ba4987ab-a1c3-412a-b58c-360fc407cb10"|"Billing Manager"|"billing_manager"|"0e338b8c-cc7f-498a-928d-ea3470d7e7e3"|"e6be2762-e4ad-4108-b72d-1bbe884a0f91"}
   schemas: list<string> # The URIs that are used to indicate the namespaces of the SCIM schemas. (e.g. [urn:ietf:params:scim:schemas:core:2.0:User])
   user_name: string # The username for the user. (e.g. E012345)
-]: any -> any {
+]: any -> record<active: bool, displayName: string, emails: table<primary: bool, type: string, value: string>, externalId: string, name: record<familyName: string, formatted: string, givenName: string, middleName: string>, roles: table<display: string, primary: bool, type: string, value: string>, schemas: list<string>, userName: string, groups: table<_ref: string, display: string, value: string>, id: string, meta: record<created: string, lastModified: string, location: string, resourceType: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -25661,7 +25661,7 @@ export def "zen get-meta" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/zen")

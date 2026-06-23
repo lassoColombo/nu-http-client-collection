@@ -772,7 +772,7 @@ export def "hooks delete-delet" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($hook_id | is-empty) { error make --unspanned { msg: "path parameter 'hook_id' must be non-empty" } }
@@ -805,7 +805,7 @@ export def "hooks update" [
   --subscriber-name: string # Name of the person to be notified
   subscriber_type: string@subscriber-type-completer # A platform with an endpoint ready to process the information
   --subscriber-url: string # URL where the notification is to be sent. Required only if subscriber_type is set to web
-]: any -> any {
+]: any -> record<actions: list<string>, event_type: string, signing_key: string, status: string, subscriber_type: string, subscriber_url: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "truora-api-key"))
   let base = ($base_url | default $BASE_URL)

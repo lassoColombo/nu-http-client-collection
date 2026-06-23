@@ -210,7 +210,7 @@ export def "well-known-mercure-subscriptions get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_context: string, id: string, lastEventID: string, subscriptions: table<_context: string, active: bool, id: string, lastEventID: string, payload: record, subscriber: string, topic: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/.well-known/mercure/subscriptions")
@@ -234,7 +234,7 @@ export def "well-known-mercure-subscriptions get-by-topic" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_context: string, id: string, lastEventID: string, subscriptions: table<_context: string, active: bool, id: string, lastEventID: string, payload: record, subscriber: string, topic: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic | is-empty) { error make --unspanned { msg: "path parameter 'topic' must be non-empty" } }
@@ -260,7 +260,7 @@ export def "well-known-mercure-subscriptions get-by-topic-subscriber" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_context: string, id: string, lastEventID: string, subscriptions: table<_context: string, active: bool, id: string, lastEventID: string, payload: record, subscriber: string, topic: string, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($topic | is-empty) { error make --unspanned { msg: "path parameter 'topic' must be non-empty" } }

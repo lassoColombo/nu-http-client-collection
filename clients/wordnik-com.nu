@@ -164,7 +164,7 @@ export def "word-json-audio get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --limit: int # Maximum number of results to return (format: int32, default: 50)
-]: nothing -> any {
+]: nothing -> table<attributionText: string, attributionUrl: string, audioType: string, commentCount: int, createdAt: string, createdBy: string, description: string, duration: float, fileUrl: string, id: int, voteAverage: float, voteCount: int, voteWeightedAverage: float, word: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -196,7 +196,7 @@ export def "word-json-definitions get" [
   --source-dictionaries: list<string>@source-dictionaries-completer # Source dictionary to return definitions from. If 'all' is received, results are returned from all sources. If multiple values are received (e.g. 'century,wiktionary'), results are returned from the first specified dictionary that has definitions. If left blank, results are returned from the first dictionary that has definitions. By default, dictionaries are searched in this order: ahd-5, wiktionary, webster, century, wordnet
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --include-tags: string@include-tags-completer # Return a closed set of XML tags in response (default: false)
-]: nothing -> any {
+]: nothing -> table<attributionText: string, attributionUrl: string, citations: list<any>, exampleUses: list<any>, extendedText: string, labels: list<any>, notes: list<any>, partOfSpeech: string, relatedWords: list<any>, score: float, seqString: string, sequence: string, sourceDictionary: string, text: string, textProns: list<any>, word: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -223,7 +223,7 @@ export def "word-json-etymologies get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -253,7 +253,7 @@ export def "word-json-examples get" [
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --skip: int # Results to skip (format: int32, default: 0)
   --limit: int # Maximum number of results to return (format: int32, default: 5)
-]: nothing -> any {
+]: nothing -> record<examples: list<any>, facets: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -282,7 +282,7 @@ export def "word-json-frequency get" [
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --start-year: int # Starting Year (format: int32, default: 1800)
   --end-year: int # Ending Year (format: int32, default: 2012)
-]: nothing -> any {
+]: nothing -> record<frequency: list<any>, frequencyString: string, totalCount: int, unknownYearCount: int, word: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -311,7 +311,7 @@ export def "word-json-hyphenation get" [
   --use-canonical: string@use-canonical-completer # If true will try to return a correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --source-dictionary: string@source-dictionary-completer # Get from a single dictionary. Valid options: ahd-5, century, wiktionary, webster, and wordnet.
   --limit: int # Maximum number of results to return (format: int32, default: 50)
-]: nothing -> any {
+]: nothing -> table<seq: int, text: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -340,7 +340,7 @@ export def "word-json-phrases get" [
   --limit: int # Maximum number of results to return (format: int32, default: 5)
   --wlmi: int # Minimum WLMI for the phrase (format: int32, default: 0)
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-]: nothing -> any {
+]: nothing -> table<count: int, gram1: string, gram2: string, mi: float, wlmi: float> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -370,7 +370,7 @@ export def "word-json-pronunciations get-text" [
   --source-dictionary: string@source-dictionary-completer-1 # Get from a single dictionary
   --type-format: string@type-format-completer # Text pronunciation type
   --limit: int # Maximum number of results to return (format: int32, default: 50)
-]: nothing -> any {
+]: nothing -> table<raw: string, rawType: string, seq: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -399,7 +399,7 @@ export def "word-json-related-words get" [
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
   --relationship-types: string@relationship-types-completer # Limits the total results per type of relationship type
   --limit-per-relationship-type: int # Restrict to the supplied relationship types (format: int32, default: 10)
-]: nothing -> any {
+]: nothing -> table<gram: string, label1: string, label2: string, label3: string, label4: string, relationshipType: string, words: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -425,7 +425,7 @@ export def "word-json-scrabble-score get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -451,7 +451,7 @@ export def "word-json-top-example get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --use-canonical: string@use-canonical-completer # If true will try to return the correct word root ('cats' -> 'cat'). If false returns exactly what was requested. (default: false)
-]: nothing -> any {
+]: nothing -> record<documentId: int, exampleId: int, id: int, provider: record<id: int, name: string>, rating: float, score: record<baseWordScore: float, docTermCount: int, id: int, lemma: string, partOfSpeech: string, position: int, score: float, sentenceId: int, stopword: bool, word: string, wordType: string>, sentence: record<display: string, documentMetadataId: int, hasScoredWords: bool, id: int, rating: int, scoredWords: list<any>>, text: string, title: string, url: string, word: string, year: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -485,7 +485,7 @@ export def "words-json-random-word get" [
   --max-dictionary-count: int # Maximum dictionary count (format: int32, default: -1)
   --min-length: int # Minimum word length (format: int32, default: 5)
   --max-length: int # Maximum word length (format: int32, default: -1)
-]: nothing -> any {
+]: nothing -> record<canonicalForm: string, id: int, originalWord: string, suggestions: list<string>, vulgar: string, word: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hasDictionaryDef" $has_dictionary_def "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar")] | flatten | str join "&"
@@ -521,7 +521,7 @@ export def "words-json-random-words get" [
   --sort-by: string@sort-by-completer # Attribute to sort by
   --sort-order: string@sort-order-completer # Sort direction
   --limit: int # Maximum number of results to return (format: int32, default: 10)
-]: nothing -> any {
+]: nothing -> table<canonicalForm: string, id: int, originalWord: string, suggestions: list<string>, vulgar: string, word: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "hasDictionaryDef" $has_dictionary_def "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minDictionaryCount" $min_dictionary_count "scalar") (serialize-qp "maxDictionaryCount" $max_dictionary_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -561,7 +561,7 @@ export def "words-json-reverse-dictionary get" [
   --sort-order: string@sort-order-completer # Sort direction
   --skip: string # Results to skip (default: 0)
   --limit: int # Maximum number of results to return (format: int32, default: 10)
-]: nothing -> any {
+]: nothing -> record<results: list<any>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "findSenseForWord" $find_sense_for_word "scalar") (serialize-qp "includeSourceDictionaries" $include_source_dictionaries "scalar") (serialize-qp "excludeSourceDictionaries" $exclude_source_dictionaries "scalar") (serialize-qp "includePartOfSpeech" $include_part_of_speech "scalar") (serialize-qp "excludePartOfSpeech" $exclude_part_of_speech "scalar") (serialize-qp "minCorpusCount" $min_corpus_count "scalar") (serialize-qp "maxCorpusCount" $max_corpus_count "scalar") (serialize-qp "minLength" $min_length "scalar") (serialize-qp "maxLength" $max_length "scalar") (serialize-qp "expandTerms" $expand_terms "scalar") (serialize-qp "includeTags" $include_tags "scalar") (serialize-qp "sortBy" $sort_by "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -598,7 +598,7 @@ export def "words-json-search list" [
   --max-length: int # Maximum word length (format: int32, default: -1)
   --skip: int # Results to skip (format: int32, default: 0)
   --limit: int # Maximum number of results to return (format: int32, default: 10)
-]: nothing -> any {
+]: nothing -> record<searchResults: list<any>, totalResults: int> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   if ($query | is-empty) { error make --unspanned { msg: "path parameter 'query' must be non-empty" } }
@@ -624,7 +624,7 @@ export def "words-json-word-of-the-day get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --date: string # Fetches by date in yyyy-MM-dd
-]: nothing -> any {
+]: nothing -> record<category: string, contentProvider: record<id: int, name: string>, createdAt: string, createdBy: string, definitions: list<any>, examples: list<any>, htmlExtra: string, id: int, note: string, parentId: string, publishDate: string, word: string> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "date" $date "scalar")] | flatten | str join "&"

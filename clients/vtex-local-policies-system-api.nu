@@ -272,7 +272,7 @@ export def "policy-engine-policies create-or-update" [
   description: string # Policy description. This description is only for internal use of identification
   name: string # Policy Name
   statements: list # Requirements to the Policy be applied — item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
-]: any -> any {
+]: any -> table<description: string, id: string, name: string, statements: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -309,7 +309,7 @@ export def "policy-engine-policies update" [
   description: string # Policy description. This description is only for internal use of identification
   name: string # Policy Name
   statements: list # Requirements to the Policy be applied — item shape: {actions?: list, condition?: record, effect: string, operation?: string, resource?: string}
-]: any -> any {
+]: any -> table<description: string, id: string, name: string, statements: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

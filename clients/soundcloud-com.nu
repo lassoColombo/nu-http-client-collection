@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -173,8 +183,8 @@ export def commands []: nothing -> table {
 # GET /connect
 export def "connect get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -187,7 +197,7 @@ export def "connect get" [
   --scope: string # Scope (e.g. default)
   --state: string # Any value included here will be appended to the redirect URI. Use this for CSRF protection. (e.g. encrypted_session_info)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "response_type" $response_type "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "state" $state "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connect" $qp)
@@ -808,8 +818,8 @@ export def "oauth2-token create" [
 @deprecated --flag offset
 export def "playlists list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -822,7 +832,7 @@ export def "playlists list" [
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/playlists" $qp)
@@ -864,8 +874,8 @@ export def "playlists create" [
 export def "playlists delete" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -873,7 +883,7 @@ export def "playlists delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let full_url = (build-url $base ({playlist_id: (encode-path-segment $playlist_id)} | format pattern "/playlists/{playlist_id}"))
@@ -888,8 +898,8 @@ export def "playlists delete" [
 export def "playlists get" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -899,7 +909,7 @@ export def "playlists get" [
   --secret-token: string # A secret token to fetch private playlists/tracks
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let qp = [(serialize-qp "secret_token" $secret_token "scalar") (serialize-qp "access" $access "csv")] | flatten | str join "&"
@@ -970,8 +980,8 @@ export def "playlists-reposters get" [
 export def "playlists-tracks get" [
   playlist_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -982,7 +992,7 @@ export def "playlists-tracks get" [
   --access: list<string> # Filters content by level of access the user (logged in or anonymous) has to the track. The result list will include only tracks with the specified access. Include all options if you'd like to see all possible tracks. See `Track#access` schema for more details. (default: playable,preview)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($playlist_id | is-empty) { error make --unspanned { msg: "path parameter 'playlist_id' must be non-empty" } }
   let qp = [(serialize-qp "secret_token" $secret_token "scalar") (serialize-qp "access" $access "csv") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
@@ -1093,8 +1103,8 @@ export def "reposts-tracks create" [
 # GET /resolve
 export def "resolve get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1103,7 +1113,7 @@ export def "resolve get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # SoundCloud URL (e.g. https://soundcloud.com/user-434241656)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/resolve" $qp)
@@ -1118,8 +1128,8 @@ export def "resolve get" [
 @deprecated --flag offset
 export def "tracks list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1138,7 +1148,7 @@ export def "tracks list" [
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "genres" $genres "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "bpm" $bpm "deepObject") (serialize-qp "duration" $duration "deepObject") (serialize-qp "created_at" $created_at "deepObject") (serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/tracks" $qp)
@@ -1152,8 +1162,8 @@ export def "tracks list" [
 # POST /tracks
 export def "tracks create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1180,7 +1190,7 @@ export def "tracks create" [
   --track-title: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tracks")
   let req_body = {"track[artwork_data]": $track_artwork_data, "track[asset_data]": $track_asset_data, "track[commentable]": $track_commentable, "track[description]": $track_description, "track[downloadable]": $track_downloadable, "track[embeddable_by]": $track_embeddable_by, "track[genre]": $track_genre, "track[isrc]": $track_isrc, "track[label_name]": $track_label_name, "track[license]": $track_license, "track[permalink]": $track_permalink, "track[purchase_url]": $track_purchase_url, "track[release]": $track_release, "track[release_date]": $track_release_date, "track[sharing]": $track_sharing, "track[streamable]": $track_streamable, "track[tag_list]": $track_tag_list, "track[title]": $track_title} | compact
@@ -1307,8 +1317,8 @@ export def "tracks-comments get" [
 export def "tracks-comments create" [
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1318,7 +1328,7 @@ export def "tracks-comments create" [
   --comment: record # shape: {body: string, timestamp?: any}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($track_id | is-empty) { error make --unspanned { msg: "path parameter 'track_id' must be non-empty" } }
   let full_url = (build-url $base ({track_id: (encode-path-segment $track_id)} | format pattern "/tracks/{track_id}/comments"))
@@ -1445,8 +1455,8 @@ export def "tracks-streams get" [
 @deprecated --flag offset
 export def "users list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1459,7 +1469,7 @@ export def "users list" [
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "q" $q "scalar") (serialize-qp "ids" $ids "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
@@ -1474,8 +1484,8 @@ export def "users list" [
 export def "users get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1483,7 +1493,7 @@ export def "users get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}"))
@@ -1499,8 +1509,8 @@ export def "users get" [
 export def "users-comments get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1510,7 +1520,7 @@ export def "users-comments get" [
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --offset: int # Offset of first result. Deprecated, use `linked_partitioning` instead. (DEPRECATED, default: 0, e.g. 0)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -1528,8 +1538,8 @@ export def "users-comments get" [
 export def "users-favorites get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1539,7 +1549,7 @@ export def "users-favorites get" [
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
@@ -1555,8 +1565,8 @@ export def "users-favorites get" [
 export def "users-followers get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1565,7 +1575,7 @@ export def "users-followers get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1581,8 +1591,8 @@ export def "users-followers get" [
 export def "users-followings list" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1591,7 +1601,7 @@ export def "users-followings list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1610,8 +1620,8 @@ export def "users-followings get" [
   user_id: int
   following_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1619,7 +1629,7 @@ export def "users-followings get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   if ($following_id | is-empty) { error make --unspanned { msg: "path parameter 'following_id' must be non-empty" } }
@@ -1635,8 +1645,8 @@ export def "users-followings get" [
 export def "users-likes-tracks get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1647,7 +1657,7 @@ export def "users-likes-tracks get" [
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
@@ -1663,8 +1673,8 @@ export def "users-likes-tracks get" [
 export def "users-playlists get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1675,7 +1685,7 @@ export def "users-playlists get" [
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
@@ -1691,8 +1701,8 @@ export def "users-playlists get" [
 export def "users-tracks get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1703,7 +1713,7 @@ export def "users-tracks get" [
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
   --linked-partitioning: oneof<nothing, bool> # Returns paginated collection of items (recommended, returning a list without pagination is deprecated and should not be used) (e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "access" $access "csv") (serialize-qp "limit" $limit "scalar") (serialize-qp "linked_partitioning" $linked_partitioning "scalar")] | flatten | str join "&"
@@ -1719,8 +1729,8 @@ export def "users-tracks get" [
 export def "users-web-profiles get" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authheader: string # Auth token for AuthHeader (Authorization)
+  --token-clientid: string # Auth token for ClientId (client_id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1729,7 +1739,7 @@ export def "users-web-profiles get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --limit: int # Number of results to return in the collection. (default: 50, e.g. 2)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authheader | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_AUTHHEADER_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o SOUNDCLOUD_PUBLIC_API_SPECIFICATION_CLIENTID_TOKEN | default "")) "query-client_id")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar")] | flatten | str join "&"

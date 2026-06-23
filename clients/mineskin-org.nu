@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -142,8 +152,8 @@ export def commands []: nothing -> table {
 @deprecated --flag model
 export def "generate-upload create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (key)
+  --token-bearerauth: string # Auth token for bearerAuth (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -158,7 +168,7 @@ export def "generate-upload create" [
   --file: string # format: binary
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate/upload")
   let req_body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "file": $file} | compact
@@ -175,8 +185,8 @@ export def "generate-upload create" [
 @deprecated --flag model
 export def "generate-url create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (key)
+  --token-bearerauth: string # Auth token for bearerAuth (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -191,7 +201,7 @@ export def "generate-url create" [
   --url: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate/url")
   let req_body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "url": $url} | compact
@@ -207,8 +217,8 @@ export def "generate-url create" [
 @deprecated --flag model
 export def "generate-user create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (key)
+  --token-bearerauth: string # Auth token for bearerAuth (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -223,7 +233,7 @@ export def "generate-user create" [
   --uuid: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/generate/user")
   let req_body = {"model": $model, "name": $name, "variant": $variant, "visibility": $visibility, "uuid": $uuid} | compact
@@ -238,8 +248,8 @@ export def "generate-user create" [
 # GET /get/delay
 export def "get-delay get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (key)
+  --token-bearerauth: string # Auth token for bearerAuth (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -248,7 +258,7 @@ export def "get-delay get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-agent: string # Custom User-Agent for your application, see [user-agent.dev](https://user-agent.dev/) for implementation examples (e.g. ExampleApp/v1.0)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o MINESKIN_API_APIKEY_TOKEN | default "")) "query-key") (build-auth ($token_bearerauth | default ($env | get -o MINESKIN_API_BEARERAUTH_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/get/delay")
   let accept_val = "application/json"

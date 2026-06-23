@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -147,8 +157,8 @@ export def commands []: nothing -> table {
 # operationId: getOwnedNumbers
 export def "account-numbers get-owned" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -164,7 +174,7 @@ export def "account-numbers get-owned" [
   --size: int # Page size (default: 10, e.g. 10)
   --index: int # Page index (default: 1, e.g. 1)
 ]: nothing -> record<count: int, numbers: table<country: string, features: list, messagesCallbackType: string, messagesCallbackValue: string, moHttpUrl: string, msisdn: string, type: string, voiceCallbackType: string, voiceCallbackValue: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "application_id" $application_id "scalar") (serialize-qp "has_application" $has_application "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "pattern" $pattern "scalar") (serialize-qp "search_pattern" $search_pattern "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "index" $index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/account/numbers" $qp)
@@ -179,8 +189,8 @@ export def "account-numbers get-owned" [
 # operationId: buyANumber
 export def "number-buy create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -193,7 +203,7 @@ export def "number-buy create" [
   --target-api-key: string # If you’d like to perform an action on a subaccount, provide the `api_key` of that account here. If you’d like to perform an action on your own account, you do not need to provide this field. (e.g. 1a2345b7)
 ]: any -> record<error_code: string, error_code_label: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/buy")
   let req_body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
@@ -210,8 +220,8 @@ export def "number-buy create" [
 # operationId: cancelANumber
 export def "number-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -224,7 +234,7 @@ export def "number-cancel cancel" [
   --target-api-key: string # If you’d like to perform an action on a subaccount, provide the `api_key` of that account here. If you’d like to perform an action on your own account, you do not need to provide this field. (e.g. 1a2345b7)
 ]: any -> record<error_code: string, error_code_label: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/cancel")
   let req_body = {"country": $country, "msisdn": $msisdn, "target_api_key": $target_api_key} | compact
@@ -241,8 +251,8 @@ export def "number-cancel cancel" [
 # operationId: getAvailableNumbers
 export def "number-search get-available" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -258,7 +268,7 @@ export def "number-search get-available" [
   --size: int # Page size (default: 10, e.g. 10)
   --index: int # Page index (default: 1, e.g. 1)
 ]: nothing -> record<count: int, numbers: table<cost: string, country: string, features: list, msisdn: string, type: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country" $country "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "pattern" $pattern "scalar") (serialize-qp "search_pattern" $search_pattern "scalar") (serialize-qp "features" $features "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "index" $index "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/number/search" $qp)
@@ -275,8 +285,8 @@ export def "number-search get-available" [
 @deprecated --flag messages-callback-value
 export def "number-update update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -296,7 +306,7 @@ export def "number-update update" [
   --voice-status-callback: string # A webhook URI for Vonage to send a request to when a call ends (e.g. https://example.com/webhooks/status)
 ]: any -> record<error_code: string, error_code_label: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBERS_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBERS_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/number/update")
   let req_body = {"app_id": $app_id, "country": $country, "messagesCallbackType": $messages_callback_type, "messagesCallbackValue": $messages_callback_value, "moHttpUrl": $mo_http_url, "moSmppSysType": $mo_smpp_sys_type, "msisdn": $msisdn, "voiceCallbackType": $voice_callback_type, "voiceCallbackValue": $voice_callback_value, "voiceStatusCallback": $voice_status_callback} | compact

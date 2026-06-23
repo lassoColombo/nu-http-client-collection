@@ -719,7 +719,7 @@ export def "food-menu-items-nutrition-label get-widget" [
   --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
   --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
   --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -749,7 +749,7 @@ export def "food-menu-items-nutrition-label-png get-image" [
   --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
   --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
   --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -778,7 +778,7 @@ export def "food-menu-items-nutrition-widget get-visualize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -807,7 +807,7 @@ export def "food-menu-items-nutrition-widget-png get-by-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1043,7 +1043,7 @@ export def "food-products-nutrition-label get-widget" [
   --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
   --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
   --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1073,7 +1073,7 @@ export def "food-products-nutrition-label-png get-image" [
   --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
   --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
   --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1102,7 +1102,7 @@ export def "food-products-nutrition-widget get-visualize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1131,7 +1131,7 @@ export def "food-products-nutrition-widget-png get-by-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2448,7 +2448,7 @@ export def "recipes-visualize-equipment create" [
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2483,7 +2483,7 @@ export def "recipes-visualize-ingredients create" [
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2519,7 +2519,7 @@ export def "recipes-visualize-nutrition create" [
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2555,7 +2555,7 @@ export def "recipes-visualize-price-estimator create-breakdown" [
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2628,7 +2628,7 @@ export def "recipes-visualize-taste create" [
   --content-type: string@content-type-completer # The content type. (e.g. application/json)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2723,7 +2723,7 @@ export def "recipes-equipment-widget get-visualize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2778,7 +2778,7 @@ export def "recipes-equipment-widget-png get-by-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2834,7 +2834,7 @@ export def "recipes-ingredient-widget get-visualize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
   --measure: string@measure-completer # Whether the the measures should be 'us' or 'metric'. (e.g. metric)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2890,7 +2890,7 @@ export def "recipes-ingredient-widget-png get-by-image" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --measure: string@measure-completer # Whether the the measures should be 'us' or 'metric'. (e.g. metric)
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2921,7 +2921,7 @@ export def "recipes-nutrition-label get-widget" [
   --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
   --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
   --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2951,7 +2951,7 @@ export def "recipes-nutrition-label-png get-image" [
   --show-optional-nutrients: oneof<nothing, bool> # Whether to show optional nutrients. (e.g. false)
   --show-zero-values: oneof<nothing, bool> # Whether to show zero values. (e.g. false)
   --show-ingredients: oneof<nothing, bool> # Whether to show a list of ingredients. (e.g. false)
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2980,7 +2980,7 @@ export def "recipes-nutrition-widget get-visualize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
   --hdr-accept: string@accept-completer # Accept header. (e.g. application/json)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3037,7 +3037,7 @@ export def "recipes-nutrition-widget-png get-by-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3064,7 +3064,7 @@ export def "recipes-price-breakdown-widget get-visualize" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --default-css: oneof<nothing, bool> # Whether the default CSS should be added to the response. (default: true, e.g. false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3119,7 +3119,7 @@ export def "recipes-price-breakdown-widget-png get-by-image" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3204,7 +3204,7 @@ export def "recipes-taste-widget get-visualize" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --normalize: oneof<nothing, bool> # Whether to normalize to the strongest taste. (default: true, e.g. true)
   --rgb: string # Red, green, blue values for the chart color. (e.g. 75,192,192)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3263,7 +3263,7 @@ export def "recipes-taste-widget-png get-by-image" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --normalize: oneof<nothing, bool> # Normalize to the strongest taste. (e.g. false)
   --rgb: string # Red, green, blue values for the chart color. (e.g. 75,192,192)
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

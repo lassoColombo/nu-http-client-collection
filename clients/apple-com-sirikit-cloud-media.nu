@@ -155,7 +155,7 @@ export def "configuration get-extension" [
   --accept-language: string
   --if-none-match: string
   --cache-control: string
-]: nothing -> any {
+]: nothing -> record<hdr: record, intent: record<addMedia: record<opt: list>, hdr: record, playMedia: record<opt: list>, updateMediaAffinity: record<opt: list>>, media: record<queues: record<hdr: record, playMedia: record, updateActivity: record>>, url: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration")

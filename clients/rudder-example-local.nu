@@ -212,7 +212,7 @@ export def "archives-export export" [
   --techniques: list # IDs, ie technique name/technique version (optionally with revision, '+' need to be escaped as '%2B') of techniques to include
   --groups: list # IDs (optionally with revision, '+' need to be escaped as '%2B') of groups to include
   --include: list<string> # Scope of dependencies to include in archive, where rule as directives and groups dependencies, directives have techniques dependencies, and techniques and groups don't have dependencies. 'none' means no dependencies will be include, 'all' means that the whole tree will, 'directives' and 'groups' means to include them specifically, 'techniques' means to include both directives and techniques.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "rules" $rules "csv") (serialize-qp "directives" $directives "csv") (serialize-qp "techniques" $techniques "csv") (serialize-qp "groups" $groups "csv") (serialize-qp "include" $include "csv")] | flatten | str join "&"
@@ -2831,7 +2831,7 @@ export def "status get-none" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status")
@@ -2933,7 +2933,7 @@ export def "system-archives-zip get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($archive_kind | is-empty) { error make --unspanned { msg: "path parameter 'archiveKind' must be non-empty" } }

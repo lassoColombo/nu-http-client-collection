@@ -174,7 +174,7 @@ export def "api get-cancel-job" [
   --operation: string@operation-completer
   --action-2: string@action-completer #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<Success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -209,7 +209,7 @@ export def "api create-cancel-job" [
   --action-2: string@action-completer #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -251,7 +251,7 @@ export def "api get-create-job" [
   --operation: string@operation-completer-1
   --action-2: string@action-completer-1 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<JobId: string, JobType: string, Signature: string, SignatureFileContents: string, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "ManifestAddendum" $manifest_addendum "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -286,7 +286,7 @@ export def "api create-job" [
   --action-2: string@action-completer-1 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<JobId: string, JobType: string, Signature: string, SignatureFileContents: string, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -335,7 +335,7 @@ export def "api get-shipping-label" [
   --operation: string@operation-completer-2
   --action-2: string@action-completer-2 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<ShippingLabelURL: string, Warning: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "jobIds" $job_ids "multi") (serialize-qp "name" $name "scalar") (serialize-qp "company" $company "scalar") (serialize-qp "phoneNumber" $phone_number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "stateOrProvince" $state_or_province "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "street1" $street1 "scalar") (serialize-qp "street2" $street2 "scalar") (serialize-qp "street3" $street3 "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -370,7 +370,7 @@ export def "api create-get-shipping-label" [
   --action-2: string@action-completer-2 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<ShippingLabelURL: string, Warning: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -409,7 +409,7 @@ export def "api get-status" [
   --operation: string@operation-completer-3
   --action-2: string@action-completer-3 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<JobId: string, JobType: string, LocationCode: string, LocationMessage: string, ProgressCode: string, ProgressMessage: string, Carrier: string, TrackingNumber: string, LogBucket: string, LogKey: string, ErrorCount: int, Signature: string, SignatureFileContents: string, CurrentManifest: string, CreationDate: string, ArtifactList: table<Description: string, URL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -444,7 +444,7 @@ export def "api create-get-status" [
   --action-2: string@action-completer-3 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<JobId: string, JobType: string, LocationCode: string, LocationMessage: string, ProgressCode: string, ProgressMessage: string, Carrier: string, TrackingNumber: string, LogBucket: string, LogKey: string, ErrorCount: int, Signature: string, SignatureFileContents: string, CurrentManifest: string, CreationDate: string, ArtifactList: table<Description: string, URL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -484,7 +484,7 @@ export def "api get-list-jobs" [
   --operation: string@operation-completer-4
   --action-2: string@action-completer-4 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<Jobs: table<JobId: string, CreationDate: string, IsCanceled: bool, JobType: string>, IsTruncated: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxJobs" $max_jobs "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -521,7 +521,7 @@ export def "api create-list-jobs" [
   --action-2: string@action-completer-4 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<Jobs: table<JobId: string, CreationDate: string, IsCanceled: bool, JobType: string>, IsTruncated: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -563,7 +563,7 @@ export def "api get-update-job" [
   --operation: string@operation-completer-5
   --action-2: string@action-completer-5 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<Success: bool, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "JobId" $job_id "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "JobType" $job_type "scalar") (serialize-qp "ValidateOnly" $validate_only "scalar") (serialize-qp "APIVersion" $api_version "scalar") (serialize-qp "Operation" $operation "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -598,7 +598,7 @@ export def "api create-update-job" [
   --action-2: string@action-completer-5 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<Success: bool, WarningMessage: string, ArtifactList: table<Description: string, URL: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

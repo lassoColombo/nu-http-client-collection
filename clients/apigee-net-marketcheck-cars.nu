@@ -932,7 +932,7 @@ export def "image-cache-car get-cached" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API Authentication Key. Mandatory with all API calls.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($listing_id | is-empty) { error make --unspanned { msg: "path parameter 'listingID' must be non-empty" } }

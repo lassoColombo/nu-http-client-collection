@@ -157,7 +157,7 @@ export def "action create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<_thread: string, adherence: record, details: record, effective_from: string, effective_to: string, frequency_goal: record, identifiers: list, intake: record, metric_required: bool, metrics: list, static_title: string, title: string, tracking: bool, type: string, windows: list>, id: string, relationships: record<plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -184,7 +184,7 @@ export def "action get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<_thread: string, adherence: record, details: record, effective_from: string, effective_to: string, frequency_goal: record, identifiers: list, intake: record, metric_required: bool, metrics: list, static_title: string, title: string, tracking: bool, type: string, windows: list>, id: string, relationships: record<plan: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -210,7 +210,7 @@ export def "action update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<_thread: string, adherence: record, details: record, effective_from: string, effective_to: string, frequency_goal: record, identifiers: list, intake: record, metric_required: bool, metrics: list, static_title: string, title: string, tracking: bool, type: string, windows: list>, id: string, relationships: record<plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -238,7 +238,7 @@ export def "bundle create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<_thread: string, effective_from: string, effective_to: string, title: string, type: string>, id: string, relationships: record<actions: record, plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -265,7 +265,7 @@ export def "bundle get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<_thread: string, effective_from: string, effective_to: string, title: string, type: string>, id: string, relationships: record<actions: record, plan: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -291,7 +291,7 @@ export def "bundle update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<_thread: string, effective_from: string, effective_to: string, title: string, type: string>, id: string, relationships: record<actions: record, plan: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -334,7 +334,7 @@ export def "calendar-event list" [
   --page-limit: int # Page limit (default: 50)
   --page-cursor: string # Page cursor
   --include: string@include-completer # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[attendees]" $filter_attendees "scalar") (serialize-qp "filter[type]" $filter_type "scalar") (serialize-qp "filter[completed]" $filter_completed "scalar") (serialize-qp "filter[start_at]" $filter_start_at "scalar") (serialize-qp "filter[end_at]" $filter_end_at "scalar") (serialize-qp "filter[completed_at]" $filter_completed_at "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
@@ -359,7 +359,7 @@ export def "calendar-event create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<all_day: bool, attendees: list, completed_at: string, completed_by: record, description: string, end_at: string, location: string, start_at: string, time_zone: string, title: string, type: string>, id: string, links: record<self: string>, relationships: record<owner: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +411,7 @@ export def "calendar-event get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<all_day: bool, attendees: list, completed_at: string, completed_by: record, description: string, end_at: string, location: string, start_at: string, time_zone: string, title: string, type: string>, id: string, links: record<self: string>, relationships: record<owner: record>, type: string>, included: table<attributes: record, id: string, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -437,7 +437,7 @@ export def "calendar-event update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<all_day: bool, attendees: list, completed_at: string, completed_by: record, description: string, end_at: string, location: string, start_at: string, time_zone: string, title: string, type: string>, id: string, links: record<self: string>, relationships: record<owner: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -465,7 +465,7 @@ export def "calendar-event-response create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<attendee: record, response_status: string>, relationships: record<calendar_event: record, user: record>, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -493,7 +493,7 @@ export def "coach get-coaches" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-groups: string # Comma-separated list of group ids. Note that one of the following filters must be specified: `filter[groups]`, `filter[organization]`.
   --filter-organization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[groups]`, `filter[organization]`.
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
@@ -518,7 +518,7 @@ export def "coach get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<first_name: string, last_name: string>, id: string, links: record<self: string>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -546,7 +546,7 @@ export def "email-history get-histories" [
   --filter-sender: string # Fitbit Plus user id of email sender. Required if filter[receiver] is not defined.
   --filter-email-type: string # Type of email
   --qp-sort: string@sort-completer # valid sorts: * send_time - ascending by send_time * -send_time - descending by send_time
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[receiver]" $filter_receiver "scalar") (serialize-qp "filter[sender]" $filter_sender "scalar") (serialize-qp "filter[emailType]" $filter_email_type "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -571,7 +571,7 @@ export def "email-history get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<email_address: string, email_type: string, send_time: string, status_times: record, twine_email_id: string>, id: string, relationships: record<receiver: record, sender: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -597,7 +597,7 @@ export def "group list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-organization: string # Organization identifier
   --filter-name: string # Group name
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[name]" $filter_name "scalar")] | flatten | str join "&"
@@ -622,7 +622,7 @@ export def "group create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<bio: string, name: string>, id: string, links: record<self: string>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -649,7 +649,7 @@ export def "group get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<bio: string, name: string>, id: string, links: record<self: string>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -681,7 +681,7 @@ export def "health-profile list" [
   --page-limit: int # Page limit (default: 50)
   --page-cursor: string # Page cursor
   --include: string@include-completer-1 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
@@ -707,7 +707,7 @@ export def "health-profile get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-1 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<stats: list>, id: string, links: record<self: string>, relationships: record<patient: record, questions: record>, type: string>, included: table<attributes: record, id: string, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -740,7 +740,7 @@ export def "health-profile-answer list" [
   --page-limit: int # Page limit (default: 50)
   --page-cursor: string # Page cursor
   --include: string@include-completer-2 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
@@ -766,7 +766,7 @@ export def "health-profile-answer get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-2 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<history: list, latest: record, question_id: string>, id: string, links: record<self: string>, relationships: record<patient: record>, type: string>, included: table<attributes: record, id: string, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -795,7 +795,7 @@ export def "health-profile-question list" [
   --filter-groups: string # Comma-separated list of group ids. Note that one of the following filters must be specified: `filter[patient]`, `filter[group]`, or `filter[organization]`.
   --filter-organization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[patient]`, `filter[group]`, or `filter[organization]`.
   --include: string@include-completer-3 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
@@ -821,7 +821,7 @@ export def "health-profile-question get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-3 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record, id: string, links: record<self: string>, relationships: record<answer: record, profile: record, question_definition: record>, type: string>, included: table<attributes: record, id: string, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -846,7 +846,7 @@ export def "health-question-definition list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/health_question_definition")
@@ -870,7 +870,7 @@ export def "health-question-definition get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<category: string, format: record, requirements: list, text: string>, id: string, links: record<self: string>, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -897,7 +897,7 @@ export def "oauth-token create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-4 # List of related resources to include in the response
   data: record # shape: {attributes: record, type?: "token"}
-]: any -> any {
+]: any -> record<data: record<attributes: record<access_token: string, expires_in: int, refresh_token: string, token_type: string>, id: string, relationships: record<groups: record, organization: record>, type: string>, included: table<attributes: record, id: string, links: record, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -925,7 +925,7 @@ export def "oauth-token-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -950,7 +950,7 @@ export def "oauth-token-organization get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<name: string>, id: string, links: record<self: string>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -975,7 +975,7 @@ export def "organization get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<name: string>, id: string, links: record<self: string>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1010,7 +1010,7 @@ export def "patient list" [
   --page-size: int # Page size (default: 10)
   --page-limit: int # Page limit (default: 50)
   --page-cursor: string # Page cursor
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "filter[identifier][system]" $filter_identifier_system "scalar") (serialize-qp "filter[identifier][value]" $filter_identifier_value "scalar") (serialize-qp "filter[archived]" $filter_archived "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar")] | flatten | str join "&"
@@ -1035,7 +1035,7 @@ export def "patient create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1062,7 @@ export def "patient update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1089,7 +1089,7 @@ export def "patient get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1115,7 +1115,7 @@ export def "patient update-by-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<addresses: list, archive_history: list, archived: bool, birth_date: string, email_address: string, enrolled_at: string, first_access_at: string, first_name: string, gender: string, identifiers: list, invited_at: string, last_access_at: string, last_name: string, note: string, phone_numbers: list, statement: record, updated_at: string>, id: string, links: record<self: string, twine_web_app: string>, relationships: record<coaches: record, groups: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1143,7 +1143,7 @@ export def "patient-coaches get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1168,7 +1168,7 @@ export def "patient-groups get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1199,7 +1199,7 @@ export def "patient-health-metric list" [
   --page-size: int # Page size (default: 10)
   --page-limit: int # Page limit (default: 50)
   --page-cursor: string # Page cursor
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[cursor]" $page_cursor "scalar")] | flatten | str join "&"
@@ -1224,7 +1224,7 @@ export def "patient-health-metric create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<code: record, diastolic: float, occurred_at: string, systolic: float, type: string, unit: string, value: any>, id: string, relationships: record<patient: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1251,7 +1251,7 @@ export def "patient-health-metric get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1279,7 +1279,7 @@ export def "patient-plan-summary get-summaries" [
   --filter-groups: string # Comma-separated list of group ids. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
   --filter-organization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
   --include: string@include-completer-5 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, relationships: record, type: string>, included: table<attributes: record, id: string, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar") (serialize-qp "include" $include "scalar")] | flatten | str join "&"
@@ -1305,7 +1305,7 @@ export def "patient-plan-summary get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include: string@include-completer-5 # List of related resources to include in the response
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<adherence: record, critical: record, effective_from: string, time_zone: string, window_notification_times: record, window_order: list>, id: string, links: record<self: string>, relationships: record<actions: record, bundles: record, current_results: record, patient: record>, type: string>, included: table<attributes: record, id: string, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1332,7 +1332,7 @@ export def "patient-plan-summary update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<adherence: record, critical: record, effective_from: string, time_zone: string, window_notification_times: record, window_order: list>, id: string, links: record<self: string>, relationships: record<actions: record, bundles: record, current_results: record, patient: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1370,7 +1370,7 @@ export def "result list" [
   --page-size: int # Page size (default: 10)
   --page-limit: int # Page limit (default: 50)
   --page-after: string # Page cursor
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[actions]" $filter_actions "scalar") (serialize-qp "filter[start_at]" $filter_start_at "scalar") (serialize-qp "filter[end_at]" $filter_end_at "scalar") (serialize-qp "filter[threads]" $filter_threads "scalar") (serialize-qp "filter[created_at]" $filter_created_at "scalar") (serialize-qp "filter[updated_at]" $filter_updated_at "scalar") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "page[limit]" $page_limit "scalar") (serialize-qp "page[after]" $page_after "scalar")] | flatten | str join "&"
@@ -1395,7 +1395,7 @@ export def "result get-patient-health" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<last: string, next: string, prev: string, self: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1424,7 +1424,7 @@ export def "reward list" [
   --filter-thread: string # Thread identifier
   --filter-groups: string # Comma-separated list of group ids. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
   --filter-organization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[reward_program_activation]" $filter_reward_program_activation "scalar") (serialize-qp "filter[thread]" $filter_thread "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
@@ -1449,7 +1449,7 @@ export def "reward create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<_thread: string, allocated_at: string, allocated_unit: string, allocated_value: float, description: string, earned_at: string, earned_value: float, fulfilled_at: string, fulfilled_value: float, target_at: string>, id: string, relationships: record<patient: record, reward_program_activation: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1476,7 +1476,7 @@ export def "reward get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<_thread: string, allocated_at: string, allocated_unit: string, allocated_value: float, description: string, earned_at: string, earned_value: float, fulfilled_at: string, fulfilled_value: float, target_at: string>, id: string, relationships: record<patient: record, reward_program_activation: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1503,7 +1503,7 @@ export def "reward-earning list" [
   --filter-groups: string # Group identifiers
   --filter-patient: string # Patient identifier
   --filter-ready-for-fulfillment: oneof<nothing, bool> # If true, only returns those reward earnings for which ready_for_fulfillment is true and fulfilled_at is null. If false, only returns those reward earnings for which ready_for_fulfillment is false and fulfilled_at is null.
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[ready_for_fulfillment]" $filter_ready_for_fulfillment "scalar")] | flatten | str join "&"
@@ -1528,7 +1528,7 @@ export def "reward-earning create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<earned_at: string, earned_unit: string, earned_value: float, fulfilled_at: string, fulfilled_value: float, ready_for_fulfillment: bool>, id: string, relationships: record<group: record, patient: record, reward: record, reward_program_activation: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1555,7 +1555,7 @@ export def "reward-earning get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<earned_at: string, earned_unit: string, earned_value: float, fulfilled_at: string, fulfilled_value: float, ready_for_fulfillment: bool>, id: string, relationships: record<group: record, patient: record, reward: record, reward_program_activation: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1580,7 +1580,7 @@ export def "reward-earning-fulfillment list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-patient: string # Patient identifier
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar")] | flatten | str join "&"
@@ -1605,7 +1605,7 @@ export def "reward-earning-fulfillment create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<fulfilled_at: string, fulfilled_unit: string, fulfilled_value: float>, id: string, relationships: record<patient: record, reward_earning: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1632,7 +1632,7 @@ export def "reward-earning-fulfillment get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<fulfilled_at: string, fulfilled_unit: string, fulfilled_value: float>, id: string, relationships: record<patient: record, reward_earning: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1658,7 +1658,7 @@ export def "reward-program list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter-groups: string # Comma-separated list of group identifiers. Note that one of the following filters must be specified: `filter[groups]`, `filter[organization]`.
   --filter-organization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[groups]`, `filter[organization]`.
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
@@ -1683,7 +1683,7 @@ export def "reward-program create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<budget_unit: string, budget_value: float, description: string, duration_active: float, end_at: string, frozen: bool, fulfill_as_earned: bool, name: string, start_at: string, tagline: string>, id: string, relationships: record<group: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1710,7 +1710,7 @@ export def "reward-program get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<budget_unit: string, budget_value: float, description: string, duration_active: float, end_at: string, frozen: bool, fulfill_as_earned: bool, name: string, start_at: string, tagline: string>, id: string, relationships: record<group: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1735,7 +1735,7 @@ export def "reward-program-group get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, links: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1762,7 +1762,7 @@ export def "reward-program-activation list" [
   --filter-patient: string # Patient identifier. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
   --filter-groups: string # Comma-separated list of group ids. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
   --filter-organization: string # Fitbit Plus organization id. Note that one of the following filters must be specified: `filter[patient]`, `filter[groups]`, `filter[organization]`.
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[patient]" $filter_patient "scalar") (serialize-qp "filter[groups]" $filter_groups "scalar") (serialize-qp "filter[organization]" $filter_organization "scalar")] | flatten | str join "&"
@@ -1787,7 +1787,7 @@ export def "reward-program-activation create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<attributes: record<activated_at: string, active: bool, allocated_count: float, budget_unit: string, deactivated_at: string, earned_count: float, expires_at: string, fulfill_as_earned: bool, total_allocated_value: float, total_earned_value: float>, id: string, relationships: record<patient: record, reward_program: record>, type: string>, meta: record<ignored: list<string>, req_id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1814,7 +1814,7 @@ export def "reward-program-activation get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<activated_at: string, active: bool, allocated_count: float, budget_unit: string, deactivated_at: string, earned_count: float, expires_at: string, fulfill_as_earned: bool, total_allocated_value: float, total_earned_value: float>, id: string, relationships: record<patient: record, reward_program: record>, type: string>, meta: record<count: int, req_id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

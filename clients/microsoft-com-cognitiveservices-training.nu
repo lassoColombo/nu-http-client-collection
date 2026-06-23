@@ -317,7 +317,7 @@ export def "projects delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -586,7 +586,7 @@ export def "projects-images-regions delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --region-ids: list<string> # Regions to delete. Limited to 64.
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -748,7 +748,7 @@ export def "projects-images-tagged-count get" [
   --accept: string@accept-completer # Response content type
   --iteration-id: string # The iteration id. Defaults to workspace. (format: uuid)
   --tag-ids: list<string> # A list of tags ids to filter the images to count. Defaults to all tags when null.
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -776,7 +776,7 @@ export def "projects-images-tags delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-ids: list<string> # Image ids. Limited to 64 images.
   --tag-ids: list<string> # Tags to be deleted from the specified images. Limited to 20 tags.
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -866,7 +866,7 @@ export def "projects-images-untagged-count get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --iteration-id: string # The iteration id. Defaults to workspace. (format: uuid)
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -978,7 +978,7 @@ export def "projects-iterations delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1190,7 +1190,7 @@ export def "projects-iterations-performance-images-count get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --tag-ids: list<string> # A list of tags ids to filter the images to count. Defaults to all tags when null.
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1218,7 +1218,7 @@ export def "projects-iterations-publish delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1248,7 +1248,7 @@ export def "projects-iterations-publish publish" [
   --accept: string@accept-completer # Response content type
   --publish-name: string # The name to give the published iteration.
   --prediction-id: string # The id of the prediction resource to publish to.
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1276,7 +1276,7 @@ export def "projects-predictions delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<string> # The prediction ids. Limited to 64.
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -1468,7 +1468,7 @@ export def "projects-tags delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "training-key"))
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }

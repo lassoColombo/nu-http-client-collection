@@ -391,7 +391,7 @@ export def "zebra get" [
   --showlabel: oneof<nothing, bool> # Show label of text below barcode
   --height: int # Height of the barcode generated image
   --width: int # Width of the barcode generated image
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-apikey"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "value" $value "scalar") (serialize-qp "showlabel" $showlabel "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "width" $width "scalar")] | flatten | str join "&"

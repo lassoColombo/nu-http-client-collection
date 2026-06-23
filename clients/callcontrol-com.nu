@@ -206,7 +206,7 @@ export def "2015-11-01-enterprise-should-block get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($phone_number | is-empty) { error make --unspanned { msg: "path parameter 'phoneNumber' must be non-empty" } }

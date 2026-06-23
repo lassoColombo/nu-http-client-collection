@@ -148,7 +148,7 @@ export def "location-analytics-category-rated-areas get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --latitude: float # Latitude in decimal coordinates (e.g. 41.397158)
   --longitude: float # Longitude in decimal coordinates (e.g. 2.160873)
-]: nothing -> any {
+]: nothing -> record<data: table<categoryScores: record, geoCode: record, radius: int, type: string>, meta: record<count: int, links: record<self: string>>, warnings: table<code: int, detail: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar")] | flatten | str join "&"

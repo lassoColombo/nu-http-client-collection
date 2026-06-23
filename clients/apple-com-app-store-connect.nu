@@ -6096,7 +6096,7 @@ export def "finance-reports get-collection" [
   --filter-report-date: list<string> # filter by attribute 'reportDate'
   --filter-report-type: list<string> # filter by attribute 'reportType'
   --filter-vendor-number: list<string> # filter by attribute 'vendorNumber'
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[regionCode]" $filter_region_code "csv") (serialize-qp "filter[reportDate]" $filter_report_date "csv") (serialize-qp "filter[reportType]" $filter_report_type "csv") (serialize-qp "filter[vendorNumber]" $filter_vendor_number "csv")] | flatten | str join "&"
@@ -6805,7 +6805,7 @@ export def "sales-reports get-collection" [
   --filter-report-type: list<string> # filter by attribute 'reportType'
   --filter-vendor-number: list<string> # filter by attribute 'vendorNumber'
   --filter-version: list<string> # filter by attribute 'version'
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter[frequency]" $filter_frequency "csv") (serialize-qp "filter[reportDate]" $filter_report_date "csv") (serialize-qp "filter[reportSubType]" $filter_report_sub_type "csv") (serialize-qp "filter[reportType]" $filter_report_type "csv") (serialize-qp "filter[vendorNumber]" $filter_vendor_number "csv") (serialize-qp "filter[version]" $filter_version "csv")] | flatten | str join "&"

@@ -147,7 +147,7 @@ export def "atms get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
   --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
-]: nothing -> any {
+]: nothing -> record<data: table<ATMID: string, ATMServices: list, AccessibilityTypes: list, AdditionalATMServices: list, Address: record, BranchIdentification: string, Currency: list, GeographicLocation: record, LocationCategory: string, MinimumValueDispensed: string, Organisation: record, SiteID: string, SiteName: string, SupportedLanguages: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/atms")
@@ -199,7 +199,7 @@ export def "branches get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
   --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
-]: nothing -> any {
+]: nothing -> record<data: table<ATMAtBranch: bool, AccessibilityTypes: string, Address: record, AlternatePhone: list, ArrivalTime: string, BranchDescription: string, BranchFacilitiesName: list, BranchIdentification: string, BranchMediatedServiceName: list, BranchName: string, BranchOtherFacilities: list, BranchOtherMediatedServices: list, BranchOtherSelfServices: list, BranchPhoto: string, BranchSelfServeServiceName: list, BranchType: string, CustomerSegment: list, DaysOfTheWeek: string, DepartureTime: string, FaxNumber: list, GeographicLocation: record, OpeningTimes: list, Organisation: record, ParkingLocation: string, PlannedBranchClosure: list, StopName: string, TelephoneNumber: string>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/branches")
@@ -251,7 +251,7 @@ export def "business-current-accounts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
   --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
-]: nothing -> any {
+]: nothing -> record<data: table<AccessChannels: list, Benefits: record, CAPricing: list, CardNotes: string, CardType: list, CardWithdrawalLimit: string, ChequeBookAvailable: bool, Contactless: bool, CreditInterest: record, CreditScoringPartOfAccountOpeningForGettingAnAccount: bool, CreditScoringPartOfAccountOpeningForIDVerification: bool, CreditScoringPartOfAccountOpeningIDVerificationIsAHardOrSoftCreditScore: list, CreditScoringPartOfAccountOpeningIDVerificationText: list, CreditScoringPartOfAccountOpeningIsAHardOrSoftCreditScore: list, CreditScoringPartOfAccountOpeningText: string, Currency: list, Eligibility: record, Feature: list, FeesAndCharges: list, InternationalPaymentsSupported: bool, MaximumMonthlyCharge: string, MobileWallet: list, Organisation: record, Overdraft: list, OverdraftOffered: bool, ProductDescription: string, ProductIdentifier: string, ProductName: string, ProductSegment: list, ProductType: string, ProductURL: list, TsandCs: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/business-current-accounts")
@@ -303,7 +303,7 @@ export def "commercial-credit-cards get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
   --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
-]: nothing -> any {
+]: nothing -> record<data: table<Benefits: record, Description: string, Details: record, Eligibility: record, KeyFeatures: string, Organisation: record, OtherKeyFeatures: string, PaymentHoliday: bool, PaymentHolidayDescription: string, ProductIdentifier: string, ProductName: string, ProductSegment: list, ProductType: string, ProductURL: list, TsandCs: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commercial-credit-cards")
@@ -355,7 +355,7 @@ export def "personal-current-accounts get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
   --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
-]: nothing -> any {
+]: nothing -> record<data: table<AccessChannels: list, Benefits: record, CAPricing: list, CardNotes: string, CardType: list, CardWithdrawalLimit: string, ChequeBookAvailable: bool, Contactless: bool, CreditInterest: record, CreditScoringPartOfAccountOpeningForGettingAnAccount: bool, CreditScoringPartOfAccountOpeningForIDVerification: bool, CreditScoringPartOfAccountOpeningIDVerificationIsAHardOrSoftCreditScore: list, CreditScoringPartOfAccountOpeningIDVerificationText: list, CreditScoringPartOfAccountOpeningIsAHardOrSoftCreditScore: list, CreditScoringPartOfAccountOpeningText: string, Currency: list, Eligibility: record, Feature: list, FeesAndCharges: list, InternationalPaymentsSupported: bool, MaximumMonthlyCharge: string, MobileWallet: list, Organisation: record, Overdraft: list, OverdraftOffered: bool, ProductDescription: string, ProductIdentifier: string, ProductName: string, ProductSegment: list, ProductType: string, ProductURL: list, TsandCs: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/personal-current-accounts")
@@ -407,7 +407,7 @@ export def "unsecured-sme-loans get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --if-modified-since: string # Used for conditional request, to retrieve data only if modified since a given date
   --if-none-match: string # Used for conditional request, to retrieve data only if the given Etag value does not match
-]: nothing -> any {
+]: nothing -> record<data: table<ArrearsTreatment: string, Benefits: record, Currency: list, CustomerAccessChannels: list, Eligibility: record, FeesAndCharges: list, LoanItem: list, MaximumLoanAmount: string, MaximumLoanTerm: int, MinimumLoanAmount: string, MinimumLoanTerm: int, Organisation: record, PaymentHoliday: bool, ProductDescription: string, ProductIdentifier: string, ProductName: string, ProductSegment: list, ProductTypeName: string, ProductURL: list, TsandCs: list>, meta: record<Agreement: string, LastUpdated: string, License: string, TermsOfUse: string, TotalResults: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/unsecured-sme-loans")

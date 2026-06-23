@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -146,8 +156,8 @@ export def "projects-regions-clusters list" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -169,7 +179,7 @@ export def "projects-regions-clusters list" [
   --page-size: int # Optional. The standard List page size.
   --page-token: string # Optional. The standard List page token.
 ]: nothing -> record<clusters: table<clusterName: string, clusterUuid: string, config: record, labels: record, metrics: record, projectId: string, status: record, statusHistory: list, virtualClusterConfig: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -191,8 +201,8 @@ export def "projects-regions-clusters create" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -221,7 +231,7 @@ export def "projects-regions-clusters create" [
   --virtual-cluster-config: record # The Dataproc cluster config for a cluster that does not directly control the underlying compute resources, such as a Dataproc-on-GKE cluster (https://cloud.google.com/dataproc/docs/guides/dpgke/dataproc-gke-overview). — shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -243,8 +253,8 @@ export def "projects-regions-clusters delete" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -265,7 +275,7 @@ export def "projects-regions-clusters delete" [
   --cluster-uuid: string # Optional. Specifying the cluster_uuid means the RPC should fail (with error NOT_FOUND) if cluster with specified UUID does not exist.
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two DeleteClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.DeleteClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -286,8 +296,8 @@ export def "projects-regions-clusters get" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -306,7 +316,7 @@ export def "projects-regions-clusters get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<clusterName: string, clusterUuid: string, config: record<autoscalingConfig: record<policyUri: string>, auxiliaryNodeGroups: list<record>, configBucket: string, dataprocMetricConfig: record<metrics: list>, encryptionConfig: record<gcePdKmsKeyName: string, kmsKey: string>, endpointConfig: record<enableHttpPortAccess: bool, httpPorts: record>, gceClusterConfig: record<confidentialInstanceConfig: record, internalIpOnly: bool, metadata: record, networkUri: string, nodeGroupAffinity: record, privateIpv6GoogleAccess: string, reservationAffinity: record, serviceAccount: string, serviceAccountScopes: list, shieldedInstanceConfig: record, subnetworkUri: string, tags: list, zoneUri: string>, gkeClusterConfig: record<gkeClusterTarget: string, namespacedGkeDeploymentTarget: record, nodePoolTarget: list>, initializationActions: list<record>, lifecycleConfig: record<autoDeleteTime: string, autoDeleteTtl: string, idleDeleteTtl: string, idleStartTime: string>, masterConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, metastoreConfig: record<dataprocMetastoreService: string>, secondaryWorkerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>, securityConfig: record<identityConfig: record, kerberosConfig: record>, softwareConfig: record<imageVersion: string, optionalComponents: list, properties: record>, tempBucket: string, workerConfig: record<accelerators: list, diskConfig: record, imageUri: string, instanceNames: list, instanceReferences: list, isPreemptible: bool, machineTypeUri: string, managedGroupConfig: record, minCpuPlatform: string, numInstances: int, preemptibility: string>>, labels: record, metrics: record<hdfsMetrics: record, yarnMetrics: record>, projectId: string, status: record<detail: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<detail: string, state: string, stateStartTime: string, substate: string>, virtualClusterConfig: record<auxiliaryServicesConfig: record<metastoreConfig: record, sparkHistoryServerConfig: record>, kubernetesClusterConfig: record<gkeClusterConfig: record, kubernetesNamespace: string, kubernetesSoftwareConfig: record>, stagingBucket: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -330,8 +340,8 @@ export def "projects-regions-clusters update" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -361,7 +371,7 @@ export def "projects-regions-clusters update" [
   --virtual-cluster-config: record # The Dataproc cluster config for a cluster that does not directly control the underlying compute resources, such as a Dataproc-on-GKE cluster (https://cloud.google.com/dataproc/docs/guides/dpgke/dataproc-gke-overview). — shape: {auxiliaryServicesConfig?: record, kubernetesClusterConfig?: record, stagingBucket?: string}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -385,8 +395,8 @@ export def "projects-regions-clusters create-diagnose" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -411,7 +421,7 @@ export def "projects-regions-clusters create-diagnose" [
   --yarn-application-ids: list<string> # Optional. Specifies a list of yarn applications on which diagnosis is to be performed.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -435,8 +445,8 @@ export def "projects-regions-clusters create-repair" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -461,7 +471,7 @@ export def "projects-regions-clusters create-repair" [
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two RepairClusterRequests with the same ID, the second request is ignored, and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -484,8 +494,8 @@ export def "projects-regions-clusters start" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -507,7 +517,7 @@ export def "projects-regions-clusters start" [
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two StartClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.StartClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -530,8 +540,8 @@ export def "projects-regions-clusters stop" [
   region: string
   cluster_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -553,7 +563,7 @@ export def "projects-regions-clusters stop" [
   --request-id: string # Optional. A unique ID used to identify the request. If the server receives two StopClusterRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.StopClusterRequest)s with the same id, then the second request will be ignored and the first google.longrunning.Operation created and stored in the backend is returned.Recommendation: Set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The ID must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -575,8 +585,8 @@ export def "projects-regions-jobs list" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -600,7 +610,7 @@ export def "projects-regions-jobs list" [
   --page-size: int # Optional. The number of results to return in each response.
   --page-token: string # Optional. The page token, returned by a previous call, to request the next page of results.
 ]: nothing -> record<jobs: table<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record, hadoopJob: record, hiveJob: record, jobUuid: string, labels: record, pigJob: record, placement: record, prestoJob: record, pysparkJob: record, reference: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, status: record, statusHistory: list, trinoJob: record, yarnApplications: list>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -620,8 +630,8 @@ export def "projects-regions-jobs delete" [
   region: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -640,7 +650,7 @@ export def "projects-regions-jobs delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -661,8 +671,8 @@ export def "projects-regions-jobs get" [
   region: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -681,7 +691,7 @@ export def "projects-regions-jobs get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -716,8 +726,8 @@ export def "projects-regions-jobs update" [
   region: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -753,7 +763,7 @@ export def "projects-regions-jobs update" [
   --trino-job: record # A Dataproc job for running Trino (https://trino.io/) queries. IMPORTANT: The Dataproc Trino Optional Component (https://cloud.google.com/dataproc/docs/concepts/components/trino) must be enabled when the cluster is created to submit a Trino job to the cluster. — shape: {clientTags?: list<string>, continueOnFailure?: bool, loggingConfig?: record, outputFormat?: string, properties?: record, queryFileUri?: string, queryList?: record}
 ]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -776,8 +786,8 @@ export def "projects-regions-jobs cancel" [
   region: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -798,7 +808,7 @@ export def "projects-regions-jobs cancel" [
   --body: record
 ]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -821,8 +831,8 @@ export def "projects-regions-jobs-submit submit" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -844,7 +854,7 @@ export def "projects-regions-jobs-submit submit" [
   --request-id: string # Optional. A unique id used to identify the request. If the server receives two SubmitJobRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.SubmitJobRequest)s with the same id, then the second request will be ignored and the first Job created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The id must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: any -> record<done: bool, driverControlFilesUri: string, driverOutputResourceUri: string, driverSchedulingConfig: record<memoryMb: int, vcores: int>, hadoopJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, hiveJob: record<continueOnFailure: bool, jarFileUris: list<string>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, jobUuid: string, labels: record, pigJob: record<continueOnFailure: bool, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, placement: record<clusterLabels: record, clusterName: string, clusterUuid: string>, prestoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, pysparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainPythonFileUri: string, properties: record, pythonFileUris: list<string>>, reference: record<jobId: string, projectId: string>, scheduling: record<maxFailuresPerHour: int, maxFailuresTotal: int>, sparkJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainClass: string, mainJarFileUri: string, properties: record>, sparkRJob: record<archiveUris: list<string>, args: list<string>, fileUris: list<string>, loggingConfig: record<driverLogLevels: record>, mainRFileUri: string, properties: record>, sparkSqlJob: record<jarFileUris: list<string>, loggingConfig: record<driverLogLevels: record>, properties: record, queryFileUri: string, queryList: record<queries: list>, scriptVariables: record>, status: record<details: string, state: string, stateStartTime: string, substate: string>, statusHistory: table<details: string, state: string, stateStartTime: string, substate: string>, trinoJob: record<clientTags: list<string>, continueOnFailure: bool, loggingConfig: record<driverLogLevels: record>, outputFormat: string, properties: record, queryFileUri: string, queryList: record<queries: list>>, yarnApplications: table<name: string, progress: float, state: string, trackingUrl: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -866,8 +876,8 @@ export def "projects-regions-jobs-submit-as-operation submit" [
   project_id: string
   region: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -889,7 +899,7 @@ export def "projects-regions-jobs-submit-as-operation submit" [
   --request-id: string # Optional. A unique id used to identify the request. If the server receives two SubmitJobRequest (https://cloud.google.com/dataproc/docs/reference/rpc/google.cloud.dataproc.v1#google.cloud.dataproc.v1.SubmitJobRequest)s with the same id, then the second request will be ignored and the first Job created and stored in the backend is returned.It is recommended to always set this value to a UUID (https://en.wikipedia.org/wiki/Universally_unique_identifier).The id must contain only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-). The maximum length is 40 characters.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -909,8 +919,8 @@ export def "projects-regions-jobs-submit-as-operation submit" [
 export def "projects delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -930,7 +940,7 @@ export def "projects delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --version: int # Optional. The version of workflow template to delete. If specified, will only delete the template if the current server version matches specified version.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "version" $version "scalar")] | flatten | str join "&"
@@ -947,8 +957,8 @@ export def "projects delete" [
 export def "projects get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -970,7 +980,7 @@ export def "projects get" [
   --page-size: int # The standard list page size.
   --page-token: string # The standard list page token.
 ]: nothing -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -990,8 +1000,8 @@ export def "projects get" [
 export def "projects update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1018,7 +1028,7 @@ export def "projects update" [
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
 ]: any -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1037,8 +1047,8 @@ export def "projects update" [
 export def "projects cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1057,7 +1067,7 @@ export def "projects cancel" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1074,8 +1084,8 @@ export def "projects cancel" [
 export def "projects create-instantiate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1098,7 +1108,7 @@ export def "projects create-instantiate" [
   --version: int # Optional. The version of workflow template to instantiate. If specified, the workflow will be instantiated only if the current version of the workflow template has the supplied version.This option cannot be used to instantiate a previous version of workflow template. (format: int32)
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1117,8 +1127,8 @@ export def "projects create-instantiate" [
 export def "projects resize" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1141,7 +1151,7 @@ export def "projects resize" [
   --size: int # Required. The number of running instances for the node group to maintain. The group adds or removes instances to maintain the number of instances specified by this parameter. (format: int32)
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1160,8 +1170,8 @@ export def "projects resize" [
 export def "autoscaling-policies list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1182,7 +1192,7 @@ export def "autoscaling-policies list" [
   --page-size: int # Optional. The maximum number of results to return in each response. Must be less than or equal to 1000. Defaults to 100.
   --page-token: string # Optional. The page token, returned by a previous call, to request the next page of results.
 ]: nothing -> record<nextPageToken: string, policies: table<basicAlgorithm: record, id: string, labels: record, name: string, secondaryWorkerConfig: record, workerConfig: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1202,8 +1212,8 @@ export def "autoscaling-policies list" [
 export def "autoscaling-policies create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1228,7 +1238,7 @@ export def "autoscaling-policies create" [
   --worker-config: record # Configuration for the size bounds of an instance group, including its proportional size to other groups. — shape: {maxInstances?: int, minInstances?: int, weight?: int}
 ]: any -> record<basicAlgorithm: record<cooldownPeriod: string, sparkStandaloneConfig: record<gracefulDecommissionTimeout: string, scaleDownFactor: float, scaleDownMinWorkerFraction: float, scaleUpFactor: float, scaleUpMinWorkerFraction: float>, yarnConfig: record<gracefulDecommissionTimeout: string, scaleDownFactor: float, scaleDownMinWorkerFraction: float, scaleUpFactor: float, scaleUpMinWorkerFraction: float>>, id: string, labels: record, name: string, secondaryWorkerConfig: record<maxInstances: int, minInstances: int, weight: int>, workerConfig: record<maxInstances: int, minInstances: int, weight: int>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1247,8 +1257,8 @@ export def "autoscaling-policies create" [
 export def "batches list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1271,7 +1281,7 @@ export def "batches list" [
   --page-size: int # Optional. The maximum number of batches to return in each response. The service may return fewer than this value. The default page size is 20; the maximum page size is 1000.
   --page-token: string # Optional. A page token received from a previous ListBatches call. Provide this token to retrieve the subsequent page.
 ]: nothing -> record<batches: table<createTime: string, creator: string, environmentConfig: record, labels: record, name: string, operation: string, pysparkBatch: record, runtimeConfig: record, runtimeInfo: record, sparkBatch: record, sparkRBatch: record, sparkSqlBatch: record, state: string, stateHistory: list, stateMessage: string, stateTime: string, uuid: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1295,8 +1305,8 @@ export def "batches list" [
 export def "batches create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1326,7 +1336,7 @@ export def "batches create" [
   --spark-sql-batch: record # A configuration for running Apache Spark SQL (https://spark.apache.org/sql/) queries as a batch workload. — shape: {jarFileUris?: list<string>, queryFileUri?: string, queryVariables?: record}
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "batchId" $batch_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1346,8 +1356,8 @@ export def "batches create" [
 export def "node-groups create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1373,7 +1383,7 @@ export def "node-groups create" [
   --roles: list<string> # Required. Node group roles.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "nodeGroupId" $node_group_id "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1392,8 +1402,8 @@ export def "node-groups create" [
 export def "workflow-templates list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1414,7 +1424,7 @@ export def "workflow-templates list" [
   --page-size: int # Optional. The maximum number of results to return in each response.
   --page-token: string # Optional. The page token, returned by a previous call, to request the next page of results.
 ]: nothing -> record<nextPageToken: string, templates: table<createTime: string, dagTimeout: string, id: string, jobs: list, labels: record, name: string, parameters: list, placement: record, updateTime: string, version: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1434,8 +1444,8 @@ export def "workflow-templates list" [
 export def "workflow-templates create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1462,7 +1472,7 @@ export def "workflow-templates create" [
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
 ]: any -> record<createTime: string, dagTimeout: string, id: string, jobs: table<hadoopJob: record, hiveJob: record, labels: record, pigJob: record, prerequisiteStepIds: list, prestoJob: record, pysparkJob: record, scheduling: record, sparkJob: record, sparkRJob: record, sparkSqlJob: record, stepId: string, trinoJob: record>, labels: record, name: string, parameters: table<description: string, fields: list, name: string, validation: record>, placement: record<clusterSelector: record<clusterLabels: record, zone: string>, managedCluster: record<clusterName: string, config: record, labels: record>>, updateTime: string, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1484,8 +1494,8 @@ export def "workflow-templates create" [
 export def "workflow-templates-instantiate-inline create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1513,7 +1523,7 @@ export def "workflow-templates-instantiate-inline create" [
   --version: int # Optional. Used to perform a consistent read-modify-write.This field should be left blank for a CreateWorkflowTemplate request. It is required for an UpdateWorkflowTemplate request, and must match the current server version. A typical update template flow would fetch the current template with a GetWorkflowTemplate request, which will return the current template with the version field filled in with the current server version. The user updates other fields in the template, then returns it as part of the UpdateWorkflowTemplate request. (format: int32)
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($parent | is-empty) { error make --unspanned { msg: "path parameter 'parent' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -1534,8 +1544,8 @@ export def "projects create-inject-credentials" [
   region: string
   cluster: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1557,7 +1567,7 @@ export def "projects create-inject-credentials" [
   --credentials-ciphertext: string # Required. The encrypted credentials being injected in to the cluster.The client is responsible for encrypting the credentials in a way that is supported by the cluster.A wrapped value is used here so that the actual contents of the encrypted credentials are not written to audit logs.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project | is-empty) { error make --unspanned { msg: "path parameter 'project' must be non-empty" } }
   if ($region | is-empty) { error make --unspanned { msg: "path parameter 'region' must be non-empty" } }
@@ -1579,8 +1589,8 @@ export def "projects create-inject-credentials" [
 export def "projects get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1601,7 +1611,7 @@ export def "projects get-iam-policy" [
   --options: record # Encapsulates settings provided to GetIamPolicy. — shape: {requestedPolicyVersion?: int}
 ]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1621,8 +1631,8 @@ export def "projects get-iam-policy" [
 export def "projects update-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1643,7 +1653,7 @@ export def "projects update-iam-policy" [
   --policy: record # An Identity and Access Management (IAM) policy, which specifies access controls for Google Cloud resources.A Policy is a collection of bindings. A binding binds one or more members, or principals, to a single role. Principals can be user accounts, service accounts, Google groups, and domains (such as G Suite). A role is a named list of permissions; each role can be an IAM predefined role or a user-created custom role.For some types of Google Cloud resources, a binding can also specify a condition, which is a logical expression that allows access to a resource only if the expression evaluates to true. A condition can add constraints based on attributes of the request, the resource, or both. To learn which resources support conditions in their IAM policies, see the IAM documentation (https://cloud.google.com/iam/help/conditions/resource-policies).JSON example: { "bindings": [ { "role": "roles/resourcemanager.organizationAdmin", "members": [ "user:mike@example.com", "group:admins@example.com", "domain:google.com", "serviceAccount:my-project-id@appspot.gserviceaccount.com" ] }, { "role": "roles/resourcemanager.organizationViewer", "members": [ "user:eve@example.com" ], "condition": { "title": "expirable access", "description": "Does not grant access after Sep 2020", "expression": "request.time < timestamp('2020-10-01T00:00:00.000Z')", } } ], "etag": "BwWWja0YfJA=", "version": 3 } YAML example: bindings: - members: - user:mike@example.com - group:admins@example.com - domain:google.com - serviceAccount:my-project-id@appspot.gserviceaccount.com role: roles/resourcemanager.organizationAdmin - members: - user:eve@example.com role: roles/resourcemanager.organizationViewer condition: title: expirable access description: Does not grant access after Sep 2020 expression: request.time < timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 For a description of IAM and its features, see the IAM documentation (https://cloud.google.com/iam/docs/). — shape: {bindings?: list, etag?: string, version?: int}
 ]: any -> record<bindings: table<condition: record, members: list, role: string>, etag: string, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1662,8 +1672,8 @@ export def "projects update-iam-policy" [
 export def "projects test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1684,7 +1694,7 @@ export def "projects test-iam-permissions" [
   --permissions: list<string> # The set of permissions to check for the resource. Permissions with wildcards (such as * or storage.*) are not allowed. For more information see IAM Overview (https://cloud.google.com/iam/docs/overview#permissions).
 ]: any -> record<permissions: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_DATAPROC_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($resource | is-empty) { error make --unspanned { msg: "path parameter 'resource' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

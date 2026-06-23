@@ -5155,7 +5155,7 @@ export def "marketing-stats-automations-export get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<string> # The IDs of Automations for which to export stats.
   --timezone: string # The [IANA Area/Region](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones) string representing the timezone in which the stats are to be presented; i.e. `"America/Chicago"`. This parameter changes the timezone format only; it does not alter which stats are returned. (default: UTC)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"
@@ -5272,7 +5272,7 @@ export def "marketing-stats-singlesends-export get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<string> # The IDs of Single Sends for which to export stats.
   --timezone: string # The [IANA Area/Region](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones) string representing the timezone in which the stats are to be presented; i.e. `"America/Chicago"`. This parameter changes the timezone format only; it does not alter which stats are returned. (default: UTC)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "timezone" $timezone "scalar")] | flatten | str join "&"

@@ -176,7 +176,7 @@ export def "convert-url-pdf create" [
   --scale: float # By default, PDF document content is generated according to dimensions of the original web page content. Using the `scale` parameter, you can specify a custom zoom factor from 0.1 to 5.0 of the webpage rendering. (default: 1)
   url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to save as PDF
   --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
@@ -221,7 +221,7 @@ export def "convert-url-screenshot create" [
   url: string # The full URL address (including HTTP/HTTPS) of a web page that you want to capture
   --wait-delay: float # Specify a wait delay (in seconds). This may be useful if certain elements of the web site need to be rendered after the initial page load. (default: 0.5)
   --width: int # Rectangle width in device independent pixels (dip). (default: 800)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)

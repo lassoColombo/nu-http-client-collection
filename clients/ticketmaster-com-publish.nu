@@ -168,7 +168,7 @@ export def "publish-attractions publish" [
   type: string@type-completer # Type of the entity
   --url: string # URL of a web site detail page of the entity
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -205,7 +205,7 @@ export def "publish-attractions update" [
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   --body-source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -242,7 +242,7 @@ export def "publish-attractions-videos publish" [
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
   --body-source: record # Source — shape: {id?: string, name?: string}
   url: string # The url of the video
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -279,7 +279,7 @@ export def "publish-entitlements publish" [
   related_entity_type: string@related-entity-type-completer # The type of the entity to add this entitlement to
   --body-source: string@source-completer # Source of the extension, where it came from
   --version-number: int # Version of the entitlements. Version is to prevent to override an entitlements with an older one (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -347,7 +347,7 @@ export def "publish-events publish" [
   --url: string # URL of a web site detail page of the entity
   --venue: record # Venue — shape: {accessibleSeatingDetails?: record, active?: bool, additionalInfos?: record, address?: record, boxOfficeInfo?: record, city?: record, country?: record, currency?: string, descriptions?: record, discoverable?: bool, distance?: float, dma?: list, generalInfo?: record, images?: list, location?: record, markets?: list, names?: record, parkingDetails?: record, postalCode?: string, references?: record, relationships?: list, social?: record, source?: record, state?: record, test?: bool, ... (5 more fields)}
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -384,7 +384,7 @@ export def "publish-events update" [
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   --body-source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -421,7 +421,7 @@ export def "publish-events-videos publish" [
   licensing_information: record # This class defines an entitlement data on the Publish API — shape: {license: string, regionRestriction?: record}
   --body-source: record # Source — shape: {id?: string, name?: string}
   url: string # The url of the video
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -459,7 +459,7 @@ export def "publish-extensions publish" [
   --body-source: string # Source of the extension, where it came from
   type: string # The type of the extension. This represent the data sent
   --version-number: int # Version of the extensions. Version is to prevent to override an extension with an older one (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -530,7 +530,7 @@ export def "publish-venues publish" [
   --units: string
   --url: string # URL of a web site detail page of the entity
   --version: int # Version of the entity. Version is to avoid updated an entity with an older version (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -567,7 +567,7 @@ export def "publish-venues update" [
   --score: float # The confidence (%) level of the accuracy of this augmention data. 100 is the better (format: float)
   --body-source: string # The source where the augementation data came from
   version_number: int # Vesion of this augmentation data. This field is to avoid updating entity with old data. (format: int64)
-]: any -> any {
+]: any -> record<id: string, ignoredProperties: record, invalidProperties: record, invalidValues: record, missingProperties: record, status: string, unknownProperties: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

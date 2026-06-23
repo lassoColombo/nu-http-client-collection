@@ -4505,7 +4505,7 @@ export def "micro-seg-recommended-rules-nsx export" [
   --group-1: record # shape: {entity?: record}
   --group-2: record # shape: {entity?: record}
   --time-range: record # shape: {end_time?: int, start_time?: int}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

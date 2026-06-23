@@ -476,7 +476,7 @@ export def "images-scan-report-pdf get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apikey: string # ApiKey supplied.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($scan_id | is-empty) { error make --unspanned { msg: "path parameter 'scanId' must be non-empty" } }
@@ -942,7 +942,7 @@ export def "registrations-pdf-export get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apikey: string # ApiKey supplied.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -981,7 +981,7 @@ export def "registrations-pdf-export-sections get" [
   --exclude-id-documents: oneof<nothing, bool>
   --diatf-section: oneof<nothing, bool>
   --apikey: string # ApiKey supplied.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1011,7 +1011,7 @@ export def "registrations-pdf-settlement-status get-share-code-export" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --apikey: string # ApiKey supplied.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

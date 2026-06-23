@@ -1077,7 +1077,7 @@ export def "resources-download download" [
   --download-archive-name: string # When downloading multiple files, this will be used as the name of the zip file that is created.
   --ev-api-key: string # API Key required to make the API call.
   --ev-access-token: string # Access token required to make the API call. (e.g. 5dc97cc607985eb8da033220e7447647e7915fbf73808)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "resources[]" $resources "multi") (serialize-qp "downloadArchiveName" $download_archive_name "scalar")] | flatten | str join "&"

@@ -1846,7 +1846,7 @@ export def "song-lists create" [
   --song-links: list # nullable — item shape: {notes?: string, order?: int, song?: record, songInListId?: int}
   --status: string@status-completer
   --update-notes: string # nullable
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3019,7 +3019,7 @@ export def "users-current-albums create" [
   --collection-status: string@collection-status-completer
   --media-type: string@media-type-completer
   --rating: int # format: int32
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'albumId' must be non-empty" } }
@@ -3110,7 +3110,7 @@ export def "users-current-rated-songs get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($song_id | is-empty) { error make --unspanned { msg: "path parameter 'songId' must be non-empty" } }
@@ -3655,7 +3655,7 @@ export def "users-rated-songs get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3681,7 +3681,7 @@ export def "users-reports create" [
   --accept: string@accept-completer # Response content type
   --reason: string # nullable
   --report-type: string@report-type-completer-1
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

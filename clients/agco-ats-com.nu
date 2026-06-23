@@ -260,7 +260,7 @@ export def "aftermarket-services-engines-iqa-codes update" [
   --accept: string@accept-completer # Response content type
   --edt-instance-id: string # The EDT Instance Id of the kit calling this method.
   --body: list
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -317,7 +317,7 @@ export def "aftermarket-services-hello get-connection-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/v2/AftermarketServices/Hello")
@@ -371,7 +371,7 @@ export def "aftermarket-services-user-statuses update-status" [
   dealer_code: string # The dealer code of the voucher
   --state: string@state-completer-1 # The state of the voucher
   voucher_code: string # The voucher code
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +571,7 @@ export def "authorization-categories create" [
   --description: string # A description of the Category.
   --id: string # The ID of the Category.
   --name: string # The Name of the Category.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -630,7 +630,7 @@ export def "authorization-categories delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -658,7 +658,7 @@ export def "authorization-categories update" [
   --description: string # A description of the Category.
   --body-id: string # The ID of the Category.
   --name: string # The Name of the Category.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -687,7 +687,7 @@ export def "authorization-categories-users delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -714,7 +714,7 @@ export def "authorization-categories-users create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -790,7 +790,7 @@ export def "authorization-code-definitions create" [
   name: string # The name of the authorization code definition. May not be updated.
   --random-length: int # The bit length of random data which will be included in the authorization code. This is necessary to allow creation of "identical" authorization codes containing the same timestamp. Defaults to 5. May not be updated. (format: int32)
   --validation-fields: list # The defined fields to verify when reading authorization codes generated from this definition. May not be updated. — item shape: {Name: string, Type: "Boolean"|"Float"|"Int"|"StringCaseInsensitive"|"StringCaseSensitive"}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -818,7 +818,7 @@ export def "authorization-code-definitions-categories delete-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -845,7 +845,7 @@ export def "authorization-code-definitions-categories create-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -871,7 +871,7 @@ export def "authorization-code-definitions delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -939,7 +939,7 @@ export def "authorization-code-definitions update" [
   name: string # The name of the authorization code definition. May not be updated.
   --random-length: int # The bit length of random data which will be included in the authorization code. This is necessary to allow creation of "identical" authorization codes containing the same timestamp. Defaults to 5. May not be updated. (format: int32)
   --validation-fields: list # The defined fields to verify when reading authorization codes generated from this definition. May not be updated. — item shape: {Name: string, Type: "Boolean"|"Float"|"Int"|"StringCaseInsensitive"|"StringCaseSensitive"}
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1012,7 +1012,7 @@ export def "authorization-codes create" [
   --id: int # The identifier for the authorization code. Read only. (format: int32)
   --is-deleted: oneof<nothing, bool> # Indicates whether this code is deleted.
   --validation-parameters: list # The parameters and values used to validate this authorization code. May not be updated. — item shape: {Name: string, Value: string}
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1039,7 +1039,7 @@ export def "authorization-codes delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1103,7 +1103,7 @@ export def "authorization-codes update" [
   --body-id: int # The identifier for the authorization code. Read only. (format: int32)
   --is-deleted: oneof<nothing, bool> # Indicates whether this code is deleted.
   --validation-parameters: list # The parameters and values used to validate this authorization code. May not be updated. — item shape: {Name: string, Value: string}
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1226,7 +1226,7 @@ export def "authorization-contact-information create" [
   --id: int # ID of authorizationContactInformation (format: int32)
   --notes: string # Optional notes used for internal use.
   phone: string # Phone number of contact.
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1312,7 +1312,7 @@ export def "bundles create" [
   bundle_number: int # The bundle number (format: int32)
   description: string # The Bundle description.
   update_group_id: string # The update group this bundle belongs to.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1339,7 +1339,7 @@ export def "bundles delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -1395,7 +1395,7 @@ export def "bundles update" [
   bundle_number: int # The bundle number (format: int32)
   description: string # The Bundle description.
   update_group_id: string # The update group this bundle belongs to.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1508,7 +1508,7 @@ export def "clients-package-reports update" [
   --categories: list # The package report's categories. — item shape: {Values?: list, category: string}
   --package-description: string # Read Only. The package description
   --package-id: string # The PackageID.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1537,7 +1537,7 @@ export def "clients-package-reports-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1593,7 +1593,7 @@ export def "clients update" [
   --client-id: string # Read Only. The id of the client
   --last-checkin: string # Read Only. The time of the client's last checkin with the server. (format: date-time)
   --tag: string # A description of the client that can be used for easy reference
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1681,7 +1681,7 @@ export def "content-definition-attributes-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1708,7 +1708,7 @@ export def "content-definition-attributes delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_definition_attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'contentDefinitionAttributeID' must be non-empty" } }
@@ -1737,7 +1737,7 @@ export def "content-definition-attributes update-async" [
   --id: int # The ID of this attribute. (format: int32)
   name: string # The name of this Attribute.
   --value: string # The value of this Attribute
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1804,7 +1804,7 @@ export def "content-definitions create" [
   --name: string # The name of this content. Name must be valid for Attribute on PackageType.
   --package-type-id: string # Read Only. The ID of the package type used for this content.
   --type-id: int # The type of content. (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1831,7 +1831,7 @@ export def "content-definitions delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'contentDefinitionID' must be non-empty" } }
@@ -1891,7 +1891,7 @@ export def "content-definitions update" [
   --name: string # The name of this content. Name must be valid for Attribute on PackageType.
   --package-type-id: string # Read Only. The ID of the package type used for this content.
   --type-id: int # The type of content. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1954,7 +1954,7 @@ export def "content-definitions-attributes create" [
   --id: int # The ID of this attribute. (format: int32)
   name: string # The name of this Attribute.
   --value: string # The value of this Attribute
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1983,7 +1983,7 @@ export def "content-definitions-attributes-batch create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2051,7 +2051,7 @@ export def "content-releases create" [
   --test-report-url: string # The URL at which test reports for this content can be found
   --updated-date: string # Updated Date (format: date-time)
   --version: int # version (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2078,7 +2078,7 @@ export def "content-releases delete-versionn" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_release_id | is-empty) { error make --unspanned { msg: "path parameter 'ContentReleaseId' must be non-empty" } }
@@ -2136,7 +2136,7 @@ export def "content-releases update-definition" [
   --test-report-url: string # The URL at which test reports for this content can be found
   --updated-date: string # Updated Date (format: date-time)
   --version: int # version (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2164,7 +2164,7 @@ export def "content-submission-attributes-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2191,7 +2191,7 @@ export def "content-submission-attributes delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_submission_attribute_id | is-empty) { error make --unspanned { msg: "path parameter 'contentSubmissionAttributeID' must be non-empty" } }
@@ -2220,7 +2220,7 @@ export def "content-submission-attributes update-async" [
   --id: int # The ID of this attribute. (format: int32)
   name: string # The name of this Attribute.
   --value: string # The value of this Attribute
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2284,7 +2284,7 @@ export def "content-submission-types create" [
   --job-id: int # The ID of the JobDefinition for which to initiate a Job. A value of '0' will cause a submission to fail. Either 'BuildDefinitionID' or 'JobID' is required. (format: int32)
   name: string # The Name of the Content Submission Type
   --release-notes-description: string # A description of how release notes for this Content Submission Type are used
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2311,7 +2311,7 @@ export def "content-submission-types delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2372,7 +2372,7 @@ export def "content-submission-types update" [
   --job-id: int # The ID of the JobDefinition for which to initiate a Job. A value of '0' will cause a submission to fail. Either 'BuildDefinitionID' or 'JobID' is required. (format: int32)
   name: string # The Name of the Content Submission Type
   --release-notes-description: string # A description of how release notes for this Content Submission Type are used
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2449,7 +2449,7 @@ export def "content-submissions create" [
   --submission-date: string # Read Only. The UTC date and time the content submission was made. (format: date-time)
   --user-id: int # Read Only. The ID of the user who submitted the content (format: int32)
   --version: int # Optional. The version number assigned to this Content Submission and the resulting Package. If not provided, version shall be 1 if it is the first content submission for the ContentDefinitionID otherwise it shall be the highest content submission version for the specified ContentDefinitionID incremented by 1. (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2476,7 +2476,7 @@ export def "content-submissions delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($content_submission_id | is-empty) { error make --unspanned { msg: "path parameter 'contentSubmissionID' must be non-empty" } }
@@ -2544,7 +2544,7 @@ export def "content-submissions update" [
   --submission-date: string # Read Only. The UTC date and time the content submission was made. (format: date-time)
   --user-id: int # Read Only. The ID of the user who submitted the content (format: int32)
   --version: int # Optional. The version number assigned to this Content Submission and the resulting Package. If not provided, version shall be 1 if it is the first content submission for the ContentDefinitionID otherwise it shall be the highest content submission version for the specified ContentDefinitionID incremented by 1. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2607,7 +2607,7 @@ export def "content-submissions-attributes create" [
   --id: int # The ID of this attribute. (format: int32)
   name: string # The name of this Attribute.
   --value: string # The value of this Attribute
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2636,7 +2636,7 @@ export def "content-submissions-attributes-batch create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2812,7 +2812,7 @@ export def "files create" [
   path: string # The Path of the file.
   --size: int # The size of the file in bytes. Null until assigned by server when marked as 'Available'. Read Only (format: int64)
   state: string@state-completer-2 # Indicates the state of this file. Must be 'Created' when created.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2839,7 +2839,7 @@ export def "files delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -2899,7 +2899,7 @@ export def "files update" [
   path: string # The Path of the file.
   --size: int # The size of the file in bytes. Null until assigned by server when marked as 'Available'. Read Only (format: int64)
   state: string@state-completer-2 # Indicates the state of this file. Must be 'Created' when created.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3008,7 +3008,7 @@ export def "global-image-categories create-file" [
   --accept: string@accept-completer # Response content type
   --id: string # The Id of the GlobalImage Categories.
   name: string # The name of the globalImage Catetory.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3107,7 +3107,7 @@ export def "global-images create" [
   thumbnail_crc: string # The Hash of the thumbnail file (SHA256, HEX-encoded).
   --thumbnail-size: int # The size of the thumbnail file in bytes. Null until assigned by server when marked as 'Available'. Read Only (format: int64)
   width: int # The width of the file. (format: int32)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3135,7 +3135,7 @@ export def "global-images delete-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -3201,7 +3201,7 @@ export def "global-images update" [
   thumbnail_crc: string # The Hash of the thumbnail file (SHA256, HEX-encoded).
   --thumbnail-size: int # The size of the thumbnail file in bytes. Null until assigned by server when marked as 'Available'. Read Only (format: int64)
   width: int # The width of the file. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3317,7 +3317,7 @@ export def "languages create" [
   description: string # The description of the language (e.g. “English – United States”).
   --is-deleted: oneof<nothing, bool> # Indicates whether the API supports the language. Must be false when created. Read Only.
   locale_id: int # The Locale Id of the language. (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3344,7 +3344,7 @@ export def "languages delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($locale_id | is-empty) { error make --unspanned { msg: "path parameter 'LocaleID' must be non-empty" } }
@@ -3398,7 +3398,7 @@ export def "languages update" [
   description: string # The description of the language (e.g. “English – United States”).
   --is-deleted: oneof<nothing, bool> # Indicates whether the API supports the language. Must be false when created. Read Only.
   --body-locale-id: int # The Locale Id of the language. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3462,7 +3462,7 @@ export def "license-activations-register-edt-lite create" [
   expiration_date: string # The date at which the content of the EDT Lite expires. (format: date-time)
   instance_id: string # The identifier for the EDT Lite.
   voucher_code: string # The voucher code with which the EDT Lite was created.
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3521,7 +3521,7 @@ export def "license-activations-confirm update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   license_version: string # The license version to confirm
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3632,7 +3632,7 @@ export def "logs create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --message: string # Message to enter into the log
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Message" $message "scalar")] | flatten | str join "&"
@@ -3687,7 +3687,7 @@ export def "notifications create-mail" [
   message_body: string
   subject: string
   to_addresses: list<string>
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3752,7 +3752,7 @@ export def "package-types create" [
   --localized-name: string # Optional. The StringID used to localize the name of the PackageType
   --max-delta-packages: int # The maximum number of "chained" delta packages to use when updating the client (format: int32)
   --package-type-id: string # Read Only. The package type id.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3779,7 +3779,7 @@ export def "package-types delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -3839,7 +3839,7 @@ export def "package-types update" [
   --localized-name: string # Optional. The StringID used to localize the name of the PackageType
   --max-delta-packages: int # The maximum number of "chained" delta packages to use when updating the client (format: int32)
   --package-type-id: string # Read Only. The package type id.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3868,7 +3868,7 @@ export def "package-types-users delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3895,7 +3895,7 @@ export def "package-types-users create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3922,7 +3922,7 @@ export def "package-typeto-bundles delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bundle-id: string # The BundleID
   --package-type-id: string # The PackageTypeID
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "BundleID" $bundle_id "scalar") (serialize-qp "PackageTypeID" $package_type_id "scalar")] | flatten | str join "&"
@@ -3979,7 +3979,7 @@ export def "package-typeto-bundles create" [
   package_version: int # The package version of the package to include (format: int32)
   priority: int # The execution priority of the package relative to other packages in the bundle. Range 1 - 100, lower value indication higher priority. (format: int32)
   --subscription-type: string@subscription-type-completer # Optional. The type of subscription supported. The default subscription type is Required.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4010,7 +4010,7 @@ export def "package-typeto-bundles update" [
   package_version: int # The package version of the package to include (format: int32)
   priority: int # The execution priority of the package relative to other packages in the bundle. Range 1 - 100, lower value indication higher priority. (format: int32)
   --subscription-type: string@subscription-type-completer # Optional. The type of subscription supported. The default subscription type is Required.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4082,7 +4082,7 @@ export def "packages create" [
   --switches: string # The command line arguments for the package. Default value is an empty string.
   url: string # The Url to download the package from.
   version: int # The version. (format: int32)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4109,7 +4109,7 @@ export def "packages delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4175,7 +4175,7 @@ export def "packages update" [
   --switches: string # The command line arguments for the package. Default value is an empty string.
   url: string # The Url to download the package from.
   version: int # The version. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4236,7 +4236,7 @@ export def "permissions create" [
   --description: string
   --id: int # The identifier of the permission. (format: int32)
   name: string # The name of the permission.
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4393,7 +4393,7 @@ export def "priority-packages create" [
   --time-stamp: string # Read Only. The timestamp of the priority package. (format: date-time)
   --url: string # Read Only. From the package specified by package ID.
   --version: int # Read Only. From the package specified by package ID. (format: int32)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4420,7 +4420,7 @@ export def "priority-packages delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -4506,7 +4506,7 @@ export def "releases create" [
   --release-id: int # Release ID (format: int32)
   --release-number: string # Release Number
   --visible: oneof<nothing, bool> # Visible
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4560,7 +4560,7 @@ export def "releases-bundle delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'ReleaseId' must be non-empty" } }
@@ -4587,7 +4587,7 @@ export def "releases-bundle create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($release_id | is-empty) { error make --unspanned { msg: "path parameter 'ReleaseId' must be non-empty" } }
@@ -4619,7 +4619,7 @@ export def "releases update-content-definition" [
   --body-release-id: int # Release ID (format: int32)
   --release-number: string # Release Number
   --visible: oneof<nothing, bool> # Visible
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4961,7 +4961,7 @@ export def "roles create" [
   description: string # Role description
   --id: int # The role's identifier. (format: int32)
   name: string # The name of the role. Must be alpha-numeric strings separated by a period (.).
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5158,7 +5158,7 @@ export def "roles-users update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5221,7 +5221,7 @@ export def "string-definitions-batch create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5248,7 +5248,7 @@ export def "string-definitions-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5332,7 +5332,7 @@ export def "string-translations-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5394,7 +5394,7 @@ export def "string-translations update" [
   --body-string-id: string # The id of the string that is translated
   string_value: string # The translated string
   --timestamp: string # A value indicating the last modification of this translation. Read Only. (format: byte)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5454,7 +5454,7 @@ export def "translation-keys create" [
   --id: int # The identifier for the translationKey. Read Only. (format: int32)
   key_name: string # The key name of the item. One example is tkODX_HWIKM14R01
   string_id: string # Foreign key to StringDefinitionID
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5510,7 +5510,7 @@ export def "translation-keys update" [
   --body-id: int # The identifier for the translationKey. Read Only. (format: int32)
   key_name: string # The key name of the item. One example is tkODX_HWIKM14R01
   string_id: string # Foreign key to StringDefinitionID
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5577,7 +5577,7 @@ export def "translation-requests create" [
   --submitted-by: int # The ID of the User that submitted the request (format: int32)
   --translator-email: string # The email address for the translator
   --translator-name: string # The name of the translator
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5643,7 +5643,7 @@ export def "translation-requests update" [
   --submitted-by: int # The ID of the User that submitted the request (format: int32)
   --translator-email: string # The email address for the translator
   --translator-name: string # The name of the translator
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5673,7 +5673,7 @@ export def "translation-requests-strings update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5701,7 +5701,7 @@ export def "translation-set-attributes-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5728,7 +5728,7 @@ export def "translation-set-attributes delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -5757,7 +5757,7 @@ export def "translation-set-attributes update" [
   name: string # The name of this Attribute.
   --translation-set-id: int # The ID of the translation set to which this attribute belongs. (format: int32)
   --value: string # The value of this Attribute
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5854,7 +5854,7 @@ export def "translation-sets update" [
   --out-date: string # Read Only. The date the translation set was sent out. (format: date-time)
   state: string@state-completer-5 # An enum indicating the state of the translation set
   --translation-request-id: int # Read Only. The Id of the TranslationRequest which generated this translation set. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5917,7 +5917,7 @@ export def "translation-sets-attributes create" [
   name: string # The name of this Attribute.
   --translation-set-id: int # The ID of the translation set to which this attribute belongs. (format: int32)
   --value: string # The value of this Attribute
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5946,7 +5946,7 @@ export def "translation-sets-attributes-batch create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6059,7 +6059,7 @@ export def "translation-sets-strings update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6122,7 +6122,7 @@ export def "update-group-client-relationships create-subscription" [
   --last-checkin: string # ReadOnly. The timestamp of the last checkin. (format: date-time)
   --relationship-id: string # Read Only after creation. The relationship id. A relationship id will be assigned if not provided on creation.
   update_group_id: string # Read Only after creation. The update group to subscribe to.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6151,7 +6151,7 @@ export def "update-group-client-relationships update-subscription" [
   --client-id: string # The Client ID. This can be a client ID that has not been registered yet.
   --update-group-id: string # The Update Group ID
   --active: oneof<nothing, bool> # Subscribe the client to the Update Group.
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClientID" $client_id "scalar") (serialize-qp "UpdateGroupID" $update_group_id "scalar") (serialize-qp "Active" $active "scalar")] | flatten | str join "&"
@@ -6207,7 +6207,7 @@ export def "update-group-client-relationships update-subscription-by-relationshi
   --last-checkin: string # ReadOnly. The timestamp of the last checkin. (format: date-time)
   --body-relationship-id: string # Read Only after creation. The relationship id. A relationship id will be assigned if not provided on creation.
   update_group_id: string # Read Only after creation. The update group to subscribe to.
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6270,7 +6270,7 @@ export def "update-group-subscriptions create" [
   package_type_id: string # The PackageType to set subscription status for
   update_group_id: string # The Update Group this subscription is relevant for.
   --update-group-subscription-id: int # The Update Group Subscription ID. This ID will be automatically assigned when creating an Update Group Subscription. (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6297,7 +6297,7 @@ export def "update-group-subscriptions-batch create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6324,7 +6324,7 @@ export def "update-group-subscriptions-batch update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6351,7 +6351,7 @@ export def "update-group-subscriptions delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($update_group_subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'UpdateGroupSubscriptionID' must be non-empty" } }
@@ -6407,7 +6407,7 @@ export def "update-group-subscriptions update" [
   package_type_id: string # The PackageType to set subscription status for
   update_group_id: string # The Update Group this subscription is relevant for.
   --body-update-group-subscription-id: int # The Update Group Subscription ID. This ID will be automatically assigned when creating an Update Group Subscription. (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6475,7 +6475,7 @@ export def "update-groups create" [
   --validating-field: string # A field used for validation in the status report for this update group. Specify the field with the format [Label]: {[InventoryPackageID].[Category].[Attribute]}. (i.e. example: {bec778ca-278d-424a-867a-4653a1a19e86.MyCategory.MyAttribute})
   --value-to-validate: string # The value to validate the ValidationField against.
   --version: string # The version of the UpdateGroup, this value is incremented with each modification to a related Bundle or PackageType (format: byte)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6502,7 +6502,7 @@ export def "update-groups delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'ID' must be non-empty" } }
@@ -6564,7 +6564,7 @@ export def "update-groups update" [
   --validating-field: string # A field used for validation in the status report for this update group. Specify the field with the format [Label]: {[InventoryPackageID].[Category].[Attribute]}. (i.e. example: {bec778ca-278d-424a-867a-4653a1a19e86.MyCategory.MyAttribute})
   --value-to-validate: string # The value to validate the ValidationField against.
   --version: string # The version of the UpdateGroup, this value is incremented with each modification to a related Bundle or PackageType (format: byte)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6623,7 +6623,7 @@ export def "update-groups-users delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6650,7 +6650,7 @@ export def "update-groups-users create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6736,7 +6736,7 @@ export def "user-content-definitions create" [
   --content-definition-id: int # The ID of the ContentDefinition. (format: int32)
   --user-content-definition-id: int # Read Only. The ID of the User to ContentDefinition relationship. (format: int32)
   --user-id: int # The ID of the user. (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6763,7 +6763,7 @@ export def "user-content-definitions delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_content_definition_id | is-empty) { error make --unspanned { msg: "path parameter 'userContentDefinitionID' must be non-empty" } }
@@ -7134,7 +7134,7 @@ export def "users-roles update-permissions" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7247,7 +7247,7 @@ export def "vouchers create" [
   --purpose: string # Required for Internal Vouchers. Not supported for other Vouchers.
   --type: string@type-completer # The type of voucher. Commercial is the default if not specified.
   --voucher-code: string # The voucher code.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7429,7 +7429,7 @@ export def "activities create-activity" [
   --activity-id: int # The ID of the activity (format: int32)
   --deleted: oneof<nothing, bool>
   --name: string # The name of the activity
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7456,7 +7456,7 @@ export def "activities delete-activity" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityID' must be non-empty" } }
@@ -7514,7 +7514,7 @@ export def "activities update-activity" [
   --body-activity-id: int # The ID of the activity (format: int32)
   --deleted: oneof<nothing, bool>
   --name: string # The name of the activity
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7605,7 +7605,7 @@ export def "activity-runs update" [
   --job-run-id: int # Read Only. The ID of the JobRun under which this ActivityRun is executing (format: int32)
   --start-date: string # Read Only. The UTC date and time when the activity started (format: date-time)
   status: record # A DTO for an IActivityRunStatus — shape: {CurrentStep?: int, Status?: "Ready"|"InProgress"|"Succeeded"|"Cancelled"|"Failed", StepProgress?: int, StepStatus?: string}
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7663,7 +7663,7 @@ export def "activity-runs-status update" [
   --status: string@status-completer-2 # The status of the ActivityRun
   --step-progress: int # The percent progress from the currently executing step. This value shall be null if progress is not available (format: int32)
   --step-status: string # The status text from the currently executing step
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7725,7 +7725,7 @@ export def "agents create" [
   machine_name: string # The machine name of the computer the agent is running on
   status: record # A DTO for an IAgentStatus — shape: {LastStatusUpdate?: string, Online: bool}
   user_id: int # The UserID of the Agent (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7800,7 +7800,7 @@ export def "agents delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_id | is-empty) { error make --unspanned { msg: "path parameter 'agentID' must be non-empty" } }
@@ -7858,7 +7858,7 @@ export def "agents update" [
   machine_name: string # The machine name of the computer the agent is running on
   status: record # A DTO for an IAgentStatus — shape: {LastStatusUpdate?: string, Online: bool}
   user_id: int # The UserID of the Agent (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7921,7 +7921,7 @@ export def "agents-activity-run update" [
   --job-run-id: int # Read Only. The ID of the JobRun under which this ActivityRun is executing (format: int32)
   --start-date: string # Read Only. The UTC date and time when the activity started (format: date-time)
   status: record # A DTO for an IActivityRunStatus — shape: {CurrentStep?: int, Status?: "Ready"|"InProgress"|"Succeeded"|"Cancelled"|"Failed", StepProgress?: int, StepStatus?: string}
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7951,7 +7951,7 @@ export def "agents-status update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --last-status-update: string # ReadOnly. The UTC date and time of the last status update (format: date-time)
   --online: oneof<nothing, bool> # Indicates if the agent is online
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8014,7 +8014,7 @@ export def "job-runs create" [
   --job-run-id: int # The ID of this JobRun (format: int32)
   --start-date: string # The UTC date and time when the job started (format: date-time)
   --status: string@status-completer-2 # The status of this JobRun
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8041,7 +8041,7 @@ export def "job-runs delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_run_id | is-empty) { error make --unspanned { msg: "path parameter 'jobRunID' must be non-empty" } }
@@ -8101,7 +8101,7 @@ export def "job-runs update" [
   --body-job-run-id: int # The ID of this JobRun (format: int32)
   --start-date: string # The UTC date and time when the job started (format: date-time)
   --status: string@status-completer-2 # The status of this JobRun
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8162,7 +8162,7 @@ export def "jobs create" [
   --deleted: oneof<nothing, bool> # Indicates if the job has been deleted.
   --job-id: int # The ID of the job (format: int32)
   --name: string # The name of the job
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8189,7 +8189,7 @@ export def "jobs delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobID' must be non-empty" } }
@@ -8247,7 +8247,7 @@ export def "jobs update" [
   --deleted: oneof<nothing, bool> # Indicates if the job has been deleted.
   --body-job-id: int # The ID of the job (format: int32)
   --name: string # The name of the job
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8310,7 +8310,7 @@ export def "steps create" [
   implementation_id: string # The implementation ID used to lookup the step implementation when it is executed
   name: string # The name of the step
   --step-id: int # The ID of the step (format: int32)
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8372,7 +8372,7 @@ export def "steps update" [
   implementation_id: string # The implementation ID used to lookup the step implementation when it is executed
   name: string # The name of the step
   --body-step-id: int # The ID of the step (format: int32)
-]: any -> any {
+]: any -> record<DeveloperMessage: string, ErrorCode: int, MoreInfo: string, UserMessage: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

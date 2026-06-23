@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -142,8 +152,8 @@ export def commands []: nothing -> table {
 # operationId: localservices.accountReports.search
 export def "account-reports-search list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -171,7 +181,7 @@ export def "account-reports-search list" [
   --start-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
   --start-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
 ]: nothing -> record<accountReports: table<accountId: string, aggregatorInfo: record, averageFiveStarRating: float, averageWeeklyBudget: float, businessName: string, currencyCode: string, currentPeriodChargedLeads: string, currentPeriodConnectedPhoneCalls: string, currentPeriodPhoneCalls: string, currentPeriodTotalCost: float, impressionsLastTwoDays: string, phoneLeadResponsiveness: float, previousPeriodChargedLeads: string, previousPeriodConnectedPhoneCalls: string, previousPeriodPhoneCalls: string, previousPeriodTotalCost: float, totalReview: int>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o LOCAL_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o LOCAL_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate.day" $end_date_day "scalar") (serialize-qp "endDate.month" $end_date_month "scalar") (serialize-qp "endDate.year" $end_date_year "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "startDate.day" $start_date_day "scalar") (serialize-qp "startDate.month" $start_date_month "scalar") (serialize-qp "startDate.year" $start_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/accountReports:search" $qp)
@@ -186,8 +196,8 @@ export def "account-reports-search list" [
 # operationId: localservices.detailedLeadReports.search
 export def "detailed-lead-reports-search list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -215,7 +225,7 @@ export def "detailed-lead-reports-search list" [
   --start-date-month: int # Month of a year. Must be from 1 to 12, or 0 to specify a year without a month and day.
   --start-date-year: int # Year of the date. Must be from 1 to 9999, or 0 to specify a date without a year.
 ]: nothing -> record<detailedLeadReports: table<accountId: string, aggregatorInfo: record, bookingLead: record, businessName: string, chargeStatus: string, currencyCode: string, disputeStatus: string, geo: string, leadCategory: string, leadCreationTimestamp: string, leadId: string, leadPrice: float, leadType: string, messageLead: record, phoneLead: record, timezone: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o LOCAL_SERVICES_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o LOCAL_SERVICES_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "endDate.day" $end_date_day "scalar") (serialize-qp "endDate.month" $end_date_month "scalar") (serialize-qp "endDate.year" $end_date_year "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "startDate.day" $start_date_day "scalar") (serialize-qp "startDate.month" $start_date_month "scalar") (serialize-qp "startDate.year" $start_date_year "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v1/detailedLeadReports:search" $qp)

@@ -251,7 +251,7 @@ export def "api complete-multipart-upload" [
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --body: any
-]: any -> any {
+]: any -> record<Location: record, Bucket: record, Key: record, ETag: record, ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -296,7 +296,7 @@ export def "api list-parts" [
   --x-amz-server-side-encryption-customer-algorithm: string # The server-side encryption (SSE) algorithm used to encrypt the object. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-server-side-encryption-customer-key: string # The server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
-]: nothing -> any {
+]: nothing -> record<Bucket: record, Key: record, UploadId: record, PartNumberMarker: record, NextPartNumberMarker: record, MaxParts: record, IsTruncated: record, Parts: record, Initiator: record<ID: record, DisplayName: record>, Owner: record<DisplayName: record, ID: record>, StorageClass: record, ChecksumAlgorithm: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -367,7 +367,7 @@ export def "api copy-object" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record<CopyObjectResult: record<ETag: record, LastModified: record, ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -411,7 +411,7 @@ export def "api create" [
   --x-amz-bucket-object-lock-enabled: oneof<nothing, bool> # Specifies whether you want S3 Object Lock to be enabled for the new bucket.
   --x-amz-object-ownership: string@x-amz-object-ownership-completer
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -512,7 +512,7 @@ export def "api list-objects-by-bucket" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<IsTruncated: record, Marker: record, NextMarker: record, Contents: record, Name: record, Prefix: record, Delimiter: record, MaxKeys: record, CommonPrefixes: record, EncodingType: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -572,7 +572,7 @@ export def "api create-multipart-upload" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-algorithm: string@x-amz-checksum-algorithm-completer # Indicates the algorithm you want Amazon S3 to use to create the checksum for the object. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide.
   --body: any
-]: any -> any {
+]: any -> record<Bucket: record, Key: record, UploadId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -642,7 +642,7 @@ export def "api get-analytics-configuration" [
   --analytics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<AnalyticsConfiguration: record<Id: record, Filter: record<Prefix: record, Tag: record, And: record>, StorageClassAnalysis: record<DataExport: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -742,7 +742,7 @@ export def "api get-cors" [
   --cors: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<CORSRules: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -842,7 +842,7 @@ export def "api get-encryption" [
   --encryption: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<ServerSideEncryptionConfiguration: record<Rules: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -941,7 +941,7 @@ export def "api get-intelligent-tiering-configuration" [
   --id: string # The ID used to identify the S3 Intelligent-Tiering configuration.
   --intelligent-tiering: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-]: nothing -> any {
+]: nothing -> record<IntelligentTieringConfiguration: record<Id: record, Filter: record<Prefix: record, Tag: record, And: record>, Status: record, Tierings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1040,7 +1040,7 @@ export def "api get-inventory-configuration" [
   --inventory: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<InventoryConfiguration: record<Destination: record<S3BucketDestination: record>, IsEnabled: record, Filter: record<Prefix: record>, Id: record, IncludedObjectVersions: record, OptionalFields: record, Schedule: record<Frequency: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1139,7 +1139,7 @@ export def "api get-lifecycle-configuration" [
   --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Rules: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1239,7 +1239,7 @@ export def "api get-metrics-configuration" [
   --metrics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<MetricsConfiguration: record<Id: record, Filter: record<Prefix: record, Tag: record, AccessPointArn: record, And: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1337,7 +1337,7 @@ export def "api get-ownership-controls" [
   --ownership-controls: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<OwnershipControls: record<Rules: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1437,7 +1437,7 @@ export def "api get-policy" [
   --policy: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1538,7 +1538,7 @@ export def "api get-replication" [
   --replication: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<ReplicationConfiguration: record<Role: record, Rules: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1640,7 +1640,7 @@ export def "api get-tagging" [
   --tagging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<TagSet: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1742,7 +1742,7 @@ export def "api get-website" [
   --website: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<RedirectAllRequestsTo: record<HostName: record, Protocol: record>, IndexDocument: record<Suffix: record>, ErrorDocument: record<Key: record>, RoutingRules: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1867,7 +1867,7 @@ export def "api get-object" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-checksum-mode: string@x-amz-checksum-mode-completer # To retrieve the checksum, this mode must be enabled.
-]: nothing -> any {
+]: nothing -> record<Body: record, Metadata: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -1978,7 +1978,7 @@ export def "api update-object" [
   --x-amz-object-lock-legal-hold: string@x-amz-object-lock-legal-hold-completer # Specifies whether a legal hold will be applied to this object. For more information about S3 Object Lock, see Object Lock (https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lock.html).
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2051,7 +2051,7 @@ export def "api get-object-tagging" [
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
-]: nothing -> any {
+]: nothing -> record<TagSet: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2089,7 +2089,7 @@ export def "api update-object-tagging" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2130,7 +2130,7 @@ export def "api delete-objects" [
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter. This checksum algorithm must be the same for all parts and it match the checksum value supplied in the CreateMultipartUpload request.
   --body: any
-]: any -> any {
+]: any -> record<Deleted: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2195,7 +2195,7 @@ export def "api get-public-access-block" [
   --public-access-block: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2263,7 +2263,7 @@ export def "api get-accelerate-configuration" [
   --accelerate: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2331,7 +2331,7 @@ export def "api get-acl" [
   --acl: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Owner: record<DisplayName: record, ID: record>, Grants: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2409,7 +2409,7 @@ export def "api get-lifecycle" [
   --lifecycle: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Rules: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2481,7 +2481,7 @@ export def "api get-location" [
   --location: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<LocationConstraint: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2513,7 +2513,7 @@ export def "api get-logging" [
   --logging: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<LoggingEnabled: record<TargetBucket: record, TargetGrants: record, TargetPrefix: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2582,7 +2582,7 @@ export def "api get-notification-configuration" [
   --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<TopicConfigurations: record, QueueConfigurations: record, LambdaFunctionConfigurations: record, EventBridgeConfiguration: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2652,7 +2652,7 @@ export def "api get-notification" [
   --notification: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<TopicConfiguration: record<Id: string, Events: record, Event: record, Topic: record>, QueueConfiguration: record<Id: string, Event: record, Events: record, Queue: record>, CloudFunctionConfiguration: record<Id: string, Event: record, Events: record, CloudFunction: record, InvocationRole: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2723,7 +2723,7 @@ export def "api get-policy-status" [
   --policy-status: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<PolicyStatus: record<IsPublic: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2755,7 +2755,7 @@ export def "api get-request-payment" [
   --request-payment: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Payer: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2825,7 +2825,7 @@ export def "api get-versioning" [
   --versioning: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Status: record, MFADelete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2899,7 +2899,7 @@ export def "api get-object-acl" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Owner: record<DisplayName: record, ID: record>, Grants: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -2944,7 +2944,7 @@ export def "api update-object-acl" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2988,7 +2988,7 @@ export def "api get-object-attributes" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-object-attributes: list # An XML header that specifies the fields at the root level that you want returned in the response. Fields that you do not specify are not returned.
-]: nothing -> any {
+]: nothing -> record<ETag: record, Checksum: record<ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record>, ObjectParts: record<TotalPartsCount: record, PartNumberMarker: record, NextPartNumberMarker: record, MaxParts: record, IsTruncated: record, Parts: record>, StorageClass: record, ObjectSize: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3023,7 +3023,7 @@ export def "api get-object-legal-hold" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<LegalHold: record<Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3061,7 +3061,7 @@ export def "api update-object-legal-hold" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3096,7 +3096,7 @@ export def "api get-object-lock-configuration" [
   --object-lock: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<ObjectLockConfiguration: record<ObjectLockEnabled: record, Rule: record<DefaultRetention: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3132,7 +3132,7 @@ export def "api update-object-lock-configuration" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3169,7 +3169,7 @@ export def "api get-object-retention" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Retention: record<Mode: record, RetainUntilDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3208,7 +3208,7 @@ export def "api update-object-retention" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3246,7 +3246,7 @@ export def "api get-object-torrent" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Body: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3279,7 +3279,7 @@ export def "api list-analytics-configurations" [
   --analytics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<IsTruncated: record, ContinuationToken: record, NextContinuationToken: record, AnalyticsConfigurationList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3310,7 +3310,7 @@ export def "api list-intelligent-tiering-configurations" [
   --continuation-token: string # The ContinuationToken that represents a placeholder from where this request should begin.
   --intelligent-tiering: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
-]: nothing -> any {
+]: nothing -> record<IsTruncated: record, ContinuationToken: record, NextContinuationToken: record, IntelligentTieringConfigurationList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3342,7 +3342,7 @@ export def "api list-inventory-configurations" [
   --inventory: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<ContinuationToken: record, InventoryConfigurationList: record, IsTruncated: record, NextContinuationToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3374,7 +3374,7 @@ export def "api list-metrics-configurations" [
   --metrics: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<IsTruncated: record, ContinuationToken: record, NextContinuationToken: record, MetricsConfigurationList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3403,7 +3403,7 @@ export def "api list-buckets" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --x-amz-security-token: string
-]: nothing -> any {
+]: nothing -> record<Buckets: record, Owner: record<DisplayName: record, ID: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/")
@@ -3442,7 +3442,7 @@ export def "api list-multipart-uploads" [
   --uploads: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<Bucket: record, KeyMarker: record, UploadIdMarker: record, NextKeyMarker: record, Prefix: record, Delimiter: record, NextUploadIdMarker: record, MaxUploads: record, IsTruncated: record, Uploads: record, CommonPrefixes: record, EncodingType: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3483,7 +3483,7 @@ export def "api list-object-versions" [
   --versions: oneof<nothing, bool> # allows empty value
   --x-amz-security-token: string
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<IsTruncated: record, KeyMarker: record, VersionIdMarker: record, NextKeyMarker: record, NextVersionIdMarker: record, Versions: record, DeleteMarkers: record, Name: record, Prefix: record, Delimiter: record, MaxKeys: record, CommonPrefixes: record, EncodingType: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3524,7 +3524,7 @@ export def "api list-objects-by-bucket-1" [
   --x-amz-security-token: string
   --x-amz-request-payer: string@x-amz-request-payer-completer # Confirms that the requester knows that she or he will be charged for the list objects request in V2 style. Bucket owners need not specify this parameter in their requests.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<IsTruncated: record, Contents: record, Name: record, Prefix: record, Delimiter: record, MaxKeys: record, CommonPrefixes: record, EncodingType: record, KeyCount: record, ContinuationToken: record, NextContinuationToken: record, StartAfter: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }
@@ -3561,7 +3561,7 @@ export def "api create-restore-object" [
   --x-amz-sdk-checksum-algorithm: string@x-amz-sdk-checksum-algorithm-completer # Indicates the algorithm used to create the checksum for the object when using the SDK. This header will not provide any additional functionality if not using the SDK. When sending this header, there must be a corresponding x-amz-checksum or x-amz-trailer header sent. Otherwise, Amazon S3 fails the request with the HTTP status code 400 Bad Request. For more information, see Checking object integrity (https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html) in the Amazon S3 User Guide. If you provide an individual checksum, Amazon S3 ignores any provided ChecksumAlgorithm parameter.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3602,7 +3602,7 @@ export def "api create-select-object-content" [
   --x-amz-server-side-encryption-customer-key-md5: string # The MD5 server-side encryption (SSE) customer managed key. This parameter is needed only when the object was created using a checksum algorithm. For more information, see Protecting data using SSE-C keys (https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html) in the Amazon S3 User Guide.
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record<Payload: record<Records: record<Payload: record>, Stats: record<Details: record>, Progress: record<Details: record>, Cont: record, End: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3652,7 +3652,7 @@ export def "api upload-part" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3704,7 +3704,7 @@ export def "api upload-part-copy" [
   --x-amz-request-payer: string@x-amz-request-payer-completer
   --x-amz-expected-bucket-owner: string # The account ID of the expected destination bucket owner. If the destination bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
   --x-amz-source-expected-bucket-owner: string # The account ID of the expected source bucket owner. If the source bucket is owned by a different account, the request fails with the HTTP status code 403 Forbidden (access denied).
-]: nothing -> any {
+]: nothing -> record<CopyPartResult: record<ETag: record, LastModified: record, ChecksumCRC32: record, ChecksumCRC32C: record, ChecksumSHA1: record, ChecksumSHA256: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bucket | is-empty) { error make --unspanned { msg: "path parameter 'Bucket' must be non-empty" } }

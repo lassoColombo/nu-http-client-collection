@@ -184,7 +184,7 @@ export def "apps list" [
   --limit: int # The maximum number of results to return per page
   --user-id: string # The unique id of the user requesting this resource
   --is-owner: oneof<nothing, bool> # Whether this result should only contain apps that are owned by this user
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<access: list, allow: record, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: list, name: string, ownership: record, randomize: int, rating: int, restrict: record, reviewCount: int, safeName: list, statistics: record, status: record, submittedDate: int, type: string, version: int>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwner" $is_owner "scalar")] | flatten | str join "&"
@@ -216,7 +216,7 @@ export def "apps create" [
   --restrict: string # JSON object to restrict users from owning or viewing this app. Example: {'view':{'country':['Canada','Mexico']},'own':{'country':['Canada','Mexico']}} restricts users from canada and mexico from viewing or owning this app
   --allow: string # JSON object to restrict users from owning or viewing this app. Example: {'view':{'country':['Canada','Mexico']},'own':{'country':['Canada','Mexico']}} restricts users from canada and mexico from viewing or owning this app
   --access: string # JSON array of data access requirements
-]: nothing -> any {
+]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, parent: record<status: record<profanity: list, reason: string, value: string>>, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, status: record<profanity: list<record>, reason: string, value: string>, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "developerId" $developer_id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar") (serialize-qp "attributes" $attributes "scalar") (serialize-qp "restrict" $restrict "scalar") (serialize-qp "allow" $allow "scalar") (serialize-qp "access" $access "scalar")] | flatten | str join "&"
@@ -242,7 +242,7 @@ export def "apps-by-safe-name get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The unique id of the user that is requesting this resource
   --track-views: oneof<nothing, bool> # Whether this call should be tracked as a 'view' for this app. Default is false.
-]: nothing -> any {
+]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, ownership: record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string>, randomize: int, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, statistics: record, status: record<profanity: list<record>, reason: string, value: string>, submittedDate: int, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($safe_name | is-empty) { error make --unspanned { msg: "path parameter 'safeName' must be non-empty" } }
@@ -273,7 +273,7 @@ export def "apps-text-search get" [
   --limit: int # The maximum number of results to return per page
   --user-id: string # The unique id of the user requesting this resource
   --is-owned: oneof<nothing, bool> # Whether this result should only contain apps that are owned by this user
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<access: list, allow: record, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: list, name: string, ownership: record, randomize: int, rating: int, restrict: record, reviewCount: int, safeName: list, statistics: record, status: record, submittedDate: int, type: string, version: int>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "isOwned" $is_owned "scalar")] | flatten | str join "&"
@@ -301,7 +301,7 @@ export def "apps-versions get" [
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
   --developer-id: string # The unique id of the developer requesting this resource
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<access: list, allow: record, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: list, name: string, parent: record, rating: int, restrict: record, reviewCount: int, safeName: list, status: record, type: string, version: int>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "developerId" $developer_id "scalar")] | flatten | str join "&"
@@ -353,7 +353,7 @@ export def "apps get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The unique id of the user that is requesting this resource
   --track-views: oneof<nothing, bool> # Whether this call should be tracked as a 'view' for this app. Default is false.
-]: nothing -> any {
+]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, ownership: record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string>, randomize: int, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, statistics: record, status: record<profanity: list<record>, reason: string, value: string>, submittedDate: int, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -463,7 +463,7 @@ export def "apps-versions get-by-app-id-version" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --developer-id: string # The unique id of the developer that is requesting this resource
-]: nothing -> any {
+]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, parent: record<status: record<profanity: list, reason: string, value: string>>, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, status: record<profanity: list<record>, reason: string, value: string>, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -500,7 +500,7 @@ export def "apps-versions update" [
   --allow: string # JSON object to allow users to purchase or view this app. Example: {'purchase':{'country':['Canada','Mexico']}} allows only users from canada and mexico to purchase this app
   --access: string # JSON array of data access requirements
   --approval-required: string # False if updates should skip the approval process and be available immediately. Default is True
-]: nothing -> any {
+]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, parent: record<status: record<profanity: list, reason: string, value: string>>, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, status: record<profanity: list<record>, reason: string, value: string>, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -537,7 +537,7 @@ export def "apps-versions create" [
   --allow: string # JSON object to allow users to purchase or view this app. Example: {'purchase':{'country':['Canada','Mexico']}} allows only users from canada and mexico to purchase this app
   --access: string # JSON array of data access requirements
   --approval-required: string # False if updates should skip the approval process and be available immediately. Default is True
-]: nothing -> any {
+]: nothing -> record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLatestVersion: bool, isLive: bool, lastUpdated: int, model: table<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, name: string, parent: record<status: record<profanity: list, reason: string, value: string>>, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, status: record<profanity: list<record>, reason: string, value: string>, type: string, version: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -600,7 +600,7 @@ export def "custom-gateway-payment create" [
   --marketplace-amount: int # The amount (in cents) paid to the marketplace owner as a commission for the purchase of this app. Defaults based on the commission amount configured for this marketplace.
   --developer-amount: int # The amount (in cents) paid to the owner of the app. Defaults based on the commission amount configured for this marketplace.
   --custom-data: string # A custom JSON object to attach to this transaction
-]: nothing -> any {
+]: nothing -> record<amount: int, appId: string, customData: record, date: int, developerAmount: int, developerId: string, feeAmount: int, marketplaceAmount: int, ownershipId: string, transactionId: string, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
@@ -631,7 +631,7 @@ export def "custom-gateway-refund create" [
   --marketplace-amount: int # The amount (in cents) recovered from the marketplace owner as a commission refund for the purchase of this app
   --developer-amount: int # The amount (in cents) recovered from the owner of the app
   --custom-data: string # A custom JSON object to attach to this transaction
-]: nothing -> any {
+]: nothing -> record<amount: int, appId: string, customData: record, date: int, developerAmount: int, developerId: string, feeAmount: int, marketplaceAmount: int, ownershipId: string, transactionId: string, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
@@ -659,7 +659,7 @@ export def "developer-accounts list" [
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<customData: record, developerAccountId: string, developerId: string, email: string, name: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -707,7 +707,7 @@ export def "developer-accounts get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<customData: record, developerAccountId: string, developerId: string, email: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_account_id | is-empty) { error make --unspanned { msg: "path parameter 'developerAccountId' must be non-empty" } }
@@ -735,7 +735,7 @@ export def "developer-accounts update" [
   --email: string # The contact email address
   --name: string # The name for the account
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<customData: record, developerAccountId: string, developerId: string, email: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_account_id | is-empty) { error make --unspanned { msg: "path parameter 'developerAccountId' must be non-empty" } }
@@ -764,7 +764,7 @@ export def "developer-accounts create" [
   --email: string # The contact email address
   --name: string # The name for the account
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<customData: record, developerAccountId: string, developerId: string, email: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_account_id | is-empty) { error make --unspanned { msg: "path parameter 'developerAccountId' must be non-empty" } }
@@ -792,7 +792,7 @@ export def "developers list" [
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<created: int, customData: record, developerId: string, email: string, name: string, type: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -840,7 +840,7 @@ export def "developers get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created: int, customData: record, developerId: string, email: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
@@ -869,7 +869,7 @@ export def "developers update" [
   --username: string # The developer's username
   --name: string # The developer's name
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<created: int, customData: record, developerId: string, email: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
@@ -899,7 +899,7 @@ export def "developers create" [
   --username: string # The developer's username
   --name: string # The developer's name
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<created: int, customData: record, developerId: string, email: string, name: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
@@ -924,7 +924,7 @@ export def "events get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<app: record<access: list<string>, allow: record<own: record, view: record>, appId: string, attributes: record, created: int, customData: record, developerId: string, isLive: bool, lastUpdated: int, model: list<record>, name: string, ownership: record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string>, randomize: int, rating: int, restrict: record<own: record, view: record>, reviewCount: int, safeName: list<string>, statistics: record, status: record<profanity: list, reason: string, value: string>, submittedDate: int, type: string, version: int>, createdDate: int, description: string, developer: record<created: int, customData: record, developerId: string, email: string, name: string, type: string>, eventId: string, eventType: string, marketplaceId: string, ownership: record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string>, review: record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string>, transaction: record<amount: int, appId: string, customData: record, date: int, developerAmount: int, developerId: string, feeAmount: int, marketplaceAmount: int, ownershipId: string, transactionId: string, type: string, userId: string>, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($event_id | is-empty) { error make --unspanned { msg: "path parameter 'eventId' must be non-empty" } }
@@ -951,7 +951,7 @@ export def "files get" [
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -977,7 +977,7 @@ export def "files create" [
   --is-private: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
   --hash: string # A comma separated list of hashes to return in order to verify file integrity.
   file: string # The file to be uploaded (format: binary)
-]: any -> any {
+]: any -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1006,7 +1006,7 @@ export def "files-by-id-or-url get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id-or-url: string # The fileId or fileUrl of the file to be returned
-]: nothing -> any {
+]: nothing -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fileIdOrUrl" $file_id_or_url "scalar")] | flatten | str join "&"
@@ -1031,7 +1031,7 @@ export def "files-download get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --file-id: string # The URL of the file to be uploaded
   --valid-seconds: int # The number of seconds that this signed URL should be valid for. The default is 60.
-]: nothing -> any {
+]: nothing -> record<url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fileId" $file_id "scalar") (serialize-qp "validSeconds" $valid_seconds "scalar")] | flatten | str join "&"
@@ -1056,7 +1056,7 @@ export def "files-url create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # The URL of the file to be uploaded
   --is-private: oneof<nothing, bool> # If true, this file will be protected as a private file and require the generation of a signed URL in order to download using the Download File API. The default is false.
-]: nothing -> any {
+]: nothing -> record<contentType: string, fileId: string, fileUrl: string, hash: record<MD5: string, SHA_1: string, SHA_256: string>, mimeCheck: string, name: string, size: int, uploadDate: int, virusScan: record<finished: int, foundViruses: list<record>, started: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "isPrivate" $is_private "scalar")] | flatten | str join "&"
@@ -1079,7 +1079,7 @@ export def "markets-this get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<attributes: table<name: string, type: string, values: string>, categoryGroups: table<categories: list, name: string>, marketplaceId: string, previewAppUrl: string, viewAppUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/markets/this")
@@ -1105,7 +1105,7 @@ export def "ownership list" [
   --qp-sort: string # A sort document. Example: {'date':1} sorts the results by date in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<appId: string, customData: record, date: int, developerId: string, expires: int, model: record, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1133,7 +1133,7 @@ export def "ownership-install create" [
   --model-id: string # The id of the model associated with this ownership request
   --model: string # A custom model that will override the app's default model for this install
   --custom-data: string # A custom JSON object to attach to this ownership record
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "modelId" $model_id "scalar") (serialize-qp "model" $model "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
@@ -1160,7 +1160,7 @@ export def "ownership-uninstall create" [
   --user-id: string # The id of the User requesting to uninstall the App
   --cancel-ownership: oneof<nothing, bool> # True if this app will require payment to be re-installed. Default is false
   --custom-data: string # A custom JSON object to attach to this ownership record
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
@@ -1185,7 +1185,7 @@ export def "ownership get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
@@ -1211,7 +1211,7 @@ export def "ownership update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-data: string # Custom JSON object that will be attached to this ownership record
   --expires: int # The date (in millis) of when this app ownership expires (format: int64)
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
@@ -1238,7 +1238,7 @@ export def "ownership create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-data: string # Custom JSON object that will be attached to this ownership record
   --expires: int # The date (in millis) of when this app ownership expires (format: int64)
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: record, date: int, developerId: string, expires: int, model: record<billingPeriod: string, billingPeriodUnit: int, commission: int, currency: string, customData: record, feePayer: string, license: string, modelId: string, price: int, subtype: string, trial: int, type: string>, ownershipId: string, ownershipStatus: string, ownershipType: string, uninstallDate: int, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($ownership_id | is-empty) { error make --unspanned { msg: "path parameter 'ownershipId' must be non-empty" } }
@@ -1290,7 +1290,7 @@ export def "permission-apps get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string # The id of the user
-]: nothing -> any {
+]: nothing -> record<access: list<string>, appId: string, date: int, ip: string, isValid: bool, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1318,7 +1318,7 @@ export def "permission-apps create" [
   --user-id: string # The id of the user
   --date: int # The time (in milliseconds) of when the user agreed to the access request (format: int64)
   --ip: string # The ip address of the user agreeing to the access request
-]: nothing -> any {
+]: nothing -> record<access: list<string>, appId: string, date: int, ip: string, isValid: bool, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($app_id | is-empty) { error make --unspanned { msg: "path parameter 'appId' must be non-empty" } }
@@ -1346,7 +1346,7 @@ export def "reviews list" [
   --qp-sort: string # A sort document. Example: {'rating':1} sorts the results by rating in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record, type: string, user: record, userAccount: record, userAccountId: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1379,7 +1379,7 @@ export def "reviews create" [
   --must-own-app: oneof<nothing, bool> # True if a review can be created only by a user that has owned the app. The default is True.
   --auto-approve: oneof<nothing, bool> # True if the review should be automatically approved. The default is False.
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list<record>, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "appId" $app_id "scalar") (serialize-qp "userId" $user_id "scalar") (serialize-qp "userAccountId" $user_account_id "scalar") (serialize-qp "headline" $headline "scalar") (serialize-qp "rating" $rating "scalar") (serialize-qp "description" $description "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "mustOwnApp" $must_own_app "scalar") (serialize-qp "autoApprove" $auto_approve "scalar") (serialize-qp "customData" $custom_data "scalar")] | flatten | str join "&"
@@ -1430,7 +1430,7 @@ export def "reviews get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list<record>, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
@@ -1460,7 +1460,7 @@ export def "reviews update" [
   --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
   --description: string # The review's description. Limited to 2000 characters.
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list<record>, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
@@ -1491,7 +1491,7 @@ export def "reviews create-by-review-id" [
   --rating: int # The rating given within this review. The rating is represented as an integer between 0 and 500 (0 - 5 stars)
   --description: string # The review's description. Limited to 2000 characters.
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<appId: string, customData: string, description: string, headline: string, rating: int, reportDate: int, reviewId: string, status: record<profanity: list<record>, reason: string, value: string>, type: string, user: record<created: int, customData: record, email: string, name: string, type: string, userId: string>, userAccount: record<customData: record, email: string, name: string, userAccountId: string, userId: string>, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($review_id | is-empty) { error make --unspanned { msg: "path parameter 'reviewId' must be non-empty" } }
@@ -1549,7 +1549,7 @@ export def "stats-series get" [
   --start: int # The start date for this series (in millis) (format: int64)
   --end: int # The end date for this series (in millis) (format: int64)
   --query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
-]: nothing -> any {
+]: nothing -> list<list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($period | is-empty) { error make --unspanned { msg: "path parameter 'period' must be non-empty" } }
@@ -1578,7 +1578,7 @@ export def "stats-total get" [
   --query: string # A query document. Example: {'developerId': '112'} matches all the apps that have the developer with id 112
   --start: int # The start date for this total (in millis) (format: int64)
   --end: int # The end date for this total (in millis) (format: int64)
-]: nothing -> any {
+]: nothing -> record<apps: record<_appId: record<_field: int>>, end: int, start: int, totals: record<_field: int>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fields" $fields "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "end" $end "scalar")] | flatten | str join "&"
@@ -1602,7 +1602,7 @@ export def "stripe-gateway-developer-accounts get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<accounts: table<accountName: string, country: string, defaultCurrency: string, stripeId: string>, developerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
@@ -1627,7 +1627,7 @@ export def "stripe-gateway-developer-accounts create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --redirect-url: string # The URL to redirect this developer after they have connected their Stripe account
-]: nothing -> any {
+]: nothing -> record<developerId: string, expires: int, targetUrl: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
@@ -1653,7 +1653,7 @@ export def "stripe-gateway-developer-accounts delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<accounts: table<accountName: string, country: string, defaultCurrency: string, stripeId: string>, developerId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($developer_id | is-empty) { error make --unspanned { msg: "path parameter 'developerId' must be non-empty" } }
@@ -1678,7 +1678,7 @@ export def "stripe-gateway-user-cards get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cards: table<address_city: string, address_country: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, brand: string, cardId: string, exp_month: int, exp_year: int, isDefault: bool, last4: string, name: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1704,7 +1704,7 @@ export def "stripe-gateway-user-cards create-by-user-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --qp-token: string # The Stripe token returned by the Stripe.js Stripe.card.createToken call
   --is-default: oneof<nothing, bool> # Set to true if this should be set to be the default credit card
-]: nothing -> any {
+]: nothing -> record<cards: table<address_city: string, address_country: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, brand: string, cardId: string, exp_month: int, exp_year: int, isDefault: bool, last4: string, name: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1730,7 +1730,7 @@ export def "stripe-gateway-user-cards delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cards: table<address_city: string, address_country: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, brand: string, cardId: string, exp_month: int, exp_year: int, isDefault: bool, last4: string, name: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1763,7 +1763,7 @@ export def "stripe-gateway-user-cards create-by-user-id-card-id" [
   --address-line2: string # The card holder's street address
   --address-state: string # The card holder's city state/province
   --address-zip: string # The card holder's zip/postal code
-]: nothing -> any {
+]: nothing -> record<cards: table<address_city: string, address_country: string, address_line1: string, address_line2: string, address_state: string, address_zip: string, brand: string, cardId: string, exp_month: int, exp_year: int, isDefault: bool, last4: string, name: string>, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -1792,7 +1792,7 @@ export def "transactions list" [
   --qp-sort: string # A sort document. Example: {'date':1} sorts the results by total in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<amount: int, appId: string, customData: record, date: int, developerAmount: int, developerId: string, feeAmount: int, marketplaceAmount: int, ownershipId: string, transactionId: string, type: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1865,7 +1865,7 @@ export def "transactions create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<amount: int, appId: string, customData: record, date: int, developerAmount: int, developerId: string, feeAmount: int, marketplaceAmount: int, ownershipId: string, transactionId: string, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'transactionId' must be non-empty" } }
@@ -1893,7 +1893,7 @@ export def "user-accounts list" [
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<customData: record, email: string, name: string, userAccountId: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -1941,7 +1941,7 @@ export def "user-accounts get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<customData: record, email: string, name: string, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_account_id | is-empty) { error make --unspanned { msg: "path parameter 'userAccountId' must be non-empty" } }
@@ -1969,7 +1969,7 @@ export def "user-accounts update" [
   --email: string # The contact email address
   --name: string # The user account name
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<customData: record, email: string, name: string, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_account_id | is-empty) { error make --unspanned { msg: "path parameter 'userAccountId' must be non-empty" } }
@@ -1998,7 +1998,7 @@ export def "user-accounts create" [
   --email: string # The contact email address
   --name: string # The user account name
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<customData: record, email: string, name: string, userAccountId: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_account_id | is-empty) { error make --unspanned { msg: "path parameter 'userAccountId' must be non-empty" } }
@@ -2026,7 +2026,7 @@ export def "users list" [
   --qp-sort: string # A sort document. Example: {'name':1} sorts the results by name in ascending order
   --page-number: int # The result set page number to be returned
   --limit: int # The maximum number of results to return per page
-]: nothing -> any {
+]: nothing -> record<count: int, list: table<created: int, customData: record, email: string, name: string, type: string, userId: string>, pageNumber: int, pages: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -2074,7 +2074,7 @@ export def "users get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created: int, customData: record, email: string, name: string, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2103,7 +2103,7 @@ export def "users update" [
   --username: string # The user's username
   --name: string # The user's name
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<created: int, customData: record, email: string, name: string, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -2133,7 +2133,7 @@ export def "users create" [
   --username: string # The user's username
   --name: string # The user's name
   --custom-data: string # A custom JSON object that you can create and attach to this record
-]: nothing -> any {
+]: nothing -> record<created: int, customData: record, email: string, name: string, type: string, userId: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }

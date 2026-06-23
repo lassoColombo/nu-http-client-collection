@@ -8390,7 +8390,7 @@ export def "spaces-persons-invitation get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<ClientManagement: string, CodeMethod: any, EmployeeAccess: bool, Folders: table<Id: string, Name: string, Right: string>, GroupIds: list<string>, Groups: table<EndDate: string, Id: string, Name: string>, IsAdmin: bool, LinkMethod: record<Type: string>, Player: string, PlayerEnd: string, Status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($space_id | is-empty) { error make --unspanned { msg: "path parameter 'spaceId' must be non-empty" } }

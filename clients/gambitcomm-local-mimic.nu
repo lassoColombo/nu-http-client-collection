@@ -151,7 +151,7 @@ export def "mimic-access-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -178,7 +178,7 @@ export def "mimic-access-del delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($user | is-empty) { error make --unspanned { msg: "path parameter 'user' must be non-empty" } }
@@ -202,7 +202,7 @@ export def "mimic-access-get-acldb get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/acldb")
@@ -225,7 +225,7 @@ export def "mimic-access-get-admindir get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/admindir")
@@ -248,7 +248,7 @@ export def "mimic-access-get-adminuser get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/adminuser")
@@ -271,7 +271,7 @@ export def "mimic-access-get-enabled get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/access/get/enabled")
@@ -368,7 +368,7 @@ export def "mimic-access-set-acldb update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
@@ -393,7 +393,7 @@ export def "mimic-access-set-enabled update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($enabled_or_not | is-empty) { error make --unspanned { msg: "path parameter 'enabledOrNot' must be non-empty" } }
@@ -420,7 +420,7 @@ export def "mimic-agent-add create-new" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -451,7 +451,7 @@ export def "mimic-agent-from-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -480,7 +480,7 @@ export def "mimic-agent-from-delete delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -532,7 +532,7 @@ export def "mimic-agent-get-changed get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -557,7 +557,7 @@ export def "mimic-agent-get-config-changed get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -582,7 +582,7 @@ export def "mimic-agent-get-delay get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -607,7 +607,7 @@ export def "mimic-agent-get-drops get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -632,7 +632,7 @@ export def "mimic-agent-get-host get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -657,7 +657,7 @@ export def "mimic-agent-get-inform-timeout get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -682,7 +682,7 @@ export def "mimic-agent-get-interface get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -707,7 +707,7 @@ export def "mimic-agent-get-mask get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -757,7 +757,7 @@ export def "mimic-agent-get-num-starts get-number" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -782,7 +782,7 @@ export def "mimic-agent-get-oiddir get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -807,7 +807,7 @@ export def "mimic-agent-get-owner get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -832,7 +832,7 @@ export def "mimic-agent-get-pdusize get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -857,7 +857,7 @@ export def "mimic-agent-get-port get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -882,7 +882,7 @@ export def "mimic-agent-get-privdir get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -932,7 +932,7 @@ export def "mimic-agent-get-read get-community" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -957,7 +957,7 @@ export def "mimic-agent-get-scen get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -982,7 +982,7 @@ export def "mimic-agent-get-sim get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1007,7 +1007,7 @@ export def "mimic-agent-get-start get-starttime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1032,7 +1032,7 @@ export def "mimic-agent-get-state get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1057,7 +1057,7 @@ export def "mimic-agent-get-state-changed get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1107,7 +1107,7 @@ export def "mimic-agent-get-trace get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1132,7 +1132,7 @@ export def "mimic-agent-get-validate get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1157,7 +1157,7 @@ export def "mimic-agent-get-write get-community" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1182,7 +1182,7 @@ export def "mimic-agent-halt update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1211,7 +1211,7 @@ export def "mimic-agent-ipalias-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1242,7 +1242,7 @@ export def "mimic-agent-ipalias-delete delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1296,7 +1296,7 @@ export def "mimic-agent-ipalias-start start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1325,7 +1325,7 @@ export def "mimic-agent-ipalias-status get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1354,7 +1354,7 @@ export def "mimic-agent-ipalias-stop stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1381,7 +1381,7 @@ export def "mimic-agent-pause pause-now" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1508,7 +1508,7 @@ export def "mimic-agent-protocol-msg-coap-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1536,7 +1536,7 @@ export def "mimic-agent-protocol-msg-coap-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1689,7 +1689,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1717,7 +1717,7 @@ export def "mimic-agent-protocol-msg-dhcp-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1844,7 +1844,7 @@ export def "mimic-agent-protocol-msg-ipmi-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1872,7 +1872,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1900,7 +1900,7 @@ export def "mimic-agent-protocol-msg-ipmi-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -1928,7 +1928,7 @@ export def "mimic-agent-protocol-msg-ipmi-set update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2091,7 +2091,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-resubscribe update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2602,7 +2602,7 @@ export def "mimic-agent-protocol-msg-mqtt-client-unsubscribe unsubscribe" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2730,7 +2730,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2758,7 +2758,7 @@ export def "mimic-agent-protocol-msg-mqtt-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2785,7 +2785,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-dfs-interval update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2812,7 +2812,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change-tfs-interval update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2842,7 +2842,7 @@ export def "mimic-agent-protocol-msg-netflow-flow-change update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -2996,7 +2996,7 @@ export def "mimic-agent-protocol-msg-netflow-halt update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3021,7 +3021,7 @@ export def "mimic-agent-protocol-msg-netflow-reload reload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3046,7 +3046,7 @@ export def "mimic-agent-protocol-msg-netflow-resume update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3072,7 +3072,7 @@ export def "mimic-agent-protocol-msg-netflow-set-collector update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3100,7 +3100,7 @@ export def "mimic-agent-protocol-msg-netflow-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3128,7 +3128,7 @@ export def "mimic-agent-protocol-msg-netflow-set-filename update-file-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3155,7 +3155,7 @@ export def "mimic-agent-protocol-msg-netflow-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3284,7 +3284,7 @@ export def "mimic-agent-protocol-msg-proxy-port-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3313,7 +3313,7 @@ export def "mimic-agent-protocol-msg-proxy-port-is-started get-isstarted" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3365,7 +3365,7 @@ export def "mimic-agent-protocol-msg-proxy-port-remove delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3392,7 +3392,7 @@ export def "mimic-agent-protocol-msg-proxy-port-start start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3419,7 +3419,7 @@ export def "mimic-agent-protocol-msg-proxy-port-stop stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3447,7 +3447,7 @@ export def "mimic-agent-protocol-msg-proxy-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3475,7 +3475,7 @@ export def "mimic-agent-protocol-msg-proxy-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3601,7 +3601,7 @@ export def "mimic-agent-protocol-msg-sflow-halt update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3626,7 +3626,7 @@ export def "mimic-agent-protocol-msg-sflow-reload reload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3651,7 +3651,7 @@ export def "mimic-agent-protocol-msg-sflow-resume update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3678,7 +3678,7 @@ export def "mimic-agent-protocol-msg-sflow-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3706,7 +3706,7 @@ export def "mimic-agent-protocol-msg-sflow-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3834,7 +3834,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-disable disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3863,7 +3863,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-enable enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3892,7 +3892,7 @@ export def "mimic-agent-protocol-msg-snmptcp-ipalias-isenabled get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3946,7 +3946,7 @@ export def "mimic-agent-protocol-msg-snmptcp-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -3974,7 +3974,7 @@ export def "mimic-agent-protocol-msg-snmptcp-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4008,7 +4008,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4041,7 +4041,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-clear delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4067,7 +4067,7 @@ export def "mimic-agent-protocol-msg-snmpv3-access-del delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4143,7 +4143,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-context-engineid get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4168,7 +4168,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineboots get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4193,7 +4193,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-engineid get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4218,7 +4218,7 @@ export def "mimic-agent-protocol-msg-snmpv3-get-enginetime get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4246,7 +4246,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4274,7 +4274,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-clear delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4300,7 +4300,7 @@ export def "mimic-agent-protocol-msg-snmpv3-group-del delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4353,7 +4353,7 @@ export def "mimic-agent-protocol-msg-snmpv3-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4386,7 +4386,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4417,7 +4417,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-clear delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4443,7 +4443,7 @@ export def "mimic-agent-protocol-msg-snmpv3-user-del delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4602,7 +4602,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4631,7 +4631,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-clear delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4657,7 +4657,7 @@ export def "mimic-agent-protocol-msg-snmpv3-view-del delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4810,7 +4810,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-disable disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4839,7 +4839,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-enable enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4868,7 +4868,7 @@ export def "mimic-agent-protocol-msg-ssh-ipalias-isenabled get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4922,7 +4922,7 @@ export def "mimic-agent-protocol-msg-ssh-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -4950,7 +4950,7 @@ export def "mimic-agent-protocol-msg-ssh-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5077,7 +5077,7 @@ export def "mimic-agent-protocol-msg-syslog-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5109,7 +5109,7 @@ export def "mimic-agent-protocol-msg-syslog-send send" [
   --separator: string
   --sequence: string
   --timestamp: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -5140,7 +5140,7 @@ export def "mimic-agent-protocol-msg-syslog-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5168,7 +5168,7 @@ export def "mimic-agent-protocol-msg-syslog-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5196,7 +5196,7 @@ export def "mimic-agent-protocol-msg-syslog-set update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5414,7 +5414,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-disable disable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5443,7 +5443,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-enable enable" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5472,7 +5472,7 @@ export def "mimic-agent-protocol-msg-telnet-ipalias-isenabled get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5676,7 +5676,7 @@ export def "mimic-agent-protocol-msg-telnet-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5704,7 +5704,7 @@ export def "mimic-agent-protocol-msg-telnet-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5886,7 +5886,7 @@ export def "mimic-agent-protocol-msg-tftp-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5914,7 +5914,7 @@ export def "mimic-agent-protocol-msg-tftp-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5942,7 +5942,7 @@ export def "mimic-agent-protocol-msg-tftp-get get-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -5972,7 +5972,7 @@ export def "mimic-agent-protocol-msg-tftp-set update-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6001,7 +6001,7 @@ export def "mimic-agent-protocol-msg-tftp-start start-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6028,7 +6028,7 @@ export def "mimic-agent-protocol-msg-tftp-status get-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6055,7 +6055,7 @@ export def "mimic-agent-protocol-msg-tftp-stop stop-session" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6218,7 +6218,7 @@ export def "mimic-agent-protocol-msg-tod-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6246,7 +6246,7 @@ export def "mimic-agent-protocol-msg-tod-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6373,7 +6373,7 @@ export def "mimic-agent-protocol-msg-web-port-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6427,7 +6427,7 @@ export def "mimic-agent-protocol-msg-web-port-remove delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6456,7 +6456,7 @@ export def "mimic-agent-protocol-msg-web-port-set update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6485,7 +6485,7 @@ export def "mimic-agent-protocol-msg-web-port-start start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6512,7 +6512,7 @@ export def "mimic-agent-protocol-msg-web-port-stop stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6540,7 +6540,7 @@ export def "mimic-agent-protocol-msg-web-set-config update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6568,7 +6568,7 @@ export def "mimic-agent-protocol-msg-web-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6621,7 +6621,7 @@ export def "mimic-agent-reload reload" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6646,7 +6646,7 @@ export def "mimic-agent-remove delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6671,7 +6671,7 @@ export def "mimic-agent-resume update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6696,7 +6696,7 @@ export def "mimic-agent-save update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6722,7 +6722,7 @@ export def "mimic-agent-set-delay update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6749,7 +6749,7 @@ export def "mimic-agent-set-drops update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6776,7 +6776,7 @@ export def "mimic-agent-set-host update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6803,7 +6803,7 @@ export def "mimic-agent-set-inform-timeout update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6830,7 +6830,7 @@ export def "mimic-agent-set-interface update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6857,7 +6857,7 @@ export def "mimic-agent-set-mask update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6884,7 +6884,7 @@ export def "mimic-agent-set-mibs update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -6913,7 +6913,7 @@ export def "mimic-agent-set-oiddir update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6940,7 +6940,7 @@ export def "mimic-agent-set-owner update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6967,7 +6967,7 @@ export def "mimic-agent-set-pdusize update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -6994,7 +6994,7 @@ export def "mimic-agent-set-port update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7021,7 +7021,7 @@ export def "mimic-agent-set-privdir update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7077,7 +7077,7 @@ export def "mimic-agent-set-read update-community" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7104,7 +7104,7 @@ export def "mimic-agent-set-start update-starttime" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7131,7 +7131,7 @@ export def "mimic-agent-set-trace update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7158,7 +7158,7 @@ export def "mimic-agent-set-validate update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7185,7 +7185,7 @@ export def "mimic-agent-set-write update-community" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7211,7 +7211,7 @@ export def "mimic-agent-start start" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7236,7 +7236,7 @@ export def "mimic-agent-stop stop" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7262,7 +7262,7 @@ export def "mimic-agent-store-copy copy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7289,7 +7289,7 @@ export def "mimic-agent-store-exists get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7316,7 +7316,7 @@ export def "mimic-agent-store-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7370,7 +7370,7 @@ export def "mimic-agent-store-lreplace update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7401,7 +7401,7 @@ export def "mimic-agent-store-persists get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7430,7 +7430,7 @@ export def "mimic-agent-store-set update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7461,7 +7461,7 @@ export def "mimic-agent-store-unset update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7490,7 +7490,7 @@ export def "mimic-agent-timer-script-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7521,7 +7521,7 @@ export def "mimic-agent-timer-script-delete delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7576,7 +7576,7 @@ export def "mimic-agent-trap-config-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7605,7 +7605,7 @@ export def "mimic-agent-trap-config-delete delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7684,7 +7684,7 @@ export def "mimic-agent-value-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7713,7 +7713,7 @@ export def "mimic-agent-value-eval get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7743,7 +7743,7 @@ export def "mimic-agent-value-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7772,7 +7772,7 @@ export def "mimic-agent-value-info get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7907,7 +7907,7 @@ export def "mimic-agent-value-mib get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -7934,7 +7934,7 @@ export def "mimic-agent-value-mset update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7963,7 +7963,7 @@ export def "mimic-agent-value-munset update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: list
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -7992,7 +7992,7 @@ export def "mimic-agent-value-name get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8019,7 +8019,7 @@ export def "mimic-agent-value-oid get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8047,7 +8047,7 @@ export def "mimic-agent-value-remove delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8078,7 +8078,7 @@ export def "mimic-agent-value-set update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -8137,7 +8137,7 @@ export def "mimic-agent-value-state-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8165,7 +8165,7 @@ export def "mimic-agent-value-state-set update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8195,7 +8195,7 @@ export def "mimic-agent-value-unset update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($agent_num | is-empty) { error make --unspanned { msg: "path parameter 'agentNum' must be non-empty" } }
@@ -8485,7 +8485,7 @@ export def "mimic-get-last get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/last")
@@ -8531,7 +8531,7 @@ export def "mimic-get-max get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/max")
@@ -8669,7 +8669,7 @@ export def "mimic-get-version get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mimic/get/version")
@@ -9123,7 +9123,7 @@ export def "mimic-set-log update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9242,7 +9242,7 @@ export def "mimic-store-exists get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
@@ -9267,7 +9267,7 @@ export def "mimic-store-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
@@ -9317,7 +9317,7 @@ export def "mimic-store-lreplace update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9346,7 +9346,7 @@ export def "mimic-store-persists get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
@@ -9373,7 +9373,7 @@ export def "mimic-store-set update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -9402,7 +9402,7 @@ export def "mimic-store-unset update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($var | is-empty) { error make --unspanned { msg: "path parameter 'var' must be non-empty" } }
@@ -9452,7 +9452,7 @@ export def "mimic-timer-script-add create-daemon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($script | is-empty) { error make --unspanned { msg: "path parameter 'script' must be non-empty" } }
@@ -9481,7 +9481,7 @@ export def "mimic-timer-script-delete delete-daemon" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($script | is-empty) { error make --unspanned { msg: "path parameter 'script' must be non-empty" } }

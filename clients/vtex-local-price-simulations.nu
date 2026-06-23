@@ -183,7 +183,7 @@ export def "v-custom-prices-rules delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # Describes the type of the content being sent
   --hdr-accept: string # HTTP Client Negotiation _Accept_ Header. Indicates the types of responses the client can understand
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($price_association_id | is-empty) { error make --unspanned { msg: "path parameter 'priceAssociationId' must be non-empty" } }

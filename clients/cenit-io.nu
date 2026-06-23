@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -139,8 +149,8 @@ export def commands []: nothing -> table {
 # GET /setup/connection
 export def "setup-connection list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -148,7 +158,7 @@ export def "setup-connection list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<headers: list<record>, id: string, key: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: list<record>, token: string, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/connection")
   let accept_val = "application/json"
@@ -161,8 +171,8 @@ export def "setup-connection list" [
 # POST /setup/connection
 export def "setup-connection create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -170,7 +180,7 @@ export def "setup-connection create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<headers: table<key: string, value: string>, id: string, key: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: table<key: string, value: string>, token: string, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/connection")
   let accept_val = "application/json"
@@ -184,8 +194,8 @@ export def "setup-connection create" [
 export def "setup-connection delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -193,7 +203,7 @@ export def "setup-connection delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/connection/{id}"))
@@ -208,8 +218,8 @@ export def "setup-connection delete" [
 export def "setup-connection get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -217,7 +227,7 @@ export def "setup-connection get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<headers: table<key: string, value: string>, id: string, key: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: table<key: string, value: string>, token: string, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/connection/{id}"))
@@ -231,8 +241,8 @@ export def "setup-connection get" [
 # GET /setup/connection_role
 export def "setup-connection-role list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -240,7 +250,7 @@ export def "setup-connection-role list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<connection: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: list<record>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/connection_role")
   let accept_val = "application/json"
@@ -253,8 +263,8 @@ export def "setup-connection-role list" [
 # POST /setup/connection_role
 export def "setup-connection-role create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -262,7 +272,7 @@ export def "setup-connection-role create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<connection: table<headers: list, id: string, key: string, name: string, namespace: record, parameters: list, token: string, url: string>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: table<headers: list, id: string, name: string, namespace: record, parameters: list, path: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/connection_role")
   let accept_val = "application/json"
@@ -276,8 +286,8 @@ export def "setup-connection-role create" [
 export def "setup-connection-role delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -285,7 +295,7 @@ export def "setup-connection-role delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/connection_role/{id}"))
@@ -300,8 +310,8 @@ export def "setup-connection-role delete" [
 export def "setup-connection-role get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -309,7 +319,7 @@ export def "setup-connection-role get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<connection: table<headers: list, id: string, key: string, name: string, namespace: record, parameters: list, token: string, url: string>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: table<headers: list, id: string, name: string, namespace: record, parameters: list, path: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/connection_role/{id}"))
@@ -323,8 +333,8 @@ export def "setup-connection-role get" [
 # GET /setup/data_type/
 export def "setup-data-type list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -332,7 +342,7 @@ export def "setup-data-type list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/data_type/")
   let accept_val = "application/json"
@@ -345,8 +355,8 @@ export def "setup-data-type list" [
 # POST /setup/data_type/
 export def "setup-data-type create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -354,7 +364,7 @@ export def "setup-data-type create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/data_type/")
   let accept_val = "application/json"
@@ -368,8 +378,8 @@ export def "setup-data-type create" [
 export def "setup-data-type delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -377,7 +387,7 @@ export def "setup-data-type delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/data_type/{id}"))
@@ -392,8 +402,8 @@ export def "setup-data-type delete" [
 export def "setup-data-type get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -401,7 +411,7 @@ export def "setup-data-type get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/data_type/{id}"))
@@ -415,8 +425,8 @@ export def "setup-data-type get" [
 # GET /setup/flow/
 export def "setup-flow list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -424,7 +434,7 @@ export def "setup-flow list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<active: bool, connection_role: record<connection: list, id: string, name: string, namespace: record, webhook: list>, custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, event: record, id: string, name: string, namespace: record<id: string, name: string, slug: string>, notify_request: bool, notify_response: bool, response_translator: record<custom_data_type: record, id: string, name: string, namespace: record, source_data_type: record, style: string, target_data_type: record, transformation: string, type: string>, translator: record<custom_data_type: record, id: string, name: string, namespace: record, source_data_type: record, style: string, target_data_type: record, transformation: string, type: string>, webhook: record<headers: list, id: string, name: string, namespace: record, parameters: list, path: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/flow/")
   let accept_val = "application/json"
@@ -437,8 +447,8 @@ export def "setup-flow list" [
 # POST /setup/flow/
 export def "setup-flow create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -446,7 +456,7 @@ export def "setup-flow create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, connection_role: record<connection: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: list<record>>, custom_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, event: record, id: string, name: string, namespace: record<id: string, name: string, slug: string>, notify_request: bool, notify_response: bool, response_translator: record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string>, translator: record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string>, webhook: record<headers: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: list<record>, path: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/flow/")
   let accept_val = "application/json"
@@ -460,8 +470,8 @@ export def "setup-flow create" [
 export def "setup-flow delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -469,7 +479,7 @@ export def "setup-flow delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/flow/{id}"))
@@ -484,8 +494,8 @@ export def "setup-flow delete" [
 export def "setup-flow get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -493,7 +503,7 @@ export def "setup-flow get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<active: bool, connection_role: record<connection: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, webhook: list<record>>, custom_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, event: record, id: string, name: string, namespace: record<id: string, name: string, slug: string>, notify_request: bool, notify_response: bool, response_translator: record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string>, translator: record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string>, webhook: record<headers: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: list<record>, path: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/flow/{id}"))
@@ -507,8 +517,8 @@ export def "setup-flow get" [
 # GET /setup/namespace/
 export def "setup-namespace list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -516,7 +526,7 @@ export def "setup-namespace list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, name: string, slug: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/namespace/")
   let accept_val = "application/json"
@@ -529,8 +539,8 @@ export def "setup-namespace list" [
 # POST /setup/namespace/
 export def "setup-namespace create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -538,7 +548,7 @@ export def "setup-namespace create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, slug: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/namespace/")
   let accept_val = "application/json"
@@ -552,8 +562,8 @@ export def "setup-namespace create" [
 export def "setup-namespace delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -561,7 +571,7 @@ export def "setup-namespace delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/namespace/{id}"))
@@ -576,8 +586,8 @@ export def "setup-namespace delete" [
 export def "setup-namespace get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -585,7 +595,7 @@ export def "setup-namespace get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, name: string, slug: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/namespace/{id}"))
@@ -599,8 +609,8 @@ export def "setup-namespace get" [
 # GET /setup/observer/
 export def "setup-observer list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -608,7 +618,7 @@ export def "setup-observer list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, triggers: string, type: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/observer/")
   let accept_val = "application/json"
@@ -621,8 +631,8 @@ export def "setup-observer list" [
 # POST /setup/observer/
 export def "setup-observer create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -630,7 +640,7 @@ export def "setup-observer create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, triggers: string, type: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/observer/")
   let accept_val = "application/json"
@@ -644,8 +654,8 @@ export def "setup-observer create" [
 export def "setup-observer delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -653,7 +663,7 @@ export def "setup-observer delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/observer/{id}"))
@@ -668,8 +678,8 @@ export def "setup-observer delete" [
 export def "setup-observer get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -677,7 +687,7 @@ export def "setup-observer get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, triggers: string, type: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/observer/{id}"))
@@ -691,8 +701,8 @@ export def "setup-observer get" [
 # GET /setup/scheduler/
 export def "setup-scheduler list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -700,7 +710,7 @@ export def "setup-scheduler list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<activated: bool, expression: string, id: string, name: string, namespace: record<id: string, name: string, slug: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/scheduler/")
   let accept_val = "application/json"
@@ -713,8 +723,8 @@ export def "setup-scheduler list" [
 # POST /setup/scheduler/
 export def "setup-scheduler create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -722,7 +732,7 @@ export def "setup-scheduler create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<activated: bool, expression: string, id: string, name: string, namespace: record<id: string, name: string, slug: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/scheduler/")
   let accept_val = "application/json"
@@ -736,8 +746,8 @@ export def "setup-scheduler create" [
 export def "setup-scheduler delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -745,7 +755,7 @@ export def "setup-scheduler delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/scheduler/{id}"))
@@ -760,8 +770,8 @@ export def "setup-scheduler delete" [
 export def "setup-scheduler get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -769,7 +779,7 @@ export def "setup-scheduler get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<activated: bool, expression: string, id: string, name: string, namespace: record<id: string, name: string, slug: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/scheduler/{id}"))
@@ -783,8 +793,8 @@ export def "setup-scheduler get" [
 # GET /setup/schema/
 export def "setup-schema list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -792,7 +802,7 @@ export def "setup-schema list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<id: string, namespace: record<id: string, name: string, slug: string>, schema: string, uri: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/schema/")
   let accept_val = "application/json"
@@ -805,8 +815,8 @@ export def "setup-schema list" [
 # POST /setup/schema/
 export def "setup-schema create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -814,7 +824,7 @@ export def "setup-schema create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, namespace: record<id: string, name: string, slug: string>, schema: string, uri: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/schema/")
   let accept_val = "application/json"
@@ -828,8 +838,8 @@ export def "setup-schema create" [
 export def "setup-schema delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -837,7 +847,7 @@ export def "setup-schema delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/schema/{id}"))
@@ -852,8 +862,8 @@ export def "setup-schema delete" [
 export def "setup-schema get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -861,7 +871,7 @@ export def "setup-schema get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<id: string, namespace: record<id: string, name: string, slug: string>, schema: string, uri: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/schema/{id}"))
@@ -875,8 +885,8 @@ export def "setup-schema get" [
 # GET /setup/translator/
 export def "setup-translator list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -884,7 +894,7 @@ export def "setup-translator list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/translator/")
   let accept_val = "application/json"
@@ -897,8 +907,8 @@ export def "setup-translator list" [
 # POST /setup/translator/
 export def "setup-translator create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -906,7 +916,7 @@ export def "setup-translator create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/translator/")
   let accept_val = "application/json"
@@ -920,8 +930,8 @@ export def "setup-translator create" [
 export def "setup-translator delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -929,7 +939,7 @@ export def "setup-translator delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/translator/{id}"))
@@ -944,8 +954,8 @@ export def "setup-translator delete" [
 export def "setup-translator get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -953,7 +963,7 @@ export def "setup-translator get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<custom_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, source_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, style: string, target_data_type: record<id: string, model_schema: string, name: string, namespace: record<id: string, name: string, slug: string>, show_navigation_link: string, slug: string, title: string, type: record>, transformation: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/translator/{id}"))
@@ -967,8 +977,8 @@ export def "setup-translator get" [
 # GET /setup/webhook/
 export def "setup-webhook list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -976,7 +986,7 @@ export def "setup-webhook list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<headers: list<record>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: list<record>, path: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/webhook/")
   let accept_val = "application/json"
@@ -989,8 +999,8 @@ export def "setup-webhook list" [
 # POST /setup/webhook/
 export def "setup-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -998,7 +1008,7 @@ export def "setup-webhook create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<headers: table<key: string, value: string>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: table<key: string, value: string>, path: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/setup/webhook/")
   let accept_val = "application/json"
@@ -1012,8 +1022,8 @@ export def "setup-webhook create" [
 export def "setup-webhook delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1021,7 +1031,7 @@ export def "setup-webhook delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/webhook/{id}"))
@@ -1036,8 +1046,8 @@ export def "setup-webhook delete" [
 export def "setup-webhook get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
+  --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1045,7 +1055,7 @@ export def "setup-webhook get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<headers: table<key: string, value: string>, id: string, name: string, namespace: record<id: string, name: string, slug: string>, parameters: table<key: string, value: string>, path: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-user-access-key"))
+  let auth = (merge-auth [(build-auth ($token_xuseraccesskey | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSKEY_TOKEN | default "")) "x-user-access-key") (build-auth ($token_xuseraccesstoken | default ($env | get -o CENIT_IO_REST_API_SPECIFICATION_XUSERACCESSTOKEN_TOKEN | default "")) "x-user-access-token")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/setup/webhook/{id}"))

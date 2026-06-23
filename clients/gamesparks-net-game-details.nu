@@ -183,7 +183,7 @@ export def "restv2-game-regions list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restv2/game/regions")
@@ -213,7 +213,7 @@ export def "restv2-game-admin-analytics get-data-using" [
   --start-date: string # yyyy-MM-dd (format: date)
   --end-date: string # yyyy-MM-dd (format: date)
   --keys: string # the keys to select. For example "ReturningUsers", "NewUsers", etc
-]: nothing -> any {
+]: nothing -> table<_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -241,7 +241,7 @@ export def "restv2-game-admin-analytics-count get-data-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --stage: string@stage-completer # stage
   --query-name: string@query-name-completer # queryName
-]: nothing -> any {
+]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -268,7 +268,7 @@ export def "restv2-game-admin-analytics-rolling-retention get-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --stage: string@stage-completer # stage
-]: nothing -> any {
+]: nothing -> record<result: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -294,7 +294,7 @@ export def "restv2-game-admin-billing-details get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -336,7 +336,7 @@ export def "restv2-game-admin-billing-details update" [
   --state: string
   street: string
   --tax-number: string
-]: any -> any {
+]: any -> record<building: string, city: string, companyName: string, country: string, email1: string, email2: string, email3: string, firstName1: string, firstName2: string, firstName3: string, lastName1: string, lastName2: string, lastName3: string, postcode: string, state: string, street: string, taxNumber: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -367,7 +367,7 @@ export def "restv2-game-admin-notifications-summary get-using" [
   --stage: string@stage-completer # stage
   --start-date: string # yyyy-MM-dd (format: date)
   --end-date: string # yyyy-MM-dd (format: date)
-]: nothing -> any {
+]: nothing -> record<logLevelData: list<record>, logLevelSummary: table<count: int, level: string>, message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -399,7 +399,7 @@ export def "restv2-game-admin-push-notifications-test-amazon create-using" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -433,7 +433,7 @@ export def "restv2-game-admin-push-notifications-test-apple-development create-d
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -467,7 +467,7 @@ export def "restv2-game-admin-push-notifications-test-apple-production create-pr
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -501,7 +501,7 @@ export def "restv2-game-admin-push-notifications-test-google create-using" [
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -535,7 +535,7 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows8 create-
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -569,7 +569,7 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 c
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +603,7 @@ export def "restv2-game-admin-push-notifications-test-viber-integration create-u
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -637,7 +637,7 @@ export def "restv2-game-admin-push-notifications-test-viber-production create-us
   --subtitle: string
   --summary: string
   --title: string
-]: any -> any {
+]: any -> record<summaries: table<error: bool, outgoingMessageParts: record, resultParts: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -667,7 +667,7 @@ export def "restv2-game-admin-scripts-differences get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -721,7 +721,7 @@ export def "restv2-game-admin-scripts-import-accept create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: string # body
   file: string # file (format: binary)
-]: any -> any {
+]: any -> record<message: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -753,7 +753,7 @@ export def "restv2-game-admin-scripts-import-preview create-zip-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # file (format: binary)
-]: any -> any {
+]: any -> record<differences: table<bind: string, changeType: string, fileName: string, script1: string, script2: string, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -784,7 +784,7 @@ export def "restv2-game-admin-scripts-versions get-using-by-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 100)
-]: nothing -> any {
+]: nothing -> record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -812,7 +812,7 @@ export def "restv2-game-admin-scripts-versions get-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 100)
-]: nothing -> any {
+]: nothing -> record<scriptVersions: table<cloudCodeVersion: int, createdDate: string, description: string, id: string, live: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -839,7 +839,7 @@ export def "restv2-game-admin-segment-query-filters get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<filters: table<key: string, name: string, options: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -864,7 +864,7 @@ export def "restv2-game-admin-segment-query-filters-config get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -892,7 +892,7 @@ export def "restv2-game-admin-segment-query-filters-config update-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --custom-filters: list # item shape: {key?: string, name?: string, options?: list, type?: string}
   --hidden-filters: list<string>
-]: any -> any {
+]: any -> record<customFilters: table<key: string, name: string, options: list, type: string>, hiddenFilters: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -920,7 +920,7 @@ export def "restv2-game-admin-segment-query-filters-standard-filters get-using" 
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<filters: table<key: string, name: string, options: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -946,7 +946,7 @@ export def "restv2-game-admin-snapshots get-using-by-api-key" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 20)
-]: nothing -> any {
+]: nothing -> table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -973,7 +973,7 @@ export def "restv2-game-admin-snapshots create-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-]: any -> any {
+]: any -> record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1001,7 @@ export def "restv2-game-admin-snapshots-live-snapshot-id get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1028,7 +1028,7 @@ export def "restv2-game-admin-snapshots-page get-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page-size: int # pageSize (format: int32, default: 20)
-]: nothing -> any {
+]: nothing -> table<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1056,7 +1056,7 @@ export def "restv2-game-admin-snapshots-revert-to create-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1083,7 +1083,7 @@ export def "restv2-game-admin-snapshots delete-using-by-api-key-snapshot-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1110,7 +1110,7 @@ export def "restv2-game-admin-snapshots get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created: string, createdBy: string, description: string, id: string, indexProgress: record, published: bool, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1141,7 +1141,7 @@ export def "restv2-game-admin-snapshots-copy create-to-new-using" [
   --include-metadata: oneof<nothing, bool> # includeMetadata (default: true)
   --include-binaries: oneof<nothing, bool> # includeBinaries (default: true)
   --include-collaborators: oneof<nothing, bool> # includeCollaborators (default: true)
-]: nothing -> any {
+]: nothing -> record<targetGameApiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1174,7 +1174,7 @@ export def "restv2-game-admin-snapshots-copy-to create-existing-using-by-api-key
   --include-metadata: oneof<nothing, bool> # includeMetadata (default: true)
   --include-binaries: oneof<nothing, bool> # includeBinaries (default: true)
   --include-collaborators: oneof<nothing, bool> # includeCollaborators (default: true)
-]: nothing -> any {
+]: nothing -> record<targetGameApiKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1230,7 +1230,7 @@ export def "restv2-game-admin-snapshots-unpublish create-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1256,7 +1256,7 @@ export def "restv2-game-admin-test-harness-scenarios list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<scenarioJson: record, scenarioName: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1283,7 +1283,7 @@ export def "restv2-game-admin-test-harness-scenarios create-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scenario-json: record
   --scenario-name: string
-]: any -> any {
+]: any -> record<scenarioJson: record, scenarioName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1312,7 +1312,7 @@ export def "restv2-game-admin-test-harness-scenarios delete-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1339,7 +1339,7 @@ export def "restv2-game-admin-test-harness-scenarios get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<scenarioJson: record, scenarioName: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1368,7 +1368,7 @@ export def "restv2-game-admin-test-harness-scenarios update-using" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --scenario-json: record
   --body-scenario-name: string
-]: any -> any {
+]: any -> record<scenarioJson: record, scenarioName: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1424,7 +1424,7 @@ export def "restv2-game-endpoints get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<liveElasticSearch: string, liveNosql: string, previewElasticSearch: string, previewNosql: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1449,7 +1449,7 @@ export def "restv2-game-manage-experiments list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1487,7 +1487,7 @@ export def "restv2-game-manage-experiments create-using" [
   --percent-hash: string
   --published-stages: list<string>
   --start-date: string # format: date-time
-]: any -> any {
+]: any -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1516,7 +1516,7 @@ export def "restv2-game-manage-experiments delete-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1543,7 +1543,7 @@ export def "restv2-game-manage-experiments get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1583,7 +1583,7 @@ export def "restv2-game-manage-experiments update-using" [
   --percent-hash: string
   --published-stages: list<string>
   --start-date: string # format: date-time
-]: any -> any {
+]: any -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1614,7 +1614,7 @@ export def "restv2-game-manage-experiments create-do-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, changedFieldsAndInitialValues: record, complete: bool, config: record<playerMongoQuery: string, playerQuery: string, variants: string>, endDate: string, id: int, measurements: string, measurementsEsQuery: string, name: string, percentHash: string, publishedStages: list<string>, startDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1641,7 +1641,7 @@ export def "restv2-game-manage-queries list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string, shortCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1670,7 +1670,7 @@ export def "restv2-game-manage-queries create-list-using" [
   --name: string
   --qb-rules: string
   --short-code: string
-]: any -> any {
+]: any -> record<esRules: string, name: string, qbRules: string, shortCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1699,7 +1699,7 @@ export def "restv2-game-manage-queries delete-list-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1726,7 +1726,7 @@ export def "restv2-game-manage-queries get-list-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<esRules: string, name: string, qbRules: string, shortCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1757,7 +1757,7 @@ export def "restv2-game-manage-queries update-list-using" [
   --name: string
   --qb-rules: string
   --body-short-code: string
-]: any -> any {
+]: any -> record<esRules: string, name: string, qbRules: string, shortCode: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1786,7 +1786,7 @@ export def "restv2-game-manage-screens list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string, shortCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1815,7 +1815,7 @@ export def "restv2-game-manage-screens create-using" [
   --name: string
   --short-code: string
   --template: string
-]: any -> any {
+]: any -> record<groups: list<string>, name: string, shortCode: string, template: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1843,7 +1843,7 @@ export def "restv2-game-manage-screens-executable list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string, shortCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1869,7 +1869,7 @@ export def "restv2-game-manage-screens delete-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1896,7 +1896,7 @@ export def "restv2-game-manage-screens get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<groups: list<string>, name: string, shortCode: string, template: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1927,7 +1927,7 @@ export def "restv2-game-manage-screens update-using" [
   --name: string
   --body-short-code: string
   --template: string
-]: any -> any {
+]: any -> record<groups: list<string>, name: string, shortCode: string, template: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -1956,7 +1956,7 @@ export def "restv2-game-manage-snapshots list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<date: string, description: string, id: string, published: bool> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -1982,7 +1982,7 @@ export def "restv2-game-manage-snapshots create-using" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --description: string
-]: any -> any {
+]: any -> record<date: string, description: string, id: string, published: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2011,7 +2011,7 @@ export def "restv2-game-manage-snapshots delete-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2039,7 +2039,7 @@ export def "restv2-game-manage-snapshots-copy-to create-existing-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2067,7 +2067,7 @@ export def "restv2-game-manage-snapshots-publish create-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2094,7 +2094,7 @@ export def "restv2-game-manage-snapshots-revert create-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2120,7 +2120,7 @@ export def "restv2-game-manage-snippets list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<name: string, shortCode: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2151,7 +2151,7 @@ export def "restv2-game-manage-snippets create-using" [
   --script-data: string
   --short-code: string
   --template: string
-]: any -> any {
+]: any -> record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2180,7 +2180,7 @@ export def "restv2-game-manage-snippets delete-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2207,7 +2207,7 @@ export def "restv2-game-manage-snippets get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2240,7 +2240,7 @@ export def "restv2-game-manage-snippets update-using" [
   --script-data: string
   --body-short-code: string
   --template: string
-]: any -> any {
+]: any -> record<groups: list<string>, name: string, script: string, scriptData: string, shortCode: string, template: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
@@ -2269,7 +2269,7 @@ export def "restv2-game-restore create-deleted-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($api_key | is-empty) { error make --unspanned { msg: "path parameter 'apiKey' must be non-empty" } }
@@ -2295,7 +2295,7 @@ export def "restv2-game-region update-using-create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<message: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
@@ -2321,7 +2321,7 @@ export def "restv2-game-regions get-options-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<locked: bool, options: table<regionCode: string, regionName: string, selected: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   if ($game_api_key | is-empty) { error make --unspanned { msg: "path parameter 'gameApiKey' must be non-empty" } }
@@ -2345,7 +2345,7 @@ export def "restv2-games list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<_id: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restv2/games")
@@ -2368,7 +2368,7 @@ export def "restv2-games-deleted list-using-get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<apiKey: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "accesstoken"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/restv2/games/deleted")

@@ -951,7 +951,7 @@ export def "rest-messages-analyse-message-credit-cost create" [
   --accept: string@accept-completer # Response content type
   --message: string
   --recipient-number: string
-]: any -> any {
+]: any -> oneof<float, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -980,7 +980,7 @@ export def "rest-messages-analyse-message-encoding create" [
   --accept: string@accept-completer # Response content type
   --message: string
   --recipient-number: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1009,7 +1009,7 @@ export def "rest-messages-analyse-message-length create" [
   --accept: string@accept-completer # Response content type
   --message: string
   --recipient-number: string
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1038,7 +1038,7 @@ export def "rest-messages-analyse-message-length-within-max-allowed create" [
   --accept: string@accept-completer # Response content type
   --message: string
   --recipient-number: string
-]: any -> any {
+]: any -> oneof<bool, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1067,7 +1067,7 @@ export def "rest-messages-analyse-number-of-messages create" [
   --accept: string@accept-completer # Response content type
   --message: string
   --recipient-number: string
-]: any -> any {
+]: any -> oneof<int, string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
@@ -1355,7 +1355,7 @@ export def "rest-sms-send-url-parameters get" [
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
@@ -1384,7 +1384,7 @@ export def "rest-sms-send-url-parameters create" [
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "recipientNumber" $recipient_number "scalar") (serialize-qp "message" $message "scalar") (serialize-qp "dateToSend" $date_to_send "scalar") (serialize-qp "campaign" $campaign "scalar") (serialize-qp "dataField" $data_field "scalar")] | flatten | str join "&"
@@ -1414,7 +1414,7 @@ export def "rest-sms-send-url get" [
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -1445,7 +1445,7 @@ export def "rest-sms-send-url create" [
   --date-to-send: string # date format: yyyyMMddHHmm (format: date-time)
   --campaign: string # optional campaign name
   --data-field: string # optional extra data
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "email"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }

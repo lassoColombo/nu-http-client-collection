@@ -555,7 +555,7 @@ export def "customer-landlord-tenancy-maintenance-preference create-controller" 
   --tenancy-id: string # The Tenancy ID
   --name: string # Name of the maintenance preference to add
   --notes: string # Notes of the maintenance preference to add
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
@@ -702,7 +702,7 @@ export def "customer-session get-controller" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --qp-token: string # The login token returned from the /session POST call
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
@@ -731,7 +731,7 @@ export def "customer-session create-controller-login" [
   --accept: string@accept-completer # Response content type
   --username: string # The user's username.
   --password: string # The user's password.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }

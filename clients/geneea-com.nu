@@ -489,7 +489,7 @@ export def "status get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-user_key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/status")

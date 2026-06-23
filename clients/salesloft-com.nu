@@ -154,7 +154,7 @@ export def "account-stages-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -178,7 +178,7 @@ export def "account-stages get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -209,7 +209,7 @@ export def "account-tiers-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "name" $name "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -233,7 +233,7 @@ export def "account-tiers get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -285,7 +285,7 @@ export def "account-upserts-json create" [
   --twitter-handle: string # Twitter handle, with @
   --upsert-key: string # Name of the parameter to upsert on. The field must be provided in the input parameters, or the request will fail. The request will also fail if there are multiple records matched by the upsert field. If upsert_key is not provided, this endpoint will not update an existing record. Valid options are: id, crm_id, domain. If crm_id is provided, then a valid crm_id_type must be provided, as documented for the account create and update endpoints.
   --website: string # Website
-]: any -> any {
+]: any -> record<account: record<account_tier: record<_href: string, id: int>, archived_at: string, city: string, company_stage: record<_href: string, id: int>, company_type: string, conversational_name: string, country: string, counts: record<people: int>, created_at: string, creator: record<_href: string, id: int>, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, description: string, do_not_contact: bool, domain: string, founded: string, id: int, industry: string, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_person: record<_href: string, id: int>, last_contacted_type: string, linkedin_url: string, locale: string, name: string, owner: record<_href: string, id: int>, owner_crm_id: string, phone: string, postal_code: string, revenue_range: string, size: string, state: string, street: string, tags: list<string>, twitter_handle: string, updated_at: string, user_relationships: record, website: string>, upsert_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -340,7 +340,7 @@ export def "accounts-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<account_tier: record<_href: string, id: int>, archived_at: string, city: string, company_stage: record<_href: string, id: int>, company_type: string, conversational_name: string, country: string, counts: record<people: int>, created_at: string, creator: record<_href: string, id: int>, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, description: string, do_not_contact: bool, domain: string, founded: string, id: int, industry: string, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_person: record<_href: string, id: int>, last_contacted_type: string, linkedin_url: string, locale: string, name: string, owner: record<_href: string, id: int>, owner_crm_id: string, phone: string, postal_code: string, revenue_range: string, size: string, state: string, street: string, tags: list<string>, twitter_handle: string, updated_at: string, user_relationships: record, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "crm_id" $crm_id "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "tag_id" $tag_id "csv") (serialize-qp "created_at" $created_at "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "domain" $domain "scalar") (serialize-qp "website" $website "csv") (serialize-qp "archived" $archived "scalar") (serialize-qp "name" $name "csv") (serialize-qp "account_stage_id" $account_stage_id "csv") (serialize-qp "account_tier_id" $account_tier_id "csv") (serialize-qp "owner_id" $owner_id "csv") (serialize-qp "owner_is_active" $owner_is_active "scalar") (serialize-qp "last_contacted" $last_contacted "multi") (serialize-qp "custom_fields" $custom_fields "multi") (serialize-qp "industry" $industry "csv") (serialize-qp "country" $country "csv") (serialize-qp "state" $state "csv") (serialize-qp "city" $city "csv") (serialize-qp "owner_crm_id" $owner_crm_id "csv") (serialize-qp "locales" $locales "csv") (serialize-qp "user_relationships" $user_relationships "multi") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -390,7 +390,7 @@ export def "accounts-json create" [
   --tags: list<string> # All tags applied to this Account
   --twitter-handle: string # Twitter handle, with @
   --website: string # Website
-]: any -> any {
+]: any -> record<account_tier: record<_href: string, id: int>, archived_at: string, city: string, company_stage: record<_href: string, id: int>, company_type: string, conversational_name: string, country: string, counts: record<people: int>, created_at: string, creator: record<_href: string, id: int>, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, description: string, do_not_contact: bool, domain: string, founded: string, id: int, industry: string, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_person: record<_href: string, id: int>, last_contacted_type: string, linkedin_url: string, locale: string, name: string, owner: record<_href: string, id: int>, owner_crm_id: string, phone: string, postal_code: string, revenue_range: string, size: string, state: string, street: string, tags: list<string>, twitter_handle: string, updated_at: string, user_relationships: record, website: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -441,7 +441,7 @@ export def "accounts get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<account_tier: record<_href: string, id: int>, archived_at: string, city: string, company_stage: record<_href: string, id: int>, company_type: string, conversational_name: string, country: string, counts: record<people: int>, created_at: string, creator: record<_href: string, id: int>, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, description: string, do_not_contact: bool, domain: string, founded: string, id: int, industry: string, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_person: record<_href: string, id: int>, last_contacted_type: string, linkedin_url: string, locale: string, name: string, owner: record<_href: string, id: int>, owner_crm_id: string, phone: string, postal_code: string, revenue_range: string, size: string, state: string, street: string, tags: list<string>, twitter_handle: string, updated_at: string, user_relationships: record, website: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -493,7 +493,7 @@ export def "accounts update" [
   --tags: list<string> # All tags applied to this Account
   --twitter-handle: string # Twitter handle, with @
   --website: string # Website
-]: any -> any {
+]: any -> record<account_tier: record<_href: string, id: int>, archived_at: string, city: string, company_stage: record<_href: string, id: int>, company_type: string, conversational_name: string, country: string, counts: record<people: int>, created_at: string, creator: record<_href: string, id: int>, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, description: string, do_not_contact: bool, domain: string, founded: string, id: int, industry: string, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_person: record<_href: string, id: int>, last_contacted_type: string, linkedin_url: string, locale: string, name: string, owner: record<_href: string, id: int>, owner_crm_id: string, phone: string, postal_code: string, revenue_range: string, size: string, state: string, street: string, tags: list<string>, twitter_handle: string, updated_at: string, user_relationships: record, website: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -527,7 +527,7 @@ export def "action-details-call-instructions-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, instructions: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -551,7 +551,7 @@ export def "action-details-call-instructions get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, id: int, instructions: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -589,7 +589,7 @@ export def "actions-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<action_details: record<_href: string, id: int>, cadence: record<_href: string, id: int>, created_at: string, due: bool, due_on: string, id: int, multitouch_group_id: int, person: record<_href: string, id: int>, status: string, step: record<_href: string, id: int>, type: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "step_id" $step_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "due_on" $due_on "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "multitouch_group_id" $multitouch_group_id "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -613,7 +613,7 @@ export def "actions get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<action_details: record<_href: string, id: int>, cadence: record<_href: string, id: int>, created_at: string, due: bool, due_on: string, id: int, multitouch_group_id: int, person: record<_href: string, id: int>, status: string, step: record<_href: string, id: int>, type: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -638,7 +638,7 @@ export def "activities-json create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --action-id: int # Action that is being completed. This will validate that the action is still valid before completed it. The same action can never be successfully passed twice to this endpoint. The action must have a type of 'integration'.
   --task-id: int # Task that is being completed. This will validate that the task is still valid before completed it. The same action can never be successfully passed twice to this endpoint. The task must have a type of 'integration'.
-]: any -> any {
+]: any -> record<updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -677,7 +677,7 @@ export def "activities-calls-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<action: record<_href: string, id: int>, cadence: record<_href: string, id: int>, called_person: record<_href: string, id: int>, created_at: string, crm_activity: record<_href: string, id: int>, disposition: string, duration: int, id: int, note: record<_href: string, id: int>, recordings: list<record>, sentiment: string, step: record<_href: string, id: int>, to: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "created_at" $created_at "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "sentiment" $sentiment "csv") (serialize-qp "disposition" $disposition "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -710,7 +710,7 @@ export def "activities-calls-json create" [
   --sentiment: string # The sentiment of the call. Can be required on a per-team basis. Must be present in the sentiment list.
   --body-to: string # The phone number that was called
   --user-guid: string # Guid of the user whom this call should be logged for. Defaults to the authenticated user. Only team admins can pass another user's guid
-]: any -> any {
+]: any -> record<action: record<_href: string, id: int>, cadence: record<_href: string, id: int>, called_person: record<_href: string, id: int>, created_at: string, crm_activity: record<_href: string, id: int>, disposition: string, duration: int, id: int, note: record<_href: string, id: int>, recordings: table<recording_status: string, status: string, url: string>, sentiment: string, step: record<_href: string, id: int>, to: string, updated_at: string, user: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -737,7 +737,7 @@ export def "activities-calls get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<action: record<_href: string, id: int>, cadence: record<_href: string, id: int>, called_person: record<_href: string, id: int>, created_at: string, crm_activity: record<_href: string, id: int>, disposition: string, duration: int, id: int, note: record<_href: string, id: int>, recordings: table<recording_status: string, status: string, url: string>, sentiment: string, step: record<_href: string, id: int>, to: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -781,7 +781,7 @@ export def "activities-emails-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<action: record<_href: string, id: int>, bounced: bool, cadence: record<_href: string, id: int>, click_tracking: bool, counts: record<attachments: int, clicks: int, replies: int, unique_devices: int, unique_locations: int, views: int>, created_at: string, crm_activity: record<_href: string, id: int>, email_template: record<_href: string, id: int>, error_message: string, headers: record, id: int, mailing: record<_href: string, id: int>, personalization: string, recipient: record<_href: string, id: int>, recipient_email_address: string, send_after: string, sent_at: string, status: string, step: record<_href: string, id: int>, subject: string, task: record<_href: string, id: int>, updated_at: string, user: record<_href: string, id: int>, view_tracking: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "bounced" $bounced "scalar") (serialize-qp "crm_activity_id" $crm_activity_id "csv") (serialize-qp "action_id" $action_id "csv") (serialize-qp "user_id" $user_id "csv") (serialize-qp "status" $status "csv") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "step_id" $step_id "csv") (serialize-qp "one_off" $one_off "scalar") (serialize-qp "scoped_fields" $scoped_fields "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "email_addresses" $email_addresses "csv") (serialize-qp "personalization" $personalization "csv") (serialize-qp "sent_at" $sent_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -805,7 +805,7 @@ export def "activities-emails get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<action: record<_href: string, id: int>, bounced: bool, cadence: record<_href: string, id: int>, click_tracking: bool, counts: record<attachments: int, clicks: int, replies: int, unique_devices: int, unique_locations: int, views: int>, created_at: string, crm_activity: record<_href: string, id: int>, email_template: record<_href: string, id: int>, error_message: string, headers: record, id: int, mailing: record<_href: string, id: int>, personalization: string, recipient: record<_href: string, id: int>, recipient_email_address: string, send_after: string, sent_at: string, status: string, step: record<_href: string, id: int>, subject: string, task: record<_href: string, id: int>, updated_at: string, user: record<_href: string, id: int>, view_tracking: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -841,7 +841,7 @@ export def "activity-histories get" [
   --resource-id: list<string> # Filter by the resource id. "resource_type" filter is required to use this filter.
   --updated-at: record # Equality filters that are applied to the updated_at field. A single filter can be used by itself or combined with other filters to create a range. ---CUSTOM--- {"keys":[{"description":"Returns all matching records that are greater than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gt","type":"iso8601 string"},{"description":"Returns all matching records that are greater than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"gte","type":"iso8601 string"},{"description":"Returns all matching records that are less than the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lt","type":"iso8601 string"},{"description":"Returns all matching records that are less than or equal to the provided iso8601 timestamp. The comparison is done using microsecond precision.","name":"lte","type":"iso8601 string"}],"type":"object"}
   --user-guid: string # Filter activities by a user's guid.
-]: nothing -> any {
+]: nothing -> record<created_at: string, dynamic_data: record, failed_dynamic_resources: record, id: int, occurred_at: string, pinned_at: string, resource_id: int, resource_type: int, static_data: record, type: string, updated_at: string, user_guid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "_resource" $resource "scalar") (serialize-qp "occurred_at" $occurred_at "multi") (serialize-qp "pinned" $pinned "scalar") (serialize-qp "resource_type" $resource_type "scalar") (serialize-qp "resource_id" $resource_id "csv") (serialize-qp "updated_at" $updated_at "multi") (serialize-qp "user_guid" $user_guid "scalar")] | flatten | str join "&"
@@ -867,7 +867,7 @@ export def "bulk-jobs list" [
   --state: list<string> # The state of the bulk job. Accepts multiple states. Each state must be one of: open, executing, done
   --id: record # Filter by id using comparison operators. Only supports greater than (gt) comparison (i.e. id[gt]=123)
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
-]: nothing -> any {
+]: nothing -> table<created_at: string, errors: int, finished_at: string, id: int, marked_ready_at: string, name: string, processed: int, ready_to_execute: bool, scopes: list<any>, started_at: string, state: string, total: int, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "state" $state "csv") (serialize-qp "id" $id "multi") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -892,7 +892,7 @@ export def "bulk-jobs create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name for your bulk job
   type: string # Type of bulk job. Must be a valid type. Follow link to the bulk job details page above to view supported types.
-]: any -> any {
+]: any -> record<created_at: string, errors: int, finished_at: string, id: int, marked_ready_at: string, name: string, processed: int, ready_to_execute: bool, scopes: list<any>, started_at: string, state: string, total: int, type: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -922,7 +922,7 @@ export def "bulk-jobs-job-data get" [
   --status: list<string> # Filter by result status. Accepts multiple statuses. Each status must be one of pending, success, error, retrying
   --id: record # Filter by id using comparison operators. Only supports greater than (gt) comparison (i.e. id[gt]=123)
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
-]: nothing -> any {
+]: nothing -> table<error: string, id: int, record: record, resource: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_jobs_id | is-empty) { error make --unspanned { msg: "path parameter 'bulk_jobs_id' must be non-empty" } }
@@ -948,7 +948,7 @@ export def "bulk-jobs-job-data create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   data: list<string> # Array of objects containing parameters to be used to execute an instance of each. Array must be 5,000 records or less.
-]: any -> any {
+]: any -> record<records: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -979,7 +979,7 @@ export def "bulk-jobs-results get" [
   --status: list<string> # Filter by result status. Accepts multiple statuses. Each status must be one of pending, success, error, retrying
   --id: record # Filter by id using comparison operators. Only supports greater than (gt) comparison (i.e. id[gt]=123)
   --per-page: int # How many records to show per page in the range [1, 100]. Defaults to 25
-]: nothing -> any {
+]: nothing -> table<error: string, id: int, record: record, resource: record, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_jobs_id | is-empty) { error make --unspanned { msg: "path parameter 'bulk_jobs_id' must be non-empty" } }
@@ -1004,7 +1004,7 @@ export def "bulk-jobs get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, errors: int, finished_at: string, id: int, marked_ready_at: string, name: string, processed: int, ready_to_execute: bool, scopes: list<any>, started_at: string, state: string, total: int, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1030,7 +1030,7 @@ export def "bulk-jobs update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name for your bulk job
   --ready-to-execute: oneof<nothing, bool> # Whether the job is ready to be executed. Must be true or false.
-]: any -> any {
+]: any -> record<created_at: string, errors: int, finished_at: string, id: int, marked_ready_at: string, name: string, processed: int, ready_to_execute: bool, scopes: list<any>, started_at: string, state: string, total: int, type: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1058,7 +1058,7 @@ export def "cadence-exports get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cadence_content: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1084,7 +1084,7 @@ export def "cadence-imports-json create" [
   --cadence-content: record # Import data for cadence
   --settings: record # Settings for a cadence
   --sharing-settings: record # The shared settings for a cadence
-]: any -> any {
+]: any -> record<cadence: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1121,7 +1121,7 @@ export def "cadence-memberships-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<added_at: string, cadence: record<_href: string, id: int>, counts: record<bounces: int, calls: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, current_state: string, currently_on_cadence: bool, id: int, latest_action: record<_href: string, id: int>, person: record<_href: string, id: int>, person_deleted: bool, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "person_id" $person_id "scalar") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "currently_on_cadence" $currently_on_cadence "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1148,7 +1148,7 @@ export def "cadence-memberships-json create" [
   --cadence-id: int # ID of the cadence to create a cadence membership for
   --user-id: int # ID of the user to create a cadence membership for. The associated cadence must be owned by the user, or it must be a team cadence
   --step-id: int # ID of the step on which the person should start the cadence. Start on first step is the default behavior without this parameter.
-]: nothing -> any {
+]: nothing -> record<added_at: string, cadence: record<_href: string, id: int>, counts: record<bounces: int, calls: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, current_state: string, currently_on_cadence: bool, id: int, latest_action: record<_href: string, id: int>, person: record<_href: string, id: int>, person_deleted: bool, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "person_id" $person_id "scalar") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "user_id" $user_id "scalar") (serialize-qp "step_id" $step_id "scalar")] | flatten | str join "&"
@@ -1196,7 +1196,7 @@ export def "cadence-memberships get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<added_at: string, cadence: record<_href: string, id: int>, counts: record<bounces: int, calls: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, current_state: string, currently_on_cadence: bool, id: int, latest_action: record<_href: string, id: int>, person: record<_href: string, id: int>, person_deleted: bool, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1234,7 +1234,7 @@ export def "cadences-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<added_stage: record<_href: string, id: int>, archived_at: string, bounced_stage: record<_href: string, id: int>, cadence_framework_id: int, cadence_function: string, cadence_priority: record<_href: string, id: int>, counts: record<cadence_people: int, meetings_booked: int, opportunities_created: int, people_acted_on_count: int, target_daily_people: int>, created_at: string, creator: record<_href: string, id: int>, draft: bool, external_identifier: string, finished_stage: record<_href: string, id: int>, groups: list<record>, id: int, name: string, opt_out_link_included: bool, owner: record<_href: string, id: int>, remove_bounces_enabled: bool, remove_replies_enabled: bool, replied_stage: record<_href: string, id: int>, shared: bool, tags: list<string>, team_cadence: bool, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "team_cadence" $team_cadence "scalar") (serialize-qp "shared" $shared "scalar") (serialize-qp "owned_by_guid" $owned_by_guid "csv") (serialize-qp "people_addable" $people_addable "scalar") (serialize-qp "name" $name "csv") (serialize-qp "group_ids" $group_ids "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1258,7 +1258,7 @@ export def "cadences get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<added_stage: record<_href: string, id: int>, archived_at: string, bounced_stage: record<_href: string, id: int>, cadence_framework_id: int, cadence_function: string, cadence_priority: record<_href: string, id: int>, counts: record<cadence_people: int, meetings_booked: int, opportunities_created: int, people_acted_on_count: int, target_daily_people: int>, created_at: string, creator: record<_href: string, id: int>, draft: bool, external_identifier: string, finished_stage: record<_href: string, id: int>, groups: table<_href: string, id: int>, id: int, name: string, opt_out_link_included: bool, owner: record<_href: string, id: int>, remove_bounces_enabled: bool, remove_replies_enabled: bool, replied_stage: record<_href: string, id: int>, shared: bool, tags: list<string>, team_cadence: bool, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1289,7 +1289,7 @@ export def "calendar-events get" [
   --start-time: string # Lower bound (inclusive) for a calendar event's end time to filter by. Must be in ISO 8601 format. Example: `2022-02-14T10:12:59+00:00`.
   --end-time: string # Upper bound (exclusive) for a calendar event's start time to filter by. Must be in ISO 8601 format. Example: `2022-02-14T10:12:59+00:00`.
   --user-guid: string # user_guid of the user who created or included as a guest to the event.
-]: nothing -> any {
+]: nothing -> table<all_day: string, attendees: record, body_html: string, busy: bool, calendar_id: string, canceled_at: string, conference_data: record, created_at: string, creator: record, description: string, end_time: string, extended_properties: record, html_link: string, i_cal_uid: string, id: string, location: string, organizer: string, provider: string, recurring: string, start_time: string, status: string, tenant_id: int, title: string, updated_at: string, user_guid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "start_time" $start_time "scalar") (serialize-qp "end_time" $end_time "scalar") (serialize-qp "user_guid" $user_guid "scalar")] | flatten | str join "&"
@@ -1326,7 +1326,7 @@ export def "calendar-events-upsert create" [
   start_time: string # Start time of the calendar event, as a combined date-time value in the ISO 8601 format with a time zone offset. Example: `2022-02-14T10:12:59+00:00`. (format: date)
   --status: string # Status of the calendar event. Depending on the status, the calendar event will or will not impact user's availability. Possible values: `confirmed`, `tentative`, `cancelled`. Example: `confirmed`.
   --title: string # Title of the calendar event
-]: any -> any {
+]: any -> record<all_day: string, attendees: record, body_html: string, busy: bool, calendar_id: string, canceled_at: string, conference_data: record, created_at: string, creator: record, description: string, end_time: string, extended_properties: record, html_link: string, i_cal_uid: string, id: string, location: string, organizer: string, provider: string, recurring: string, start_time: string, status: string, tenant_id: int, title: string, updated_at: string, user_guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1364,7 +1364,7 @@ export def "call-data-records-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<call: record<_href: string, id: int>, call_type: string, call_uuid: string, called_person: record<_href: string, id: int>, created_at: string, direction: string, duration: int, from: string, id: int, recording: record<recording_status: string, status: string, url: string>, status: string, to: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "has_call" $has_call "scalar") (serialize-qp "created_at" $created_at "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1388,7 +1388,7 @@ export def "call-data-records get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<call: record<_href: string, id: int>, call_type: string, call_uuid: string, called_person: record<_href: string, id: int>, created_at: string, direction: string, duration: int, from: string, id: int, recording: record<recording_status: string, status: string, url: string>, status: string, to: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1417,7 +1417,7 @@ export def "call-dispositions-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1447,7 +1447,7 @@ export def "call-sentiments-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1477,7 +1477,7 @@ export def "conversations-calls create" [
   recording: record # Object containing recording info including the audio file (.mp3, .wav, .ogg, .m4a)
   --body-to: string # Phone number that was called
   --user-guid: string # Guid of the Salesloft User to assign the call to. If not provided, will default to the user within the authentication token
-]: any -> any {
+]: any -> record<call_created_at: string, direction: string, duration: float, from: string, recording: record, to: string, user_guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1511,7 +1511,7 @@ export def "crm-activities-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<activity_type: string, created_at: string, crm_id: string, custom_crm_fields: record, description: string, error: string, id: int, person: record<_href: string, id: int>, subject: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1535,7 +1535,7 @@ export def "crm-activities get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<activity_type: string, created_at: string, crm_id: string, custom_crm_fields: record, description: string, error: string, id: int, person: record<_href: string, id: int>, subject: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1565,7 +1565,7 @@ export def "crm-activity-fields-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, crm_object_type: string, field: string, field_type: string, id: int, picklist_values: record, salesforce_object_type: string, source: string, title: string, updated_at: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "source" $qp_source "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1598,7 +1598,7 @@ export def "crm-users-json get" [
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
   --sort-by: string # Key to sort on, must be one of: id, updated_at. Defaults to id
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
-]: nothing -> any {
+]: nothing -> table<created_at: string, crm_id: string, id: int, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "crm_id" $crm_id "csv") (serialize-qp "user_id" $user_id "csv") (serialize-qp "user_guid" $user_guid "csv") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
@@ -1629,7 +1629,7 @@ export def "custom-fields-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, field_type: string, id: int, name: string, updated_at: string, value_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "field_type" $field_type "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1654,7 +1654,7 @@ export def "custom-fields-json create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-type: string # The field type of the custom field. Value must be one of: person, company, opportunity
   name: string # The name of the custom field
-]: any -> any {
+]: any -> record<created_at: string, field_type: string, id: int, name: string, updated_at: string, value_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1705,7 +1705,7 @@ export def "custom-fields get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, field_type: string, id: int, name: string, updated_at: string, value_type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1731,7 +1731,7 @@ export def "custom-fields update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --field-type: string # The field type of the custom field. Value must be one of: person, company, opportunity
   --name: string # The name of the custom field
-]: any -> any {
+]: any -> record<created_at: string, field_type: string, id: int, name: string, updated_at: string, value_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1764,7 +1764,7 @@ export def "email-template-attachments-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<attachment_content_type: string, attachment_file_size: int, attachment_fingerprint: int, attachment_id: int, download_url: string, email_template: record<_href: string, id: int>, id: int, name: string, scanned: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "email_template_id" $email_template_id "csv") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1804,7 +1804,7 @@ export def "email-templates-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<_links: record, archived_at: string, body: string, body_preview: string, cadence_template: bool, click_tracking_enabled: bool, counts: record<bounces: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, groups: list<record>, id: int, last_used_at: string, open_tracking_enabled: bool, shared: bool, subject: string, tags: list<string>, team_template: record<_href: string, id: int>, template_owner: record<_href: string, id: int>, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "linked_to_team_template" $linked_to_team_template "scalar") (serialize-qp "search" $search "scalar") (serialize-qp "tag_ids" $tag_ids "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "filter_by_owner" $filter_by_owner "scalar") (serialize-qp "group_id" $group_id "csv") (serialize-qp "include_cadence_templates" $include_cadence_templates "scalar") (serialize-qp "include_archived_templates" $include_archived_templates "scalar") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1829,7 +1829,7 @@ export def "email-templates get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-signature: oneof<nothing, bool> # Optionally will return the templates with the current user's email signature
-]: nothing -> any {
+]: nothing -> record<_links: record, archived_at: string, body: string, body_preview: string, cadence_template: bool, click_tracking_enabled: bool, counts: record<bounces: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, groups: table<_href: string, id: int>, id: int, last_used_at: string, open_tracking_enabled: bool, shared: bool, subject: string, tags: list<string>, team_template: record<_href: string, id: int>, template_owner: record<_href: string, id: int>, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1855,7 +1855,7 @@ export def "external-emails-json create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   mailbox: string # Email address of mailbox email was sent to
   --body-raw: string # Base64 encoded MIME email content
-]: any -> any {
+]: any -> record<message_id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1884,7 +1884,7 @@ export def "groups-json get" [
   --ids: list<int> # IDs of groups to fetch.
   --sort-by: string # Key to sort on, must be one of: created_at, updated_at. Defaults to updated_at
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
-]: nothing -> any {
+]: nothing -> table<accessible_groups: list<record>, id: int, name: string, parent_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
@@ -1908,7 +1908,7 @@ export def "groups get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<accessible_groups: table<_href: string, id: int>, id: int, name: string, parent_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1939,7 +1939,7 @@ export def "imports-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, current_people_count: int, id: int, imported_people_count: int, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user_ids" $user_ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -1964,7 +1964,7 @@ export def "imports-json create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name, recommended to be easily identifiable to a user
   --user-id: int # ID of the User that owns this Import
-]: any -> any {
+]: any -> record<created_at: string, current_people_count: int, id: int, imported_people_count: int, name: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2017,7 +2017,7 @@ export def "imports get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, current_people_count: int, id: int, imported_people_count: int, name: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2043,7 +2043,7 @@ export def "imports update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # Name, recommended to be easily identifiable to a user
   --user-id: int # ID of the User that owns this Import
-]: any -> any {
+]: any -> record<created_at: string, current_people_count: int, id: int, imported_people_count: int, name: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2071,7 +2071,7 @@ export def "live-website-tracking-parameters-json create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   person_id: int # The person to create the LiveWebsiteTrackingParameter for
-]: any -> any {
+]: any -> record<parameters: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2097,7 +2097,7 @@ export def "me-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_private_fields: record, active: bool, bcc_email_address: string, click_to_call_enabled: bool, created_at: string, crm_connected: bool, email: string, email_client_configured: bool, email_client_email_address: string, email_signature: string, email_signature_click_tracking_disabled: bool, email_signature_type: string, external_feature_flags: record, first_name: string, from_address: string, full_email_address: string, group: record<_href: string, id: int>, guid: string, id: int, job_role: string, last_name: string, local_dial_enabled: bool, name: string, phone_client: record<_href: string, id: int>, phone_number_assignment: record<_href: string, id: int>, role: record<_href: string, id: int>, sending_email_address: string, slack_username: string, team: record<_href: string, id: int>, team_admin: bool, time_zone: string, twitter_handle: string, updated_at: string, work_country: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/me.json")
@@ -2137,7 +2137,7 @@ export def "meetings-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<account_id: string, all_day: bool, attendees: list<record>, booked_by_meetings_settings: record<email_address: string>, booked_by_user: record<_href: string, id: int>, cadence: record<_href: string, id: int>, calendar_id: string, calendar_type: string, canceled_at: string, created_at: string, crm_custom_fields: record, crm_references: record, description: string, end_time: string, event_id: string, event_source: string, guests: list<string>, i_cal_uid: string, id: int, location: string, meeting_type: string, no_show: bool, owned_by_meetings_settings: record<email_address: string>, person: record<_href: string, id: int>, recipient_email: string, recipient_name: string, start_time: string, status: string, step: record<_href: string, id: int>, strict_attribution: bool, task_id: string, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "status" $status "scalar") (serialize-qp "person_id" $person_id "scalar") (serialize-qp "account_id" $account_id "scalar") (serialize-qp "person_ids" $person_ids "csv") (serialize-qp "event_ids" $event_ids "csv") (serialize-qp "i_cal_uids" $i_cal_uids "csv") (serialize-qp "task_ids" $task_ids "csv") (serialize-qp "include_meetings_settings" $include_meetings_settings "scalar") (serialize-qp "start_time" $start_time "csv") (serialize-qp "user_guids" $user_guids "csv") (serialize-qp "show_deleted" $show_deleted "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2167,7 +2167,7 @@ export def "meetings-settings-searches-json create" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<active_meeting_url: record<created_at: string, updated_at: string, url: string>, allow_booking_on_behalf: bool, allow_booking_overtime: bool, allow_event_overlap: bool, availability_limit: int, availability_limit_enabled: bool, buffer_time_duration: int, calendar_type: string, created_at: string, default_meeting_length: int, description: string, email_address: string, enable_calendar_sync: bool, enable_dynamic_location: bool, id: int, location: string, primary_calendar_connection_failed: bool, primary_calendar_id: string, primary_calendar_name: string, schedule_buffer_enabled: bool, schedule_delay: int, share_event_detail: bool, time_zone: string, times_available: record, title: string, updated_at: string, user: record<_href: string, id: int>, user_details: record, user_slug: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_guids" $user_guids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "calendar_type" $calendar_type "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2212,7 +2212,7 @@ export def "meetings-settings update" [
   --time-zone: string # Time zone for current calendar
   --times-available: record # Times available set by a user that can be used to book meetings
   --title: string # Default title of the meeting
-]: any -> any {
+]: any -> record<active_meeting_url: record<created_at: string, updated_at: string, url: string>, allow_booking_on_behalf: bool, allow_booking_overtime: bool, allow_event_overlap: bool, availability_limit: int, availability_limit_enabled: bool, buffer_time_duration: int, calendar_type: string, created_at: string, default_meeting_length: int, description: string, email_address: string, enable_calendar_sync: bool, enable_dynamic_location: bool, id: int, location: string, primary_calendar_connection_failed: bool, primary_calendar_id: string, primary_calendar_name: string, schedule_buffer_enabled: bool, schedule_delay: int, share_event_detail: bool, time_zone: string, times_available: record, title: string, updated_at: string, user: record<_href: string, id: int>, user_details: record, user_slug: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2244,7 +2244,7 @@ export def "meetings update" [
   --i-cal-uid: string # Meeting unique identifier (iCalUID)
   --no-show: oneof<nothing, bool> # Whether the meeting is a No Show meeting
   --status: string # Status of the meeting creation progress. Possible values are: pending, booked, failed, retry
-]: any -> any {
+]: any -> record<account_id: string, all_day: bool, attendees: table<deleted_at: string, email: string, name: string, organizer: bool, status: string, status_changed: bool>, booked_by_meetings_settings: record<email_address: string>, booked_by_user: record<_href: string, id: int>, cadence: record<_href: string, id: int>, calendar_id: string, calendar_type: string, canceled_at: string, created_at: string, crm_custom_fields: record, crm_references: record, description: string, end_time: string, event_id: string, event_source: string, guests: list<string>, i_cal_uid: string, id: int, location: string, meeting_type: string, no_show: bool, owned_by_meetings_settings: record<email_address: string>, person: record<_href: string, id: int>, recipient_email: string, recipient_name: string, start_time: string, status: string, step: record<_href: string, id: int>, strict_attribution: bool, task_id: string, title: string, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2272,7 +2272,7 @@ export def "mime-email-payloads get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: int, mailbox: string, message_id: string, raw: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2305,7 +2305,7 @@ export def "notes-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<associated_type: string, associated_with: record<_href: string, id: int>, call: record<_href: string, id: int>, content: string, created_at: string, id: int, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "associated_with_type" $associated_with_type "scalar") (serialize-qp "associated_with_id" $associated_with_id "scalar") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2335,7 +2335,7 @@ export def "notes-json create" [
   --skip-crm-sync: oneof<nothing, bool> # Boolean indicating if the CRM sync should be skipped. No syncing will occur if true
   --subject: string # The subject of the note's crm activity, defaults to 'Note'
   --user-guid: string # The user to create the note for. Only team admins may create notes on behalf of other users. Defaults to the requesting user
-]: any -> any {
+]: any -> record<associated_type: string, associated_with: record<_href: string, id: int>, call: record<_href: string, id: int>, content: string, created_at: string, id: int, updated_at: string, user: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2386,7 +2386,7 @@ export def "notes get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<associated_type: string, associated_with: record<_href: string, id: int>, call: record<_href: string, id: int>, content: string, created_at: string, id: int, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2412,7 +2412,7 @@ export def "notes update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --call-id: int # ID of the call with which the note is associated. The call cannot already have a note. If the note is associated to a call already, it will become associated to the requested call
   content: string # The content of the note
-]: any -> any {
+]: any -> record<account: record<_href: string, id: int>, bouncing: bool, cadences: table<_href: string, id: int>, city: string, contact_restrictions: list<string>, country: string, counts: record<calls: int, emails_bounced: int, emails_clicked: int, emails_replied_to: int, emails_sent: int, emails_viewed: int>, created_at: string, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, display_name: string, do_not_contact: bool, email_address: string, eu_resident: bool, first_name: string, full_email_address: string, home_phone: string, id: int, import: record<_href: string, id: int>, job_seniority: string, last_completed_step: record<_href: string, id: int>, last_completed_step_cadence: record<_href: string, id: int>, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_type: string, last_name: string, last_replied_at: string, linkedin_url: string, locale: string, locale_utc_offset: int, mobile_phone: string, most_recent_cadence: record<_href: string, id: int>, owner: record<_href: string, id: int>, owner_crm_id: string, person_company_industry: string, person_company_name: string, person_company_website: string, person_stage: record<_href: string, id: int>, personal_email_address: string, personal_website: string, phone: string, phone_extension: string, secondary_email_address: string, starred: bool, state: string, success_count: int, tags: list<string>, title: string, twitter_handle: string, untouched: bool, updated_at: string, work_city: string, work_country: string, work_state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2440,7 +2440,7 @@ export def "ongoing-actions-json create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --action-id: int # Action that is being marked ongoing. This will validate that the action is still valid before modifying it. Ongoing actions can not be marked ongoing.
-]: any -> any {
+]: any -> record<action_details: record<_href: string, id: int>, cadence: record<_href: string, id: int>, created_at: string, due: bool, due_on: string, id: int, multitouch_group_id: int, person: record<_href: string, id: int>, status: string, step: record<_href: string, id: int>, type: string, updated_at: string, user: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2470,7 +2470,7 @@ export def "pending-emails-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<id: int, mailbox: string, mime_email_payload: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2498,7 +2498,7 @@ export def "pending-emails update" [
   message_id: string # The message id of the email that was sent
   --sent-at: string # The time that the email was actually sent in iso8601 format
   status: string # Delivery status of the email. Valid statuses are 'sent' and 'failed'
-]: any -> any {
+]: any -> record<id: int, mailbox: string, mime_email_payload: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2565,7 +2565,7 @@ export def "people-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<account: record<_href: string, id: int>, bouncing: bool, cadences: list<record>, city: string, contact_restrictions: list<string>, country: string, counts: record<calls: int, emails_bounced: int, emails_clicked: int, emails_replied_to: int, emails_sent: int, emails_viewed: int>, created_at: string, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, display_name: string, do_not_contact: bool, email_address: string, eu_resident: bool, first_name: string, full_email_address: string, home_phone: string, id: int, import: record<_href: string, id: int>, job_seniority: string, last_completed_step: record<_href: string, id: int>, last_completed_step_cadence: record<_href: string, id: int>, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_type: string, last_name: string, last_replied_at: string, linkedin_url: string, locale: string, locale_utc_offset: int, mobile_phone: string, most_recent_cadence: record<_href: string, id: int>, owner: record<_href: string, id: int>, owner_crm_id: string, person_company_industry: string, person_company_name: string, person_company_website: string, person_stage: record<_href: string, id: int>, personal_email_address: string, personal_website: string, phone: string, phone_extension: string, secondary_email_address: string, starred: bool, state: string, success_count: int, tags: list<string>, title: string, twitter_handle: string, untouched: bool, updated_at: string, work_city: string, work_country: string, work_state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "email_addresses" $email_addresses "csv") (serialize-qp "owned_by_guid" $owned_by_guid "csv") (serialize-qp "person_stage_id" $person_stage_id "csv") (serialize-qp "crm_id" $crm_id "csv") (serialize-qp "owner_crm_id" $owner_crm_id "csv") (serialize-qp "do_not_contact" $do_not_contact "scalar") (serialize-qp "can_email" $can_email "scalar") (serialize-qp "can_call" $can_call "scalar") (serialize-qp "can_text" $can_text "scalar") (serialize-qp "account_id" $account_id "csv") (serialize-qp "custom_fields" $custom_fields "multi") (serialize-qp "import_id" $import_id "csv") (serialize-qp "job_seniority" $job_seniority "csv") (serialize-qp "tag_id" $tag_id "csv") (serialize-qp "owner_is_active" $owner_is_active "scalar") (serialize-qp "cadence_id" $cadence_id "csv") (serialize-qp "starred_by_guid" $starred_by_guid "csv") (serialize-qp "replied" $replied "scalar") (serialize-qp "bounced" $bounced "scalar") (serialize-qp "success" $success "scalar") (serialize-qp "eu_resident" $eu_resident "scalar") (serialize-qp "title" $title "csv") (serialize-qp "country" $country "csv") (serialize-qp "state" $state "csv") (serialize-qp "city" $city "csv") (serialize-qp "last_contacted" $last_contacted "multi") (serialize-qp "created_at" $created_at "multi") (serialize-qp "new" $new "scalar") (serialize-qp "phone_number" $phone_number "scalar") (serialize-qp "locales" $locales "csv") (serialize-qp "owner_id" $owner_id "csv") (serialize-qp "_query" $query "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2623,7 +2623,7 @@ export def "people-json create" [
   --work-city: string # Work location - city
   --work-country: string # Work location - country
   --work-state: string # Work location - state
-]: any -> any {
+]: any -> record<account: record<_href: string, id: int>, bouncing: bool, cadences: table<_href: string, id: int>, city: string, contact_restrictions: list<string>, country: string, counts: record<calls: int, emails_bounced: int, emails_clicked: int, emails_replied_to: int, emails_sent: int, emails_viewed: int>, created_at: string, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, display_name: string, do_not_contact: bool, email_address: string, eu_resident: bool, first_name: string, full_email_address: string, home_phone: string, id: int, import: record<_href: string, id: int>, job_seniority: string, last_completed_step: record<_href: string, id: int>, last_completed_step_cadence: record<_href: string, id: int>, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_type: string, last_name: string, last_replied_at: string, linkedin_url: string, locale: string, locale_utc_offset: int, mobile_phone: string, most_recent_cadence: record<_href: string, id: int>, owner: record<_href: string, id: int>, owner_crm_id: string, person_company_industry: string, person_company_name: string, person_company_website: string, person_stage: record<_href: string, id: int>, personal_email_address: string, personal_website: string, phone: string, phone_extension: string, secondary_email_address: string, starred: bool, state: string, success_count: int, tags: list<string>, title: string, twitter_handle: string, untouched: bool, updated_at: string, work_city: string, work_country: string, work_state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2674,7 +2674,7 @@ export def "people get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<account: record<_href: string, id: int>, bouncing: bool, cadences: table<_href: string, id: int>, city: string, contact_restrictions: list<string>, country: string, counts: record<calls: int, emails_bounced: int, emails_clicked: int, emails_replied_to: int, emails_sent: int, emails_viewed: int>, created_at: string, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, display_name: string, do_not_contact: bool, email_address: string, eu_resident: bool, first_name: string, full_email_address: string, home_phone: string, id: int, import: record<_href: string, id: int>, job_seniority: string, last_completed_step: record<_href: string, id: int>, last_completed_step_cadence: record<_href: string, id: int>, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_type: string, last_name: string, last_replied_at: string, linkedin_url: string, locale: string, locale_utc_offset: int, mobile_phone: string, most_recent_cadence: record<_href: string, id: int>, owner: record<_href: string, id: int>, owner_crm_id: string, person_company_industry: string, person_company_name: string, person_company_website: string, person_stage: record<_href: string, id: int>, personal_email_address: string, personal_website: string, phone: string, phone_extension: string, secondary_email_address: string, starred: bool, state: string, success_count: int, tags: list<string>, title: string, twitter_handle: string, untouched: bool, updated_at: string, work_city: string, work_country: string, work_state: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2732,7 +2732,7 @@ export def "people update" [
   --work-city: string # Work location - city
   --work-country: string # Work location - country
   --work-state: string # Work location - state
-]: any -> any {
+]: any -> record<account: record<_href: string, id: int>, bouncing: bool, cadences: table<_href: string, id: int>, city: string, contact_restrictions: list<string>, country: string, counts: record<calls: int, emails_bounced: int, emails_clicked: int, emails_replied_to: int, emails_sent: int, emails_viewed: int>, created_at: string, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, display_name: string, do_not_contact: bool, email_address: string, eu_resident: bool, first_name: string, full_email_address: string, home_phone: string, id: int, import: record<_href: string, id: int>, job_seniority: string, last_completed_step: record<_href: string, id: int>, last_completed_step_cadence: record<_href: string, id: int>, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_type: string, last_name: string, last_replied_at: string, linkedin_url: string, locale: string, locale_utc_offset: int, mobile_phone: string, most_recent_cadence: record<_href: string, id: int>, owner: record<_href: string, id: int>, owner_crm_id: string, person_company_industry: string, person_company_name: string, person_company_website: string, person_stage: record<_href: string, id: int>, personal_email_address: string, personal_website: string, phone: string, phone_extension: string, secondary_email_address: string, starred: bool, state: string, success_count: int, tags: list<string>, title: string, twitter_handle: string, untouched: bool, updated_at: string, work_city: string, work_country: string, work_state: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2766,7 +2766,7 @@ export def "person-stages-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2790,7 +2790,7 @@ export def "person-stages-json create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the new stage
-]: any -> any {
+]: any -> record<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2841,7 +2841,7 @@ export def "person-stages get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2866,7 +2866,7 @@ export def "person-stages update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The name of the stage.
-]: any -> any {
+]: any -> record<created_at: string, id: int, name: string, order: int, updated_at: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2929,7 +2929,7 @@ export def "person-upserts-json create" [
   --work-city: string # Work location - city
   --work-country: string # Work location - country
   --work-state: string # Work location - state
-]: any -> any {
+]: any -> record<person: record<account: record<_href: string, id: int>, bouncing: bool, cadences: list<record>, city: string, contact_restrictions: list<string>, country: string, counts: record<calls: int, emails_bounced: int, emails_clicked: int, emails_replied_to: int, emails_sent: int, emails_viewed: int>, created_at: string, crm_id: string, crm_object_type: string, crm_url: string, custom_fields: record, display_name: string, do_not_contact: bool, email_address: string, eu_resident: bool, first_name: string, full_email_address: string, home_phone: string, id: int, import: record<_href: string, id: int>, job_seniority: string, last_completed_step: record<_href: string, id: int>, last_completed_step_cadence: record<_href: string, id: int>, last_contacted_at: string, last_contacted_by: record<_href: string, id: int>, last_contacted_type: string, last_name: string, last_replied_at: string, linkedin_url: string, locale: string, locale_utc_offset: int, mobile_phone: string, most_recent_cadence: record<_href: string, id: int>, owner: record<_href: string, id: int>, owner_crm_id: string, person_company_industry: string, person_company_name: string, person_company_website: string, person_stage: record<_href: string, id: int>, personal_email_address: string, personal_website: string, phone: string, phone_extension: string, secondary_email_address: string, starred: bool, state: string, success_count: int, tags: list<string>, title: string, twitter_handle: string, untouched: bool, updated_at: string, work_city: string, work_country: string, work_state: string>, upsert_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2962,7 +2962,7 @@ export def "phone-number-assignments-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<id: int, number: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -2986,7 +2986,7 @@ export def "phone-number-assignments get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: int, number: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3010,7 +3010,7 @@ export def "phone-numbers-caller-ids-json get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --phone-number: string # E.164 Phone Number
-]: nothing -> any {
+]: nothing -> table<account_name: string, display_name: string, person: record<_href: string, id: int>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "phone_number" $phone_number "scalar")] | flatten | str join "&"
@@ -3034,7 +3034,7 @@ export def "phone-numbers-recording-settings get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<recording_default: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3065,7 +3065,7 @@ export def "saved-list-views-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<id: int, is_default: bool, name: string, view: string, view_params: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "view" $view "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3092,7 +3092,7 @@ export def "saved-list-views-json create" [
   name: string # The name of the saved list view
   view: string # The type of objects in the saved list view. Value must be one of: people, companies, or recordings
   --view-params: string # JSON object of list view parameters
-]: any -> any {
+]: any -> record<id: int, is_default: bool, name: string, view: string, view_params: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3143,7 +3143,7 @@ export def "saved-list-views get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: int, is_default: bool, name: string, view: string, view_params: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3170,7 +3170,7 @@ export def "saved-list-views update" [
   --is-default: oneof<nothing, bool> # Whether the saved list view is the default
   --name: string # The name of the saved list view
   --view-params: string # JSON object of list view parameters
-]: any -> any {
+]: any -> record<id: int, is_default: bool, name: string, view: string, view_params: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3207,7 +3207,7 @@ export def "steps-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<cadence: record<_href: string, id: int>, created_at: string, day: int, details: record<_href: string, id: int>, disabled: bool, display_name: string, id: int, multitouch_enabled: bool, name: string, step_number: int, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "cadence_id" $cadence_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "has_due_actions" $has_due_actions "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3231,7 +3231,7 @@ export def "steps get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cadence: record<_href: string, id: int>, created_at: string, day: int, details: record<_href: string, id: int>, disabled: bool, display_name: string, id: int, multitouch_enabled: bool, name: string, step_number: int, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3263,7 +3263,7 @@ export def "successes-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<counts: record<total_calls: int, total_emails: int, total_other_touches: int>, created_at: string, id: int, latest_action: record<_href: string, id: int>, latest_cadence: record<_href: string, id: int>, latest_call: record<_href: string, id: int>, latest_email: record<_href: string, id: int>, latest_step: record<_href: string, id: int>, person: record<_href: string, id: int>, succeeded_at: string, success_window_started_at: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3294,7 +3294,7 @@ export def "tags-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<id: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "ids" $ids "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3332,7 +3332,7 @@ export def "tasks-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<completed_at: string, completed_by: record<_href: string, id: int>, created_at: string, created_by_user: record<_href: string, id: int>, current_state: string, description: string, due_at: string, due_date: string, id: int, person: record<_href: string, id: int>, remind_at: string, subject: string, task_type: string, updated_at: string, user: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "user_id" $user_id "csv") (serialize-qp "person_id" $person_id "csv") (serialize-qp "account_id" $account_id "csv") (serialize-qp "current_state" $current_state "csv") (serialize-qp "task_type" $task_type "csv") (serialize-qp "time_interval_filter" $time_interval_filter "scalar") (serialize-qp "idempotency_key" $idempotency_key "scalar") (serialize-qp "locale" $locale "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3364,7 +3364,7 @@ export def "tasks-json create" [
   subject: string # Subject line of the task.
   task_type: string # Task type, valid options are: call, email, general
   user_id: int # ID of the user linked to the task
-]: any -> any {
+]: any -> record<completed_at: string, completed_by: record<_href: string, id: int>, created_at: string, created_by_user: record<_href: string, id: int>, current_state: string, description: string, due_at: string, due_date: string, id: int, person: record<_href: string, id: int>, remind_at: string, subject: string, task_type: string, updated_at: string, user: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3391,7 +3391,7 @@ export def "tasks get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<cadence: record<_href: string, id: int>, created_at: string, day: int, details: record<_href: string, id: int>, disabled: bool, display_name: string, id: int, multitouch_enabled: bool, name: string, step_number: int, type: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3421,7 +3421,7 @@ export def "tasks update" [
   --is-logged: oneof<nothing, bool> # A flag to indicate that the task should only be logged
   --remind-at: string # Datetime of when the user will be reminded of the task, ISO-8601 datetime format required
   --subject: string # Subject line of the task
-]: any -> any {
+]: any -> record<completed_at: string, completed_by: record<_href: string, id: int>, created_at: string, created_by_user: record<_href: string, id: int>, current_state: string, description: string, due_at: string, due_date: string, id: int, person: record<_href: string, id: int>, remind_at: string, subject: string, task_type: string, updated_at: string, user: record<_href: string, id: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3448,7 +3448,7 @@ export def "team-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_private_fields: record, allow_automated_email_steps: bool, call_recording_disabled: bool, click_tracking_default: bool, created_at: string, custom_tracking_domain: string, deactivated: bool, dispositions_required: bool, email_daily_limit: int, group_privacy_setting: string, id: int, license_limit: int, local_dial_enabled: bool, name: string, plan: string, plan_features: record, record_by_default: bool, sentiments_required: bool, team_visibility_default: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v2/team.json")
@@ -3476,7 +3476,7 @@ export def "team-template-attachments-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<attachment_file_size: int, attachment_id: int, download_url: string, id: int, name: string, team_template: record<_href: string, id: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "team_template_id" $team_template_id "csv") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3511,7 +3511,7 @@ export def "team-templates-json get" [
   --page: int # The current page to fetch results from. Defaults to 1
   --include-paging-counts: oneof<nothing, bool> # Whether to include total_pages and total_count in the metadata. Defaults to false
   --limit-paging-counts: oneof<nothing, bool> # Specifies whether the max limit of 10k records should be applied to pagination counts. Affects the total_count and total_pages data
-]: nothing -> any {
+]: nothing -> table<_links: record, archived_at: string, body: string, body_preview: string, click_tracking_enabled: bool, counts: record<bounces: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, id: string, last_modified_at: string, last_modified_user: record<_href: string, id: int>, last_used_at: string, open_tracking_enabled: bool, subject: string, tags: list<string>, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "updated_at" $updated_at "csv") (serialize-qp "search" $search "scalar") (serialize-qp "tag_ids" $tag_ids "csv") (serialize-qp "tag" $tag "csv") (serialize-qp "include_archived_templates" $include_archived_templates "scalar") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "limit_paging_counts" $limit_paging_counts "scalar")] | flatten | str join "&"
@@ -3536,7 +3536,7 @@ export def "team-templates get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-signature: oneof<nothing, bool> # Optionally will return the templates with the current user's email signature
-]: nothing -> any {
+]: nothing -> record<_links: record, archived_at: string, body: string, body_preview: string, click_tracking_enabled: bool, counts: record<bounces: int, clicks: int, replies: int, sent_emails: int, views: int>, created_at: string, id: string, last_modified_at: string, last_modified_user: record<_href: string, id: int>, last_used_at: string, open_tracking_enabled: bool, subject: string, tags: list<string>, title: string, updated_at: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3566,7 +3566,7 @@ export def "third-party-live-feed-items create" [
   subject_id: int # The ID of the subject of the live feed item (i.e. the "person" id).
   subject_type: string # The type of the subject of the live feed item. Currently only "person" is supported.
   user_guid: string # The guid for the user that this live feed item should be shown to.
-]: any -> any {
+]: any -> table<alert_metadata: record, event_occurred_at: string, event_type: string, id: int, message: string, metadata: record, path: string, rollup_key: string, title: string, user_guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3606,7 +3606,7 @@ export def "users-json get" [
   --work-country: list<string> # Filters users based on assigned work_country.
   --sort-by: string # Key to sort on, must be one of: id, email, name, group, role. Defaults to id
   --sort-direction: string # Direction to sort in, must be one of: ASC, DESC. Defaults to DESC
-]: nothing -> any {
+]: nothing -> table<_private_fields: record, active: bool, bcc_email_address: string, click_to_call_enabled: bool, created_at: string, crm_connected: bool, email: string, email_client_configured: bool, email_client_email_address: string, email_signature: string, email_signature_click_tracking_disabled: bool, email_signature_type: string, external_feature_flags: record, first_name: string, from_address: string, full_email_address: string, group: record<_href: string, id: int>, guid: string, id: int, job_role: string, last_name: string, local_dial_enabled: bool, name: string, phone_client: record<_href: string, id: int>, phone_number_assignment: record<_href: string, id: int>, role: record<_href: string, id: int>, sending_email_address: string, slack_username: string, team: record<_href: string, id: int>, team_admin: bool, time_zone: string, twitter_handle: string, updated_at: string, work_country: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids" $ids "csv") (serialize-qp "guid" $guid "csv") (serialize-qp "group_id" $group_id "csv") (serialize-qp "role_id" $role_id "csv") (serialize-qp "search" $search "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "visible_only" $visible_only "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "include_paging_counts" $include_paging_counts "scalar") (serialize-qp "has_crm_user" $has_crm_user "scalar") (serialize-qp "work_country" $work_country "csv") (serialize-qp "sort_by" $sort_by "scalar") (serialize-qp "sort_direction" $sort_direction "scalar")] | flatten | str join "&"
@@ -3630,7 +3630,7 @@ export def "users get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<_private_fields: record, active: bool, bcc_email_address: string, click_to_call_enabled: bool, created_at: string, crm_connected: bool, email: string, email_client_configured: bool, email_client_email_address: string, email_signature: string, email_signature_click_tracking_disabled: bool, email_signature_type: string, external_feature_flags: record, first_name: string, from_address: string, full_email_address: string, group: record<_href: string, id: int>, guid: string, id: int, job_role: string, last_name: string, local_dial_enabled: bool, name: string, phone_client: record<_href: string, id: int>, phone_number_assignment: record<_href: string, id: int>, role: record<_href: string, id: int>, sending_email_address: string, slack_username: string, team: record<_href: string, id: int>, team_admin: bool, time_zone: string, twitter_handle: string, updated_at: string, work_country: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3654,7 +3654,7 @@ export def "webhook-subscriptions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Filters webhook subscriptions by whether is enabled or not.
-]: nothing -> any {
+]: nothing -> table<callback_token: string, callback_url: string, enabled: bool, event_type: string, id: int, tenant_id: int, user_guid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "enabled" $enabled "scalar")] | flatten | str join "&"
@@ -3680,7 +3680,7 @@ export def "webhook-subscriptions create" [
   callback_token: string # Any string to be used as a shared secret when subscription events are published. SalesLoft will send the value of this callback_token in the payload of each event so the receiver may verify it matches the original value. This ensures webhook events are being delivered by SalesLoft.
   callback_url: string # URL for your callback handler
   event_type: string # Type of event the subscription is for. Visit the "Event Types" section of the webhooks page to find a list of supported event types.
-]: any -> any {
+]: any -> record<callback_token: string, callback_url: string, enabled: bool, event_type: string, id: int, tenant_id: int, user_guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3731,7 +3731,7 @@ export def "webhook-subscriptions get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<callback_token: string, callback_url: string, enabled: bool, event_type: string, id: int, tenant_id: int, user_guid: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3756,7 +3756,7 @@ export def "webhook-subscriptions update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enabled: oneof<nothing, bool> # Enable or disable the webhook subscription
-]: any -> any {
+]: any -> record<callback_token: string, callback_url: string, enabled: bool, event_type: string, id: int, tenant_id: int, user_guid: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

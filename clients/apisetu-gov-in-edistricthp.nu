@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -144,8 +154,8 @@ export def commands []: nothing -> table {
 # --consentArtifact shape: {consent: record, signature: record}
 export def "aecmw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -158,7 +168,7 @@ export def "aecmw-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aecmw/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -176,8 +186,8 @@ export def "aecmw-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "aemtw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -190,7 +200,7 @@ export def "aemtw-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/aemtw/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -208,8 +218,8 @@ export def "aemtw-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "agcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -222,7 +232,7 @@ export def "agcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/agcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -240,8 +250,8 @@ export def "agcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "alimw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -254,7 +264,7 @@ export def "alimw-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/alimw/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -272,8 +282,8 @@ export def "alimw-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "arcmw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -286,7 +296,7 @@ export def "arcmw-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/arcmw/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -304,8 +314,8 @@ export def "arcmw-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "armtw-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -318,7 +328,7 @@ export def "armtw-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/armtw/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -336,8 +346,8 @@ export def "armtw-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "bacer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -350,7 +360,7 @@ export def "bacer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bacer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -368,8 +378,8 @@ export def "bacer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "bhcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -382,7 +392,7 @@ export def "bhcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bhcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -400,8 +410,8 @@ export def "bhcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "bpcrd-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -414,7 +424,7 @@ export def "bpcrd-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bpcrd/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -432,8 +442,8 @@ export def "bpcrd-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "btcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -446,7 +456,7 @@ export def "btcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/btcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -464,8 +474,8 @@ export def "btcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "cecer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -478,7 +488,7 @@ export def "cecer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/cecer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -496,8 +506,8 @@ export def "cecer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "chcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -510,7 +520,7 @@ export def "chcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/chcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -528,8 +538,8 @@ export def "chcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "clcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -542,7 +552,7 @@ export def "clcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/clcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -560,8 +570,8 @@ export def "clcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "coprg-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -574,7 +584,7 @@ export def "coprg-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/coprg/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -592,8 +602,8 @@ export def "coprg-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "dccer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -606,7 +616,7 @@ export def "dccer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dccer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -624,8 +634,8 @@ export def "dccer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "dmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -638,7 +648,7 @@ export def "dmcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dmcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -656,8 +666,8 @@ export def "dmcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "dpicr-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -670,7 +680,7 @@ export def "dpicr-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dpicr/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -688,8 +698,8 @@ export def "dpicr-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "dtcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -702,7 +712,7 @@ export def "dtcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dtcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -720,8 +730,8 @@ export def "dtcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "ercer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -734,7 +744,7 @@ export def "ercer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ercer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -752,8 +762,8 @@ export def "ercer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "ffcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -766,7 +776,7 @@ export def "ffcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ffcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -784,8 +794,8 @@ export def "ffcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "igcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -798,7 +808,7 @@ export def "igcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/igcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -816,8 +826,8 @@ export def "igcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "incer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -830,7 +840,7 @@ export def "incer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/incer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -848,8 +858,8 @@ export def "incer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "lhcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -862,7 +872,7 @@ export def "lhcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lhcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -880,8 +890,8 @@ export def "lhcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "mncer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -894,7 +904,7 @@ export def "mncer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mncer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -912,8 +922,8 @@ export def "mncer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "mnrga-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -926,7 +936,7 @@ export def "mnrga-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/mnrga/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -944,8 +954,8 @@ export def "mnrga-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "obcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -958,7 +968,7 @@ export def "obcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/obcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -976,8 +986,8 @@ export def "obcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "racer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -990,7 +1000,7 @@ export def "racer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/racer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -1008,8 +1018,8 @@ export def "racer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "rmcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1022,7 +1032,7 @@ export def "rmcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/rmcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -1040,8 +1050,8 @@ export def "rmcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "secer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1054,7 +1064,7 @@ export def "secer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/secer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -1072,8 +1082,8 @@ export def "secer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "shcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1086,7 +1096,7 @@ export def "shcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/shcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -1104,8 +1114,8 @@ export def "shcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "sicrd-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1118,7 +1128,7 @@ export def "sicrd-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sicrd/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -1136,8 +1146,8 @@ export def "sicrd-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "srcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1150,7 +1160,7 @@ export def "srcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o EDISTRICT_HIMACHAL_PRADESH_HIMACHAL_PRADESH_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/srcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact

@@ -3422,7 +3422,7 @@ export def "query create" [
   --query: string # Query script to execute.
   --type: string@type-completer # The type of query. Must be "flux".
   --bucket: string # Bucket is to be used instead of the database and retention policy specified in the InfluxQL query.
-]: any -> record<code: string, err: string, message: string, op: string> {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)

@@ -160,7 +160,7 @@ export def "accesspoint create-access-point" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point.
   --body: any
-]: any -> any {
+]: any -> record<AccessPointArn: record, Alias: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -233,7 +233,7 @@ export def "accesspoint get-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access point.
-]: nothing -> any {
+]: nothing -> record<Name: record, Bucket: record, NetworkOrigin: record, VpcConfiguration: record<VpcId: record>, PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>, CreationDate: record, Alias: record, AccessPointArn: record, Endpoints: record, BucketAccountId: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -269,7 +269,7 @@ export def "accesspointforobjectlambda create-access-point-for-object-lambda" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for owner of the specified Object Lambda Access Point.
   --body: any
-]: any -> any {
+]: any -> record<ObjectLambdaAccessPointArn: record, Alias: record<Value: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -342,7 +342,7 @@ export def "accesspointforobjectlambda get-access-point-for-object-lambda" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> any {
+]: nothing -> record<Name: record, PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>, CreationDate: record, Alias: record<Value: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -385,7 +385,7 @@ export def "bucket create" [
   --x-amz-bucket-object-lock-enabled: oneof<nothing, bool> # Specifies whether you want S3 Object Lock to be enabled for the new bucket. This is not supported by Amazon S3 on Outposts buckets.
   --x-amz-outpost-id: string # The ID of the Outposts where the bucket is being created. This ID is required by Amazon S3 on Outposts buckets.
   --body: any
-]: any -> any {
+]: any -> record<BucketArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -423,7 +423,7 @@ export def "jobs create" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID that creates the job.
   --body: any
-]: any -> any {
+]: any -> record<JobId: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -464,7 +464,7 @@ export def "jobs list" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> any {
+]: nothing -> record<NextToken: record, Jobs: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "jobStatuses" $job_statuses "multi") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -499,7 +499,7 @@ export def "async-requests-mrap-create create-multi-region-access-point" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point. The owner of the Multi-Region Access Point also must own the underlying buckets.
   --body: any
-]: any -> any {
+]: any -> record<RequestTokenARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -571,7 +571,7 @@ export def "accesspoint-policy get-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified access point.
-]: nothing -> any {
+]: nothing -> record<Policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -680,7 +680,7 @@ export def "accesspointforobjectlambda-policy get-access-point-for-object-lambda
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> any {
+]: nothing -> record<Policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -789,7 +789,7 @@ export def "bucket get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> any {
+]: nothing -> record<Bucket: record, PublicAccessBlockEnabled: record, CreationDate: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -859,7 +859,7 @@ export def "bucket-lifecycleconfiguration get-lifecycle-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> any {
+]: nothing -> record<Rules: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -968,7 +968,7 @@ export def "bucket-policy get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> any {
+]: nothing -> record<Policy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1078,7 +1078,7 @@ export def "bucket-replication get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> any {
+]: nothing -> record<ReplicationConfiguration: record<Role: record, Rules: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1187,7 +1187,7 @@ export def "bucket-tagging get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
-]: nothing -> any {
+]: nothing -> record<TagSet: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1261,7 +1261,7 @@ export def "jobs-tagging delete" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1296,7 +1296,7 @@ export def "jobs-tagging get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> any {
+]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1332,7 +1332,7 @@ export def "jobs-tagging update" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1370,7 +1370,7 @@ export def "async-requests-mrap-delete delete-multi-region-access-point" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
   --body: any
-]: any -> any {
+]: any -> record<RequestTokenARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1439,7 +1439,7 @@ export def "configuration-public-access-block get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the Amazon Web Services account whose PublicAccessBlock configuration you want to retrieve.
-]: nothing -> any {
+]: nothing -> record<PublicAccessBlockConfiguration: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v20180820/configuration/publicAccessBlock")
@@ -1545,7 +1545,7 @@ export def "storagelens get-storage-lens-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> any {
+]: nothing -> record<StorageLensConfiguration: record<Id: record, AccountLevel: record<ActivityMetrics: record, BucketLevel: record, AdvancedCostOptimizationMetrics: record, AdvancedDataProtectionMetrics: record, DetailedStatusCodesMetrics: record>, Include: record<Buckets: record, Regions: record>, Exclude: record<Buckets: record, Regions: record>, DataExport: record<S3BucketDestination: record, CloudWatchMetrics: record>, IsEnabled: record, AwsOrg: record<Arn: record>, StorageLensArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
@@ -1619,7 +1619,7 @@ export def "storagelens-tagging delete-storage-lens-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
@@ -1654,7 +1654,7 @@ export def "storagelens-tagging get-storage-lens-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> any {
+]: nothing -> record<Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($storagelensid | is-empty) { error make --unspanned { msg: "path parameter 'storagelensid' must be non-empty" } }
@@ -1690,7 +1690,7 @@ export def "storagelens-tagging update-storage-lens-configuration" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID of the requester.
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1728,7 +1728,7 @@ export def "jobs get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> any {
+]: nothing -> record<Job: record<JobId: record, ConfirmationRequired: record, Description: record, JobArn: record, Status: record, Manifest: record<Spec: record, Location: record>, Operation: record<LambdaInvoke: record, S3PutObjectCopy: record, S3PutObjectAcl: record, S3PutObjectTagging: record, S3DeleteObjectTagging: record, S3InitiateRestoreObject: record, S3PutObjectLegalHold: record, S3PutObjectRetention: record, S3ReplicateObject: record>, Priority: record, ProgressSummary: record<TotalNumberOfTasks: record, NumberOfTasksSucceeded: record, NumberOfTasksFailed: record, Timers: record>, StatusUpdateReason: record, FailureReasons: record, Report: record<Bucket: record, Format: record, Enabled: record, Prefix: record, ReportScope: record>, CreationTime: record, TerminationDate: record, RoleArn: record, SuspendedDate: record, SuspendedCause: record, ManifestGenerator: record<S3JobManifestGenerator: record>, GeneratedManifestDescriptor: record<Format: record, Location: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1763,7 +1763,7 @@ export def "async-requests-mrap get-multi-region-access-point-operation" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> any {
+]: nothing -> record<AsyncOperation: record<CreationTime: record, Operation: record, RequestTokenARN: record, RequestParameters: record<CreateMultiRegionAccessPointRequest: record, DeleteMultiRegionAccessPointRequest: record, PutMultiRegionAccessPointPolicyRequest: record>, RequestStatus: record, ResponseDetails: record<MultiRegionAccessPointDetails: record, ErrorDetails: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($request_token | is-empty) { error make --unspanned { msg: "path parameter 'request_token' must be non-empty" } }
@@ -1798,7 +1798,7 @@ export def "accesspointforobjectlambda-configuration get-access-point-for-object
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> any {
+]: nothing -> record<Configuration: record<SupportingAccessPoint: record, CloudWatchMetricsEnabled: record, AllowedFeatures: record, TransformationConfigurations: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1872,7 +1872,7 @@ export def "accesspoint-policy-status get-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified access point.
-]: nothing -> any {
+]: nothing -> record<PolicyStatus: record<IsPublic: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1907,7 +1907,7 @@ export def "accesspointforobjectlambda-policy-status get-access-point-for-object
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> any {
+]: nothing -> record<PolicyStatus: record<IsPublic: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -1942,7 +1942,7 @@ export def "bucket-versioning get" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the S3 on Outposts bucket.
-]: nothing -> any {
+]: nothing -> record<Status: record, MFADelete: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2017,7 +2017,7 @@ export def "mrap-instances get-multi-region-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> any {
+]: nothing -> record<AccessPoint: record<Name: record, Alias: record, CreatedAt: record, PublicAccessBlock: record<BlockPublicAcls: record, IgnorePublicAcls: record, BlockPublicPolicy: record, RestrictPublicBuckets: record>, Status: record, Regions: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2052,7 +2052,7 @@ export def "mrap-instances-policy get-multi-region-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> any {
+]: nothing -> record<Policy: record<Established: record<Policy: record>, Proposed: record<Policy: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2087,7 +2087,7 @@ export def "mrap-instances-policystatus get-multi-region-access-point-policy-sta
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> any {
+]: nothing -> record<Established: record<IsPublic: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2122,7 +2122,7 @@ export def "mrap-instances-routes get-multi-region-access-point" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> any {
+]: nothing -> record<Mrap: record, Routes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mrap | is-empty) { error make --unspanned { msg: "path parameter 'mrap' must be non-empty" } }
@@ -2158,7 +2158,7 @@ export def "mrap-instances-routes submit-multi-region-access-point" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2200,7 +2200,7 @@ export def "accesspoint list-access-points" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the account that owns the specified access points.
-]: nothing -> any {
+]: nothing -> record<AccessPointList: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bucket" $bucket "scalar") (serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2238,7 +2238,7 @@ export def "accesspointforobjectlambda list-access-points-for-object-lambda" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID for the account that owns the specified Object Lambda Access Point.
-]: nothing -> any {
+]: nothing -> record<ObjectLambdaAccessPointList: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2276,7 +2276,7 @@ export def "mrap-instances list-multi-region-access-points" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
-]: nothing -> any {
+]: nothing -> record<AccessPoints: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2315,7 +2315,7 @@ export def "bucket list-regional" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID of the Outposts bucket.
   --x-amz-outpost-id: string # The ID of the Outposts resource. This ID is required by Amazon S3 on Outposts buckets.
-]: nothing -> any {
+]: nothing -> record<RegionalBucketList: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "MaxResults" $max_results_2 "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2351,7 +2351,7 @@ export def "storagelens list-storage-lens-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The account ID of the requester.
-]: nothing -> any {
+]: nothing -> record<NextToken: record, StorageLensConfigurationList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "nextToken" $next_token "scalar") (serialize-qp "NextToken" $next_token_2 "scalar")] | flatten | str join "&"
@@ -2386,7 +2386,7 @@ export def "async-requests-mrap-put-policy update-multi-region-access-point" [
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID for the owner of the Multi-Region Access Point.
   --body: any
-]: any -> any {
+]: any -> record<RequestTokenARN: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2424,7 +2424,7 @@ export def "jobs-priority update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> any {
+]: nothing -> record<JobId: record, Priority: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2462,7 +2462,7 @@ export def "jobs-status update" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --x-amz-account-id: string # The Amazon Web Services account ID associated with the S3 Batch Operations job.
-]: nothing -> any {
+]: nothing -> record<JobId: record, Status: record, StatusUpdateReason: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

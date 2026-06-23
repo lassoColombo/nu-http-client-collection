@@ -287,7 +287,7 @@ export def "data-divisions-format-search-total-results list" [
   --query-parameters-start-date: string # Divisions where division date in one or after date provided. Date format is yyyy-MM-dd (format: date-time)
   --query-parameters-end-date: string # Divisions where division date in one or before date provided. Date format is yyyy-MM-dd (format: date-time)
   --query-parameters-division-number: int # Division Number - as specified by the House, unique within a session. This is different to the division id which uniquely identifies a division in this system and is passed to the GET division endpoint (format: int32)
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }

@@ -195,7 +195,7 @@ export def "chart get" [
   --icretina: string@icretina-completer # retina mode
   --icqrb: string # Background color for QR Codes (default: FFFFFF)
   --icqrf: string # Foreground color for QR Codes (default: 000000)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cht" $cht "scalar") (serialize-qp "chd" $chd "scalar") (serialize-qp "chds" $chds "scalar") (serialize-qp "choe" $choe "scalar") (serialize-qp "chld" $chld "scalar") (serialize-qp "chxr" $chxr "scalar") (serialize-qp "chxp" $chxp "scalar") (serialize-qp "chof" $chof "scalar") (serialize-qp "chs" $chs "scalar") (serialize-qp "chdl" $chdl "scalar") (serialize-qp "chdls" $chdls "scalar") (serialize-qp "chg" $chg "scalar") (serialize-qp "chco" $chco "scalar") (serialize-qp "chtt" $chtt "scalar") (serialize-qp "chts" $chts "scalar") (serialize-qp "chxt" $chxt "scalar") (serialize-qp "chxl" $chxl "scalar") (serialize-qp "chxs" $chxs "scalar") (serialize-qp "chm" $chm "scalar") (serialize-qp "chls" $chls "scalar") (serialize-qp "chl" $chl "scalar") (serialize-qp "chlps" $chlps "scalar") (serialize-qp "chma" $chma "scalar") (serialize-qp "chdlp" $chdlp "scalar") (serialize-qp "chf" $chf "scalar") (serialize-qp "chbh" $chbh "scalar") (serialize-qp "chbr" $chbr "scalar") (serialize-qp "chan" $chan "scalar") (serialize-qp "chli" $chli "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icff" $icff "scalar") (serialize-qp "icfs" $icfs "scalar") (serialize-qp "iclocale" $iclocale "scalar") (serialize-qp "icwt" $icwt "scalar") (serialize-qp "icretina" $icretina "scalar") (serialize-qp "icqrb" $icqrb "scalar") (serialize-qp "icqrf" $icqrf "scalar")] | flatten | str join "&"
@@ -230,7 +230,7 @@ export def "chart-js-2-8-0 get-chartjs280" [
   --icac: string # image-charts enterprise `account_id`
   --ichm: string # HMAC-SHA256 signature required to activate paid features
   --icretina: string@icretina-completer # retina mode
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "c" $c "scalar") (serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "backgroundColor" $background_color "scalar") (serialize-qp "bkg" $bkg "scalar") (serialize-qp "encoding" $encoding "scalar") (serialize-qp "icac" $icac "scalar") (serialize-qp "ichm" $ichm "scalar") (serialize-qp "icretina" $icretina "scalar")] | flatten | str join "&"

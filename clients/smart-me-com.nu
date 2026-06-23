@@ -162,7 +162,7 @@ export def "access-token update" [
   --accept: string@accept-completer # Response content type
   --card-id: int # The ID of the Card (format: int64)
   --user-id: int # The ID of the User. The credentials provided must have permission to edit the user. If no ID is provided, the user in the credentials is taken. (format: int64)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1445,7 +1445,7 @@ export def "virtual-tariffs-status-for-property get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

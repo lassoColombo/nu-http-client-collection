@@ -325,7 +325,7 @@ export def "logging-groov-logs-json download" [
   --minimum-log-level: string@minimum-log-level-completer # How verbose the log should be. (default: INFO)
   --last-timestamp: float # The earliest time to include in the log. Value is milliseconds since January 1, 1970 UTC. (format: int64, default: 0)
   --filter: string # Optional string to search for in the log.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minimum-log-level" $minimum_log_level "scalar") (serialize-qp "last-timestamp" $last_timestamp "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -352,7 +352,7 @@ export def "logging-groov-logs-txt download-text" [
   --minimum-log-level: string@minimum-log-level-completer # How verbose the log should be. (default: INFO)
   --last-timestamp: float # The earliest time to include in the log. Value is milliseconds since January 1, 1970 UTC. (format: int64, default: 0)
   --filter: string # Optional string to search for in the log.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "minimum-log-level" $minimum_log_level "scalar") (serialize-qp "last-timestamp" $last_timestamp "scalar") (serialize-qp "filter" $filter "scalar")] | flatten | str join "&"

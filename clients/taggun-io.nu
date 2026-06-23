@@ -618,7 +618,7 @@ export def "validation-campaign-file create" [
   --near: string # A geo location to search for merchant. Typically in the format of city, state, country.
   campaign_id: string # The ID of the campaign to validate the receipt
   --reference-id: string # Tag a request with a unique reference ID for feedback and training purposes
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -654,7 +654,7 @@ export def "validation-campaign-product-validation-file create-productvalidation
   --incognito: oneof<nothing, bool> # Set true to avoid saving the receipt in storage
   --sub-account-id: string # Tag a request with sub-account ID for billing purposes
   --reference-id: string # Tag a request with a unique reference ID for feedback and training purposes
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

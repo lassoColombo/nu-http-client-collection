@@ -237,7 +237,7 @@ export def "authorize get" [
   --redirect-uri: string # The URI to which Box redirects the browser after the user has granted or denied the application permission. This URI match one of the redirect URIs in the configuration of your application. It must be a valid HTTPS URI and it needs to be able to handle the redirection to complete the next step in the OAuth 2.0 flow. Although this parameter is optional, it must be a part of the authorization URL if you configured multiple redirect URIs for the application in the developer console. A missing parameter causes a `redirect_uri_missing` error after the user grants application access. (format: url, e.g. http://example.com/auth/callback)
   --state: string # A custom string of your choice. Box will pass the same string to the redirect URL when authentication is complete. This parameter can be used to identify a user on redirect, as well as protect against hijacked sessions and other exploits. (e.g. my_state)
   --scope: string # A comma-separated list of application scopes you'd like to authenticate the user for. This defaults to all the scopes configured for the application in its configuration page. (e.g. admin_readwrite)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://account.box.com/api/oauth2")
   let qp = [(serialize-qp "response_type" $response_type "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "redirect_uri" $redirect_uri "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "scope" $scope "scalar")] | flatten | str join "&"
@@ -2209,7 +2209,7 @@ export def "files-thumbnail-extension get" [
   --min-width: int # The minimum width of the thumbnail (e.g. 32)
   --max-height: int # The maximum height of the thumbnail (e.g. 320)
   --max-width: int # The maximum width of the thumbnail (e.g. 320)
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -6952,7 +6952,7 @@ export def "users-avatar get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7709,7 +7709,7 @@ export def "zip-downloads-content get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-]: nothing -> record<code: string, context_info: record<message: string>, help_url: string, message: string, request_id: string, status: int, type: string> {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default "https://dl.boxcloud.com/2.0")
   if ($zip_download_id | is-empty) { error make --unspanned { msg: "path parameter 'zip_download_id' must be non-empty" } }

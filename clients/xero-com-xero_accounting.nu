@@ -354,7 +354,7 @@ export def "accounts-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
@@ -385,7 +385,7 @@ export def "accounts-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'AccountID' must be non-empty" } }
@@ -664,7 +664,7 @@ export def "bank-transactions-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
@@ -695,7 +695,7 @@ export def "bank-transactions-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bank_transaction_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransactionID' must be non-empty" } }
@@ -971,7 +971,7 @@ export def "bank-transfers-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
@@ -1002,7 +1002,7 @@ export def "bank-transfers-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bank_transfer_id | is-empty) { error make --unspanned { msg: "path parameter 'BankTransferID' must be non-empty" } }
@@ -1793,7 +1793,7 @@ export def "contacts-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
@@ -1824,7 +1824,7 @@ export def "contacts-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'ContactID' must be non-empty" } }
@@ -2250,7 +2250,7 @@ export def "credit-notes-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
@@ -2281,7 +2281,7 @@ export def "credit-notes-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
@@ -2438,7 +2438,7 @@ export def "credit-notes-pdf get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_note_id | is-empty) { error make --unspanned { msg: "path parameter 'CreditNoteID' must be non-empty" } }
@@ -3039,7 +3039,7 @@ export def "invoices-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
@@ -3070,7 +3070,7 @@ export def "invoices-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
@@ -3287,7 +3287,7 @@ export def "invoices-pdf get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'InvoiceID' must be non-empty" } }
@@ -3955,7 +3955,7 @@ export def "manual-journals-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
@@ -3986,7 +3986,7 @@ export def "manual-journals-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($manual_journal_id | is-empty) { error make --unspanned { msg: "path parameter 'ManualJournalID' must be non-empty" } }
@@ -5007,7 +5007,7 @@ export def "purchase-orders-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
@@ -5038,7 +5038,7 @@ export def "purchase-orders-attachments get-order≠attachment-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
@@ -5196,7 +5196,7 @@ export def "purchase-orders-pdf get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($purchase_order_id | is-empty) { error make --unspanned { msg: "path parameter 'PurchaseOrderID' must be non-empty" } }
@@ -5439,7 +5439,7 @@ export def "quotes-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
@@ -5470,7 +5470,7 @@ export def "quotes-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
@@ -5628,7 +5628,7 @@ export def "quotes-pdf get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($quote_id | is-empty) { error make --unspanned { msg: "path parameter 'QuoteID' must be non-empty" } }
@@ -5805,7 +5805,7 @@ export def "receipts-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
@@ -5836,7 +5836,7 @@ export def "receipts-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($receipt_id | is-empty) { error make --unspanned { msg: "path parameter 'ReceiptID' must be non-empty" } }
@@ -6081,7 +6081,7 @@ export def "repeating-invoices-attachments get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }
@@ -6112,7 +6112,7 @@ export def "repeating-invoices-attachments get-by-file-name" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --xero-tenant-id: string # Xero identifier for Tenant (e.g. YOUR_XERO_TENANT_ID)
   --content-type: string # The mime type of the attachment file you are retrieving i.e image/jpg, application/pdf (e.g. image/jpg)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($repeating_invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'RepeatingInvoiceID' must be non-empty" } }

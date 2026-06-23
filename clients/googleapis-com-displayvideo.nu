@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -160,8 +170,8 @@ export def commands []: nothing -> table {
 export def "download get" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -180,7 +190,7 @@ export def "download get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<resourceName: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -197,8 +207,8 @@ export def "download get" [
 export def "media upload" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -219,7 +229,7 @@ export def "media upload" [
   --body: any
 ]: any -> record<resourceName: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($resource_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceName' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -237,8 +247,8 @@ export def "media upload" [
 # operationId: displayvideo.advertisers.list
 export def "advertisers list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -262,7 +272,7 @@ export def "advertisers list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListAdvertisers` method. If not specified, the first page of results will be returned.
   --partner-id: string # Required. The ID of the partner that the fetched advertisers should all belong to. The system only supports listing advertisers for one partner at a time.
 ]: nothing -> record<advertisers: table<adServerConfig: record, advertiserId: string, billingConfig: record, creativeConfig: record, dataAccessConfig: record, displayName: string, entityStatus: string, generalConfig: record, integrationDetails: record, name: string, partnerId: string, prismaEnabled: bool, servingConfig: record, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/advertisers" $qp)
@@ -284,8 +294,8 @@ export def "advertisers list" [
 # --servingConfig shape: {exemptTvFromViewabilityTargeting?: bool}
 export def "advertisers create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -316,7 +326,7 @@ export def "advertisers create" [
   --serving-config: record # Targeting settings related to ad serving of an advertiser. — shape: {exemptTvFromViewabilityTargeting?: bool}
 ]: any -> record<adServerConfig: record<cmHybridConfig: record<cmAccountId: string, cmFloodlightConfigId: string, cmFloodlightLinkingAuthorized: bool, cmSyncableSiteIds: list, dv360ToCmCostReportingEnabled: bool, dv360ToCmDataSharingEnabled: bool>, thirdPartyOnlyConfig: record<pixelOrderIdReportingEnabled: bool>>, advertiserId: string, billingConfig: record<billingProfileId: string>, creativeConfig: record<dynamicCreativeEnabled: bool, iasClientId: string, obaComplianceDisabled: bool, videoCreativeDataSharingAuthorized: bool>, dataAccessConfig: record<sdfConfig: record<overridePartnerSdfConfig: bool, sdfConfig: record>>, displayName: string, entityStatus: string, generalConfig: record<currencyCode: string, domainUrl: string, timeZone: string>, integrationDetails: record<details: string, integrationCode: string>, name: string, partnerId: string, prismaEnabled: bool, servingConfig: record<exemptTvFromViewabilityTargeting: bool>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/advertisers" $qp)
@@ -334,8 +344,8 @@ export def "advertisers create" [
 export def "advertisers delete" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -354,7 +364,7 @@ export def "advertisers delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -371,8 +381,8 @@ export def "advertisers delete" [
 export def "advertisers get" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -391,7 +401,7 @@ export def "advertisers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<adServerConfig: record<cmHybridConfig: record<cmAccountId: string, cmFloodlightConfigId: string, cmFloodlightLinkingAuthorized: bool, cmSyncableSiteIds: list, dv360ToCmCostReportingEnabled: bool, dv360ToCmDataSharingEnabled: bool>, thirdPartyOnlyConfig: record<pixelOrderIdReportingEnabled: bool>>, advertiserId: string, billingConfig: record<billingProfileId: string>, creativeConfig: record<dynamicCreativeEnabled: bool, iasClientId: string, obaComplianceDisabled: bool, videoCreativeDataSharingAuthorized: bool>, dataAccessConfig: record<sdfConfig: record<overridePartnerSdfConfig: bool, sdfConfig: record>>, displayName: string, entityStatus: string, generalConfig: record<currencyCode: string, domainUrl: string, timeZone: string>, integrationDetails: record<details: string, integrationCode: string>, name: string, partnerId: string, prismaEnabled: bool, servingConfig: record<exemptTvFromViewabilityTargeting: bool>, updateTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -415,8 +425,8 @@ export def "advertisers get" [
 export def "advertisers update" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -448,7 +458,7 @@ export def "advertisers update" [
   --serving-config: record # Targeting settings related to ad serving of an advertiser. — shape: {exemptTvFromViewabilityTargeting?: bool}
 ]: any -> record<adServerConfig: record<cmHybridConfig: record<cmAccountId: string, cmFloodlightConfigId: string, cmFloodlightLinkingAuthorized: bool, cmSyncableSiteIds: list, dv360ToCmCostReportingEnabled: bool, dv360ToCmDataSharingEnabled: bool>, thirdPartyOnlyConfig: record<pixelOrderIdReportingEnabled: bool>>, advertiserId: string, billingConfig: record<billingProfileId: string>, creativeConfig: record<dynamicCreativeEnabled: bool, iasClientId: string, obaComplianceDisabled: bool, videoCreativeDataSharingAuthorized: bool>, dataAccessConfig: record<sdfConfig: record<overridePartnerSdfConfig: bool, sdfConfig: record>>, displayName: string, entityStatus: string, generalConfig: record<currencyCode: string, domainUrl: string, timeZone: string>, integrationDetails: record<details: string, integrationCode: string>, name: string, partnerId: string, prismaEnabled: bool, servingConfig: record<exemptTvFromViewabilityTargeting: bool>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -467,8 +477,8 @@ export def "advertisers update" [
 export def "advertisers-assets upload" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -489,7 +499,7 @@ export def "advertisers-assets upload" [
   --body: any
 ]: any -> record<asset: record<content: string, mediaId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -508,8 +518,8 @@ export def "advertisers-assets upload" [
 export def "advertisers-campaigns list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -532,7 +542,7 @@ export def "advertisers-campaigns list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCampaigns` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<campaigns: table<advertiserId: string, campaignBudgets: list, campaignFlight: record, campaignGoal: record, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record, name: string, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -553,8 +563,8 @@ export def "advertisers-campaigns list" [
 export def "advertisers-campaigns create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -580,7 +590,7 @@ export def "advertisers-campaigns create" [
   --frequency-cap: record # Settings that control the number of times a user may be shown with the same ad during a given time period. — shape: {maxImpressions?: int, maxViews?: int, timeUnit?: "TIME_UNIT_UNSPECIFIED"|"TIME_UNIT_LIFETIME"|"TIME_UNIT_MONTHS"|"TIME_UNIT_WEEKS"|"TIME_UNIT_DAYS"|"TIME_UNIT_HOURS"|"TIME_UNIT_MINUTES", timeUnitCount?: int, unlimited?: bool}
 ]: any -> record<advertiserId: string, campaignBudgets: table<budgetAmountMicros: string, budgetId: string, budgetUnit: string, dateRange: record, displayName: string, externalBudgetId: string, externalBudgetSource: string, invoiceGroupingId: string, prismaConfig: record>, campaignFlight: record<plannedDates: record<endDate: record, startDate: record>, plannedSpendAmountMicros: string>, campaignGoal: record<campaignGoalType: string, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, name: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -600,8 +610,8 @@ export def "advertisers-campaigns delete" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -620,7 +630,7 @@ export def "advertisers-campaigns delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -639,8 +649,8 @@ export def "advertisers-campaigns get" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -659,7 +669,7 @@ export def "advertisers-campaigns get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<advertiserId: string, campaignBudgets: table<budgetAmountMicros: string, budgetId: string, budgetUnit: string, dateRange: record, displayName: string, externalBudgetId: string, externalBudgetSource: string, invoiceGroupingId: string, prismaConfig: record>, campaignFlight: record<plannedDates: record<endDate: record, startDate: record>, plannedSpendAmountMicros: string>, campaignGoal: record<campaignGoalType: string, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, name: string, updateTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -682,8 +692,8 @@ export def "advertisers-campaigns update" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -710,7 +720,7 @@ export def "advertisers-campaigns update" [
   --frequency-cap: record # Settings that control the number of times a user may be shown with the same ad during a given time period. — shape: {maxImpressions?: int, maxViews?: int, timeUnit?: "TIME_UNIT_UNSPECIFIED"|"TIME_UNIT_LIFETIME"|"TIME_UNIT_MONTHS"|"TIME_UNIT_WEEKS"|"TIME_UNIT_DAYS"|"TIME_UNIT_HOURS"|"TIME_UNIT_MINUTES", timeUnitCount?: int, unlimited?: bool}
 ]: any -> record<advertiserId: string, campaignBudgets: table<budgetAmountMicros: string, budgetId: string, budgetUnit: string, dateRange: record, displayName: string, externalBudgetId: string, externalBudgetSource: string, invoiceGroupingId: string, prismaConfig: record>, campaignFlight: record<plannedDates: record<endDate: record, startDate: record>, plannedSpendAmountMicros: string>, campaignGoal: record<campaignGoalType: string, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, name: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -732,8 +742,8 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options lis
   campaign_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -756,7 +766,7 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options lis
   --page-size: int # Requested page size. Must be between `1` and `5000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCampaignAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -778,8 +788,8 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options get
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -798,7 +808,7 @@ export def "advertisers-campaigns-targeting-types-assigned-targeting-options get
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -819,8 +829,8 @@ export def "advertisers-campaigns list-assigned-targeting-options" [
   advertiser_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -843,7 +853,7 @@ export def "advertisers-campaigns list-assigned-targeting-options" [
   --page-size: int # Requested page size. The size must be an integer between `1` and `5000`. If unspecified, the default is `5000`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token that lets the client fetch the next page of results. Typically, this is the value of next_page_token returned from the previous call to `BulkListCampaignAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -861,8 +871,8 @@ export def "advertisers-campaigns list-assigned-targeting-options" [
 export def "advertisers-channels list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -886,7 +896,7 @@ export def "advertisers-channels list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListChannels` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that owns the channels.
 ]: nothing -> record<channels: table<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -903,8 +913,8 @@ export def "advertisers-channels list" [
 export def "advertisers-channels create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -928,7 +938,7 @@ export def "advertisers-channels create" [
   --partner-id-body: string # The ID of the partner that owns the channel. (format: int64) (body field)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -948,8 +958,8 @@ export def "advertisers-channels update" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -974,7 +984,7 @@ export def "advertisers-channels update" [
   --partner-id-body: string # The ID of the partner that owns the channel. (format: int64) (body field)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -995,8 +1005,8 @@ export def "advertisers-channels-sites list" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1020,7 +1030,7 @@ export def "advertisers-channels-sites list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListSites` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that owns the parent channel.
 ]: nothing -> record<nextPageToken: string, sites: table<name: string, urlOrAppId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -1040,8 +1050,8 @@ export def "advertisers-channels-sites delete" [
   channel_id: string
   url_or_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1061,7 +1071,7 @@ export def "advertisers-channels-sites delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --partner-id: string # The ID of the partner that owns the parent channel.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -1082,8 +1092,8 @@ export def "advertisers-channels-sites-bulk-edit create" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1107,7 +1117,7 @@ export def "advertisers-channels-sites-bulk-edit create" [
   --partner-id: string # The ID of the partner that owns the parent channel. (format: int64)
 ]: any -> record<sites: table<name: string, urlOrAppId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -1129,8 +1139,8 @@ export def "advertisers-channels-sites-replace update" [
   advertiser_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1153,7 +1163,7 @@ export def "advertisers-channels-sites-replace update" [
   --partner-id: string # The ID of the partner that owns the parent channel. (format: int64)
 ]: any -> record<sites: table<name: string, urlOrAppId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -1173,8 +1183,8 @@ export def "advertisers-channels-sites-replace update" [
 export def "advertisers-creatives list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1197,7 +1207,7 @@ export def "advertisers-creatives list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCreatives` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<creatives: table<additionalDimensions: list, advertiserId: string, appendedTag: string, assets: list, cmPlacementId: string, cmTrackingAd: record, companionCreativeIds: list, counterEvents: list, createTime: string, creativeAttributes: list, creativeId: string, creativeType: string, dimensions: record, displayName: string, dynamic: bool, entityStatus: string, exitEvents: list, expandOnHover: bool, expandingDirection: string, hostingSource: string, html5Video: bool, iasCampaignMonitoring: bool, integrationCode: string, jsTrackerUrl: string, lineItemIds: list, mediaDuration: string, mp3Audio: bool, name: string, notes: string, obaIcon: record, oggAudio: bool, progressOffset: record, requireHtml5: bool, requireMraid: bool, requirePingForAttribution: bool, reviewStatus: record, skipOffset: record, skippable: bool, thirdPartyTag: string, thirdPartyUrls: list, timerEvents: list, trackerUrls: list, transcodes: list, universalAdId: record, updateTime: string, vastTagUrl: string, vpaid: bool>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1228,8 +1238,8 @@ export def "advertisers-creatives list" [
 export def "advertisers-creatives create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1281,7 +1291,7 @@ export def "advertisers-creatives create" [
   --vast-tag-url: string # Optional. The URL of the VAST tag for a third-party VAST tag creative. Required and only valid for third-party VAST tag creatives. Third-party VAST tag creatives are creatives with following hosting_source: * `HOSTING_SOURCE_THIRD_PARTY` combined with following creative_type: * `CREATIVE_TYPE_AUDIO` * `CREATIVE_TYPE_VIDEO`
 ]: any -> record<additionalDimensions: table<heightPixels: int, widthPixels: int>, advertiserId: string, appendedTag: string, assets: table<asset: record, role: string>, cmPlacementId: string, cmTrackingAd: record<cmAdId: string, cmCreativeId: string, cmPlacementId: string>, companionCreativeIds: list<string>, counterEvents: table<name: string, reportingName: string>, createTime: string, creativeAttributes: list<string>, creativeId: string, creativeType: string, dimensions: record<heightPixels: int, widthPixels: int>, displayName: string, dynamic: bool, entityStatus: string, exitEvents: table<name: string, reportingName: string, type: string, url: string>, expandOnHover: bool, expandingDirection: string, hostingSource: string, html5Video: bool, iasCampaignMonitoring: bool, integrationCode: string, jsTrackerUrl: string, lineItemIds: list<string>, mediaDuration: string, mp3Audio: bool, name: string, notes: string, obaIcon: record<clickTrackingUrl: string, dimensions: record<heightPixels: int, widthPixels: int>, landingPageUrl: string, position: string, program: string, resourceMimeType: string, resourceUrl: string, viewTrackingUrl: string>, oggAudio: bool, progressOffset: record<percentage: string, seconds: string>, requireHtml5: bool, requireMraid: bool, requirePingForAttribution: bool, reviewStatus: record<approvalStatus: string, contentAndPolicyReviewStatus: string, creativeAndLandingPageReviewStatus: string, exchangeReviewStatuses: list<record>, publisherReviewStatuses: list<record>>, skipOffset: record<percentage: string, seconds: string>, skippable: bool, thirdPartyTag: string, thirdPartyUrls: table<type: string, url: string>, timerEvents: table<name: string, reportingName: string>, trackerUrls: list<string>, transcodes: table<audioBitRateKbps: string, audioSampleRateHz: string, bitRateKbps: string, dimensions: record, fileSizeBytes: string, frameRate: float, mimeType: string, name: string, transcoded: bool>, universalAdId: record<id: string, registry: string>, updateTime: string, vastTagUrl: string, vpaid: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1301,8 +1311,8 @@ export def "advertisers-creatives delete" [
   advertiser_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1321,7 +1331,7 @@ export def "advertisers-creatives delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($creative_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeId' must be non-empty" } }
@@ -1340,8 +1350,8 @@ export def "advertisers-creatives get" [
   advertiser_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1360,7 +1370,7 @@ export def "advertisers-creatives get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<additionalDimensions: table<heightPixels: int, widthPixels: int>, advertiserId: string, appendedTag: string, assets: table<asset: record, role: string>, cmPlacementId: string, cmTrackingAd: record<cmAdId: string, cmCreativeId: string, cmPlacementId: string>, companionCreativeIds: list<string>, counterEvents: table<name: string, reportingName: string>, createTime: string, creativeAttributes: list<string>, creativeId: string, creativeType: string, dimensions: record<heightPixels: int, widthPixels: int>, displayName: string, dynamic: bool, entityStatus: string, exitEvents: table<name: string, reportingName: string, type: string, url: string>, expandOnHover: bool, expandingDirection: string, hostingSource: string, html5Video: bool, iasCampaignMonitoring: bool, integrationCode: string, jsTrackerUrl: string, lineItemIds: list<string>, mediaDuration: string, mp3Audio: bool, name: string, notes: string, obaIcon: record<clickTrackingUrl: string, dimensions: record<heightPixels: int, widthPixels: int>, landingPageUrl: string, position: string, program: string, resourceMimeType: string, resourceUrl: string, viewTrackingUrl: string>, oggAudio: bool, progressOffset: record<percentage: string, seconds: string>, requireHtml5: bool, requireMraid: bool, requirePingForAttribution: bool, reviewStatus: record<approvalStatus: string, contentAndPolicyReviewStatus: string, creativeAndLandingPageReviewStatus: string, exchangeReviewStatuses: list<record>, publisherReviewStatuses: list<record>>, skipOffset: record<percentage: string, seconds: string>, skippable: bool, thirdPartyTag: string, thirdPartyUrls: table<type: string, url: string>, timerEvents: table<name: string, reportingName: string>, trackerUrls: list<string>, transcodes: table<audioBitRateKbps: string, audioSampleRateHz: string, bitRateKbps: string, dimensions: record, fileSizeBytes: string, frameRate: float, mimeType: string, name: string, transcoded: bool>, universalAdId: record<id: string, registry: string>, updateTime: string, vastTagUrl: string, vpaid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($creative_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeId' must be non-empty" } }
@@ -1393,8 +1403,8 @@ export def "advertisers-creatives update" [
   advertiser_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1447,7 +1457,7 @@ export def "advertisers-creatives update" [
   --vast-tag-url: string # Optional. The URL of the VAST tag for a third-party VAST tag creative. Required and only valid for third-party VAST tag creatives. Third-party VAST tag creatives are creatives with following hosting_source: * `HOSTING_SOURCE_THIRD_PARTY` combined with following creative_type: * `CREATIVE_TYPE_AUDIO` * `CREATIVE_TYPE_VIDEO`
 ]: any -> record<additionalDimensions: table<heightPixels: int, widthPixels: int>, advertiserId: string, appendedTag: string, assets: table<asset: record, role: string>, cmPlacementId: string, cmTrackingAd: record<cmAdId: string, cmCreativeId: string, cmPlacementId: string>, companionCreativeIds: list<string>, counterEvents: table<name: string, reportingName: string>, createTime: string, creativeAttributes: list<string>, creativeId: string, creativeType: string, dimensions: record<heightPixels: int, widthPixels: int>, displayName: string, dynamic: bool, entityStatus: string, exitEvents: table<name: string, reportingName: string, type: string, url: string>, expandOnHover: bool, expandingDirection: string, hostingSource: string, html5Video: bool, iasCampaignMonitoring: bool, integrationCode: string, jsTrackerUrl: string, lineItemIds: list<string>, mediaDuration: string, mp3Audio: bool, name: string, notes: string, obaIcon: record<clickTrackingUrl: string, dimensions: record<heightPixels: int, widthPixels: int>, landingPageUrl: string, position: string, program: string, resourceMimeType: string, resourceUrl: string, viewTrackingUrl: string>, oggAudio: bool, progressOffset: record<percentage: string, seconds: string>, requireHtml5: bool, requireMraid: bool, requirePingForAttribution: bool, reviewStatus: record<approvalStatus: string, contentAndPolicyReviewStatus: string, creativeAndLandingPageReviewStatus: string, exchangeReviewStatuses: list<record>, publisherReviewStatuses: list<record>>, skipOffset: record<percentage: string, seconds: string>, skippable: bool, thirdPartyTag: string, thirdPartyUrls: table<type: string, url: string>, timerEvents: table<name: string, reportingName: string>, trackerUrls: list<string>, transcodes: table<audioBitRateKbps: string, audioSampleRateHz: string, bitRateKbps: string, dimensions: record, fileSizeBytes: string, frameRate: float, mimeType: string, name: string, transcoded: bool>, universalAdId: record<id: string, registry: string>, updateTime: string, vastTagUrl: string, vpaid: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($creative_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeId' must be non-empty" } }
@@ -1467,8 +1477,8 @@ export def "advertisers-creatives update" [
 export def "advertisers-insertion-orders list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1491,7 +1501,7 @@ export def "advertisers-insertion-orders list" [
   --page-size: int # Requested page size. Must be between `1` and `100`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListInsertionOrders` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<insertionOrders: table<advertiserId: string, bidStrategy: record, billableOutcome: string, budget: record, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record, insertionOrderId: string, insertionOrderType: string, integrationDetails: record, name: string, pacing: record, partnerCosts: list, performanceGoal: record, reservationType: string, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -1515,8 +1525,8 @@ export def "advertisers-insertion-orders list" [
 export def "advertisers-insertion-orders create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1548,7 +1558,7 @@ export def "advertisers-insertion-orders create" [
   --performance-goal: record # Settings that control the performance goal of a campaign or insertion order. — shape: {performanceGoalAmountMicros?: string, performanceGoalPercentageMicros?: string, performanceGoalString?: string, ... (1 more fields)}
 ]: any -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, billableOutcome: string, budget: record<automationType: string, budgetSegments: list<record>, budgetUnit: string>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, insertionOrderType: string, integrationDetails: record<details: string, integrationCode: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>, reservationType: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1568,8 +1578,8 @@ export def "advertisers-insertion-orders delete" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1588,7 +1598,7 @@ export def "advertisers-insertion-orders delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1607,8 +1617,8 @@ export def "advertisers-insertion-orders get" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1627,7 +1637,7 @@ export def "advertisers-insertion-orders get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, billableOutcome: string, budget: record<automationType: string, budgetSegments: list<record>, budgetUnit: string>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, insertionOrderType: string, integrationDetails: record<details: string, integrationCode: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>, reservationType: string, updateTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1653,8 +1663,8 @@ export def "advertisers-insertion-orders update" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1687,7 +1697,7 @@ export def "advertisers-insertion-orders update" [
   --performance-goal: record # Settings that control the performance goal of a campaign or insertion order. — shape: {performanceGoalAmountMicros?: string, performanceGoalPercentageMicros?: string, performanceGoalString?: string, ... (1 more fields)}
 ]: any -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, billableOutcome: string, budget: record<automationType: string, budgetSegments: list<record>, budgetUnit: string>, campaignId: string, displayName: string, entityStatus: string, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, insertionOrderType: string, integrationDetails: record<details: string, integrationCode: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, performanceGoal: record<performanceGoalAmountMicros: string, performanceGoalPercentageMicros: string, performanceGoalString: string, performanceGoalType: string>, reservationType: string, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1709,8 +1719,8 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   insertion_order_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1733,7 +1743,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   --page-size: int # Requested page size. Must be between `1` and `5000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListInsertionOrderAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1802,8 +1812,8 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   insertion_order_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1871,7 +1881,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   --youtube-video-details: record # Details for YouTube video assigned targeting option. This will be populated in the youtube_video_details field when targeting_type is `TARGETING_TYPE_YOUTUBE_VIDEO`. — shape: {negative?: bool, videoId?: string}
 ]: any -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1895,8 +1905,8 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1915,7 +1925,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1938,8 +1948,8 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1958,7 +1968,7 @@ export def "advertisers-insertion-orders-targeting-types-assigned-targeting-opti
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -1979,8 +1989,8 @@ export def "advertisers-insertion-orders list-assigned-targeting-options" [
   advertiser_id: string
   insertion_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2003,7 +2013,7 @@ export def "advertisers-insertion-orders list-assigned-targeting-options" [
   --page-size: int # Requested page size. The size must be an integer between `1` and `5000`. If unspecified, the default is `5000`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token that lets the client fetch the next page of results. Typically, this is the value of next_page_token returned from the previous call to `BulkListInsertionOrderAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($insertion_order_id | is-empty) { error make --unspanned { msg: "path parameter 'insertionOrderId' must be non-empty" } }
@@ -2021,8 +2031,8 @@ export def "advertisers-insertion-orders list-assigned-targeting-options" [
 export def "advertisers-invoices list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2045,7 +2055,7 @@ export def "advertisers-invoices list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListInvoices` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<invoices: table<budgetInvoiceGroupingId: string, budgetSummaries: list, correctedInvoiceId: string, currencyCode: string, displayName: string, dueDate: record, invoiceId: string, invoiceType: string, issueDate: record, name: string, nonBudgetMicros: string, paymentsAccountId: string, paymentsProfileId: string, pdfUrl: string, purchaseOrderNumber: string, replacedInvoiceIds: list, serviceDateRange: record, subtotalAmountMicros: string, totalAmountMicros: string, totalTaxAmountMicros: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "issueMonth" $issue_month "scalar") (serialize-qp "loiSapinInvoiceType" $loi_sapin_invoice_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2062,8 +2072,8 @@ export def "advertisers-invoices list" [
 export def "advertisers-invoices-lookup-invoice-currency get" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2083,7 +2093,7 @@ export def "advertisers-invoices-lookup-invoice-currency get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --invoice-month: string # Month for which the currency is needed. If not set, the request will return existing currency settings for the advertiser. Must be in the format YYYYMM.
 ]: nothing -> record<currencyCode: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "invoiceMonth" $invoice_month "scalar")] | flatten | str join "&"
@@ -2100,8 +2110,8 @@ export def "advertisers-invoices-lookup-invoice-currency get" [
 export def "advertisers-line-items list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2124,7 +2134,7 @@ export def "advertisers-line-items list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListLineItems` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<lineItems: table<advertiserId: string, bidStrategy: record, budget: record, campaignId: string, conversionCounting: record, creativeIds: list, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record, frequencyCap: record, insertionOrderId: string, integrationDetails: record, lineItemId: string, lineItemType: string, mobileApp: record, name: string, pacing: record, partnerCosts: list, partnerRevenueModel: record, reservationType: string, targetingExpansion: record, updateTime: string, warningMessages: list, youtubeAndPartnersSettings: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2153,8 +2163,8 @@ export def "advertisers-line-items list" [
 export def "advertisers-line-items create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2192,7 +2202,7 @@ export def "advertisers-line-items create" [
   --youtube-and-partners-settings: record # Settings for YouTube and Partners line items. — shape: {biddingStrategy?: record, contentCategory?: "YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_UNSPECIFIED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_STANDARD"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_EXPANDED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_LIMITED", inventorySourceSettings?: record, leadFormId?: string, linkedMerchantId?: string, relatedVideoIds?: list<string>, targetFrequency?: record, thirdPartyMeasurementSettings?: record, videoAdSequenceSettings?: record, viewFrequencyCap?: record}
 ]: any -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, budget: record<budgetAllocationType: string, budgetUnit: string, maxAmount: string>, campaignId: string, conversionCounting: record<floodlightActivityConfigs: list<record>, postViewCountPercentageMillis: string>, creativeIds: list<string>, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record<dateRange: record<endDate: record, startDate: record>, flightDateType: string>, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, integrationDetails: record<details: string, integrationCode: string>, lineItemId: string, lineItemType: string, mobileApp: record<appId: string, displayName: string, platform: string, publisher: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, partnerRevenueModel: record<markupAmount: string, markupType: string>, reservationType: string, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, updateTime: string, warningMessages: list<string>, youtubeAndPartnersSettings: record<biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, contentCategory: string, inventorySourceSettings: record<includeYoutubeSearch: bool, includeYoutubeVideoPartners: bool, includeYoutubeVideos: bool>, leadFormId: string, linkedMerchantId: string, relatedVideoIds: list<string>, targetFrequency: record<targetCount: string, timeUnit: string, timeUnitCount: int>, thirdPartyMeasurementSettings: record<brandLiftVendorConfigs: list, brandSafetyVendorConfigs: list, reachVendorConfigs: list, viewabilityVendorConfigs: list>, videoAdSequenceSettings: record<minimumDuration: string, steps: list>, viewFrequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2212,8 +2222,8 @@ export def "advertisers-line-items delete" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2232,7 +2242,7 @@ export def "advertisers-line-items delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2251,8 +2261,8 @@ export def "advertisers-line-items get" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2271,7 +2281,7 @@ export def "advertisers-line-items get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, budget: record<budgetAllocationType: string, budgetUnit: string, maxAmount: string>, campaignId: string, conversionCounting: record<floodlightActivityConfigs: list<record>, postViewCountPercentageMillis: string>, creativeIds: list<string>, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record<dateRange: record<endDate: record, startDate: record>, flightDateType: string>, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, integrationDetails: record<details: string, integrationCode: string>, lineItemId: string, lineItemType: string, mobileApp: record<appId: string, displayName: string, platform: string, publisher: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, partnerRevenueModel: record<markupAmount: string, markupType: string>, reservationType: string, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, updateTime: string, warningMessages: list<string>, youtubeAndPartnersSettings: record<biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, contentCategory: string, inventorySourceSettings: record<includeYoutubeSearch: bool, includeYoutubeVideoPartners: bool, includeYoutubeVideos: bool>, leadFormId: string, linkedMerchantId: string, relatedVideoIds: list<string>, targetFrequency: record<targetCount: string, timeUnit: string, timeUnitCount: int>, thirdPartyMeasurementSettings: record<brandLiftVendorConfigs: list, brandSafetyVendorConfigs: list, reachVendorConfigs: list, viewabilityVendorConfigs: list>, videoAdSequenceSettings: record<minimumDuration: string, steps: list>, viewFrequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2302,8 +2312,8 @@ export def "advertisers-line-items update" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2342,7 +2352,7 @@ export def "advertisers-line-items update" [
   --youtube-and-partners-settings: record # Settings for YouTube and Partners line items. — shape: {biddingStrategy?: record, contentCategory?: "YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_UNSPECIFIED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_STANDARD"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_EXPANDED"|"YOUTUBE_AND_PARTNERS_CONTENT_CATEGORY_LIMITED", inventorySourceSettings?: record, leadFormId?: string, linkedMerchantId?: string, relatedVideoIds?: list<string>, targetFrequency?: record, thirdPartyMeasurementSettings?: record, videoAdSequenceSettings?: record, viewFrequencyCap?: record}
 ]: any -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, budget: record<budgetAllocationType: string, budgetUnit: string, maxAmount: string>, campaignId: string, conversionCounting: record<floodlightActivityConfigs: list<record>, postViewCountPercentageMillis: string>, creativeIds: list<string>, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record<dateRange: record<endDate: record, startDate: record>, flightDateType: string>, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, integrationDetails: record<details: string, integrationCode: string>, lineItemId: string, lineItemType: string, mobileApp: record<appId: string, displayName: string, platform: string, publisher: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, partnerRevenueModel: record<markupAmount: string, markupType: string>, reservationType: string, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, updateTime: string, warningMessages: list<string>, youtubeAndPartnersSettings: record<biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, contentCategory: string, inventorySourceSettings: record<includeYoutubeSearch: bool, includeYoutubeVideoPartners: bool, includeYoutubeVideos: bool>, leadFormId: string, linkedMerchantId: string, relatedVideoIds: list<string>, targetFrequency: record<targetCount: string, timeUnit: string, timeUnitCount: int>, thirdPartyMeasurementSettings: record<brandLiftVendorConfigs: list, brandSafetyVendorConfigs: list, reachVendorConfigs: list, viewabilityVendorConfigs: list>, videoAdSequenceSettings: record<minimumDuration: string, steps: list>, viewFrequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2364,8 +2374,8 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options li
   line_item_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2388,7 +2398,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options li
   --page-size: int # Requested page size. Must be between `1` and `5000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListLineItemAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2457,8 +2467,8 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options cr
   line_item_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2526,7 +2536,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options cr
   --youtube-video-details: record # Details for YouTube video assigned targeting option. This will be populated in the youtube_video_details field when targeting_type is `TARGETING_TYPE_YOUTUBE_VIDEO`. — shape: {negative?: bool, videoId?: string}
 ]: any -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2550,8 +2560,8 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options de
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2570,7 +2580,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options de
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2593,8 +2603,8 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options ge
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2613,7 +2623,7 @@ export def "advertisers-line-items-targeting-types-assigned-targeting-options ge
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2634,8 +2644,8 @@ export def "advertisers-line-items create-duplicate" [
   advertiser_id: string
   line_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2656,7 +2666,7 @@ export def "advertisers-line-items create-duplicate" [
   --target-display-name: string # The display name of the new line item. Must be UTF-8 encoded with a maximum size of 240 bytes.
 ]: any -> record<duplicateLineItemId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($line_item_id | is-empty) { error make --unspanned { msg: "path parameter 'lineItemId' must be non-empty" } }
@@ -2678,8 +2688,8 @@ export def "advertisers-line-items create-duplicate" [
 export def "advertisers-line-items-bulk-edit-assigned-targeting-options create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2702,7 +2712,7 @@ export def "advertisers-line-items-bulk-edit-assigned-targeting-options create" 
   --line-item-ids: list<string> # Required. The ID of the line items whose targeting is being updated.
 ]: any -> record<errors: table<code: int, details: list, message: string>, failedLineItemIds: list<string>, updatedLineItemIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2721,8 +2731,8 @@ export def "advertisers-line-items-bulk-edit-assigned-targeting-options create" 
 export def "advertisers-line-items-bulk-list-assigned-targeting-options list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2746,7 +2756,7 @@ export def "advertisers-line-items-bulk-list-assigned-targeting-options list" [
   --page-size: int # Requested page size. The size must be an integer between `1` and `5000`. If unspecified, the default is `5000`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token that lets the client fetch the next page of results. Typically, this is the value of next_page_token returned from the previous call to the `BulkListAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<lineItemAssignedTargetingOptions: table<assignedTargetingOption: record, lineItemId: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "lineItemIds" $line_item_ids "multi") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2764,8 +2774,8 @@ export def "advertisers-line-items-bulk-list-assigned-targeting-options list" [
 export def "advertisers-line-items-bulk-update update" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2788,7 +2798,7 @@ export def "advertisers-line-items-bulk-update update" [
   --update-mask: string # Required. A field mask identifying which fields to update. Only the following fields are currently supported: * entityStatus (format: google-fieldmask)
 ]: any -> record<errors: table<code: int, details: list, message: string>, failedLineItemIds: list<string>, skippedLineItemIds: list<string>, updatedLineItemIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2808,8 +2818,8 @@ export def "advertisers-line-items-bulk-update update" [
 export def "advertisers-line-items-generate-default generate" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2833,7 +2843,7 @@ export def "advertisers-line-items-generate-default generate" [
   --mobile-app: record # A mobile app promoted by a mobile app install line item. — shape: {appId?: string}
 ]: any -> record<advertiserId: string, bidStrategy: record<fixedBid: record<bidAmountMicros: string>, maximizeSpendAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalType: string, raiseBidForDeals: bool>, performanceGoalAutoBid: record<customBiddingAlgorithmId: string, maxAverageCpmBidAmountMicros: string, performanceGoalAmountMicros: string, performanceGoalType: string>>, budget: record<budgetAllocationType: string, budgetUnit: string, maxAmount: string>, campaignId: string, conversionCounting: record<floodlightActivityConfigs: list<record>, postViewCountPercentageMillis: string>, creativeIds: list<string>, displayName: string, entityStatus: string, excludeNewExchanges: bool, flight: record<dateRange: record<endDate: record, startDate: record>, flightDateType: string>, frequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>, insertionOrderId: string, integrationDetails: record<details: string, integrationCode: string>, lineItemId: string, lineItemType: string, mobileApp: record<appId: string, displayName: string, platform: string, publisher: string>, name: string, pacing: record<dailyMaxImpressions: string, dailyMaxMicros: string, pacingPeriod: string, pacingType: string>, partnerCosts: table<costType: string, feeAmount: string, feePercentageMillis: string, feeType: string, invoiceType: string>, partnerRevenueModel: record<markupAmount: string, markupType: string>, reservationType: string, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, updateTime: string, warningMessages: list<string>, youtubeAndPartnersSettings: record<biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, contentCategory: string, inventorySourceSettings: record<includeYoutubeSearch: bool, includeYoutubeVideoPartners: bool, includeYoutubeVideos: bool>, leadFormId: string, linkedMerchantId: string, relatedVideoIds: list<string>, targetFrequency: record<targetCount: string, timeUnit: string, timeUnitCount: int>, thirdPartyMeasurementSettings: record<brandLiftVendorConfigs: list, brandSafetyVendorConfigs: list, reachVendorConfigs: list, viewabilityVendorConfigs: list>, videoAdSequenceSettings: record<minimumDuration: string, steps: list>, viewFrequencyCap: record<maxImpressions: int, maxViews: int, timeUnit: string, timeUnitCount: int, unlimited: bool>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2852,8 +2862,8 @@ export def "advertisers-line-items-generate-default generate" [
 export def "advertisers-location-lists list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2876,7 +2886,7 @@ export def "advertisers-location-lists list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. Defaults to `100` if not set. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListLocationLists` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<locationLists: table<advertiserId: string, displayName: string, locationListId: string, locationType: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -2893,8 +2903,8 @@ export def "advertisers-location-lists list" [
 export def "advertisers-location-lists create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2917,7 +2927,7 @@ export def "advertisers-location-lists create" [
   --location-type: string@location-type-completer # Required. Immutable. The type of location. All locations in the list will share this type.
 ]: any -> record<advertiserId: string, displayName: string, locationListId: string, locationType: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2937,8 +2947,8 @@ export def "advertisers-location-lists update" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2962,7 +2972,7 @@ export def "advertisers-location-lists update" [
   --location-type: string@location-type-completer # Required. Immutable. The type of location. All locations in the list will share this type.
 ]: any -> record<advertiserId: string, displayName: string, locationListId: string, locationType: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
@@ -2983,8 +2993,8 @@ export def "advertisers-location-lists-assigned-locations list" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3007,7 +3017,7 @@ export def "advertisers-location-lists-assigned-locations list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListAssignedLocations` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedLocations: table<assignedLocationId: string, name: string, targetingOptionId: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
@@ -3026,8 +3036,8 @@ export def "advertisers-location-lists-assigned-locations create" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3048,7 +3058,7 @@ export def "advertisers-location-lists-assigned-locations create" [
   --targeting-option-id: string # Required. The ID of the targeting option assigned to the location list. Must be of type TARGETING_TYPE_GEO_REGION.
 ]: any -> record<assignedLocationId: string, name: string, targetingOptionId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
@@ -3070,8 +3080,8 @@ export def "advertisers-location-lists-assigned-locations delete" [
   location_list_id: string
   assigned_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3090,7 +3100,7 @@ export def "advertisers-location-lists-assigned-locations delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
@@ -3111,8 +3121,8 @@ export def "advertisers-location-lists-assigned-locations-bulk-edit create" [
   advertiser_id: string
   location_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3134,7 +3144,7 @@ export def "advertisers-location-lists-assigned-locations-bulk-edit create" [
   --deleted-assigned-locations: list<string> # The IDs of the assigned locations to delete in bulk, specified as a list of assigned_location_ids.
 ]: any -> record<assignedLocations: table<assignedLocationId: string, name: string, targetingOptionId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($location_list_id | is-empty) { error make --unspanned { msg: "path parameter 'locationListId' must be non-empty" } }
@@ -3154,8 +3164,8 @@ export def "advertisers-location-lists-assigned-locations-bulk-edit create" [
 export def "advertisers-manual-triggers list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3178,7 +3188,7 @@ export def "advertisers-manual-triggers list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListManualTriggers` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<manualTriggers: table<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -3195,8 +3205,8 @@ export def "advertisers-manual-triggers list" [
 export def "advertisers-manual-triggers create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3219,7 +3229,7 @@ export def "advertisers-manual-triggers create" [
   --display-name: string # Required. The display name of the manual trigger. Must be UTF-8 encoded with a maximum size of 240 bytes.
 ]: any -> record<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3239,8 +3249,8 @@ export def "advertisers-manual-triggers get" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3259,7 +3269,7 @@ export def "advertisers-manual-triggers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
@@ -3278,8 +3288,8 @@ export def "advertisers-manual-triggers update" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3303,7 +3313,7 @@ export def "advertisers-manual-triggers update" [
   --display-name: string # Required. The display name of the manual trigger. Must be UTF-8 encoded with a maximum size of 240 bytes.
 ]: any -> record<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
@@ -3324,8 +3334,8 @@ export def "advertisers-manual-triggers create-activate" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3346,7 +3356,7 @@ export def "advertisers-manual-triggers create-activate" [
   --body: record
 ]: any -> record<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
@@ -3367,8 +3377,8 @@ export def "advertisers-manual-triggers create-deactivate" [
   advertiser_id: string
   trigger_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3389,7 +3399,7 @@ export def "advertisers-manual-triggers create-deactivate" [
   --body: record
 ]: any -> record<activationDurationMinutes: string, advertiserId: string, displayName: string, latestActivationTime: string, name: string, state: string, triggerId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($trigger_id | is-empty) { error make --unspanned { msg: "path parameter 'triggerId' must be non-empty" } }
@@ -3409,8 +3419,8 @@ export def "advertisers-manual-triggers create-deactivate" [
 export def "advertisers-negative-keyword-lists list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3431,7 +3441,7 @@ export def "advertisers-negative-keyword-lists list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. Defaults to `100` if not set. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListNegativeKeywordLists` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<negativeKeywordLists: table<advertiserId: string, displayName: string, name: string, negativeKeywordListId: string, targetedLineItemCount: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -3448,8 +3458,8 @@ export def "advertisers-negative-keyword-lists list" [
 export def "advertisers-negative-keyword-lists create" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3470,7 +3480,7 @@ export def "advertisers-negative-keyword-lists create" [
   --display-name: string # Required. The display name of the negative keyword list. Must be UTF-8 encoded with a maximum size of 255 bytes.
 ]: any -> record<advertiserId: string, displayName: string, name: string, negativeKeywordListId: string, targetedLineItemCount: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3490,8 +3500,8 @@ export def "advertisers-negative-keyword-lists update" [
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3513,7 +3523,7 @@ export def "advertisers-negative-keyword-lists update" [
   --display-name: string # Required. The display name of the negative keyword list. Must be UTF-8 encoded with a maximum size of 255 bytes.
 ]: any -> record<advertiserId: string, displayName: string, name: string, negativeKeywordListId: string, targetedLineItemCount: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
@@ -3534,8 +3544,8 @@ export def "advertisers-negative-keyword-lists-negative-keywords list" [
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3558,7 +3568,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords list" [
   --page-size: int # Requested page size. Must be between `1` and `1000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListNegativeKeywords` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<negativeKeywords: table<keywordValue: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
@@ -3578,8 +3588,8 @@ export def "advertisers-negative-keyword-lists-negative-keywords delete" [
   negative_keyword_list_id: string
   keyword_value: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3598,7 +3608,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
@@ -3619,8 +3629,8 @@ export def "advertisers-negative-keyword-lists-negative-keywords-bulk-edit creat
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3642,7 +3652,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords-bulk-edit creat
   --deleted-negative-keywords: list<string> # The negative keywords to delete in batch, specified as a list of keyword_values.
 ]: any -> record<negativeKeywords: table<keywordValue: string, name: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
@@ -3664,8 +3674,8 @@ export def "advertisers-negative-keyword-lists-negative-keywords-replace update"
   advertiser_id: string
   negative_keyword_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3686,7 +3696,7 @@ export def "advertisers-negative-keyword-lists-negative-keywords-replace update"
   --new-negative-keywords: list # The negative keywords that will replace the existing keywords in the negative keyword list, specified as a list of NegativeKeywords. — item shape: {keywordValue?: string}
 ]: any -> record<negativeKeywords: table<keywordValue: string, name: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($negative_keyword_list_id | is-empty) { error make --unspanned { msg: "path parameter 'negativeKeywordListId' must be non-empty" } }
@@ -3707,8 +3717,8 @@ export def "advertisers-targeting-types-assigned-targeting-options list" [
   advertiser_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3731,7 +3741,7 @@ export def "advertisers-targeting-types-assigned-targeting-options list" [
   --page-size: int # Requested page size. Must be between `1` and `5000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListAdvertiserAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -3798,8 +3808,8 @@ export def "advertisers-targeting-types-assigned-targeting-options create" [
   advertiser_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3867,7 +3877,7 @@ export def "advertisers-targeting-types-assigned-targeting-options create" [
   --youtube-video-details: record # Details for YouTube video assigned targeting option. This will be populated in the youtube_video_details field when targeting_type is `TARGETING_TYPE_YOUTUBE_VIDEO`. — shape: {negative?: bool, videoId?: string}
 ]: any -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -3889,8 +3899,8 @@ export def "advertisers-targeting-types-assigned-targeting-options delete" [
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3909,7 +3919,7 @@ export def "advertisers-targeting-types-assigned-targeting-options delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -3930,8 +3940,8 @@ export def "advertisers-targeting-types-assigned-targeting-options get" [
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3950,7 +3960,7 @@ export def "advertisers-targeting-types-assigned-targeting-options get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -3969,8 +3979,8 @@ export def "advertisers-targeting-types-assigned-targeting-options get" [
 export def "advertisers-youtube-ad-group-ads list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3993,7 +4003,7 @@ export def "advertisers-youtube-ad-group-ads list" [
   --page-size: int # Requested page size. Must be between `1` and `100`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListYoutubeAdGroupAds` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<nextPageToken: string, youtubeAdGroupAds: table<adGroupAdId: string, adGroupId: string, adUrls: list, advertiserId: string, audioAd: record, bumperAd: record, displayName: string, displayVideoSourceAd: record, entityStatus: string, inStreamAd: record, mastheadAd: record, name: string, nonSkippableAd: record, videoDiscoverAd: record, videoPerformanceAd: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -4011,8 +4021,8 @@ export def "advertisers-youtube-ad-group-ads get" [
   advertiser_id: string
   youtube_ad_group_ad_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4031,7 +4041,7 @@ export def "advertisers-youtube-ad-group-ads get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<adGroupAdId: string, adGroupId: string, adUrls: table<type: string, url: string>, advertiserId: string, audioAd: record<displayUrl: string, finalUrl: string, trackingUrl: string, video: record<id: string, unavailableReason: string>>, bumperAd: record<commonInStreamAttribute: record<actionButtonLabel: string, actionHeadline: string, companionBanner: record, displayUrl: string, finalUrl: string, trackingUrl: string, video: record>>, displayName: string, displayVideoSourceAd: record<creativeId: string>, entityStatus: string, inStreamAd: record<commonInStreamAttribute: record<actionButtonLabel: string, actionHeadline: string, companionBanner: record, displayUrl: string, finalUrl: string, trackingUrl: string, video: record>, customParameters: record>, mastheadAd: record<autoplayVideoDuration: string, autoplayVideoStartMillisecond: string, callToActionButtonLabel: string, callToActionFinalUrl: string, callToActionTrackingUrl: string, companionYoutubeVideos: list<record>, description: string, headline: string, showChannelArt: bool, video: record<id: string, unavailableReason: string>, videoAspectRatio: string>, name: string, nonSkippableAd: record<commonInStreamAttribute: record<actionButtonLabel: string, actionHeadline: string, companionBanner: record, displayUrl: string, finalUrl: string, trackingUrl: string, video: record>, customParameters: record>, videoDiscoverAd: record<description1: string, description2: string, headline: string, thumbnail: string, video: record<id: string, unavailableReason: string>>, videoPerformanceAd: record<actionButtonLabels: list<string>, companionBanners: list<record>, customParameters: record, descriptions: list<string>, displayUrlBreadcrumb1: string, displayUrlBreadcrumb2: string, domain: string, finalUrl: string, headlines: list<string>, longHeadlines: list<string>, trackingUrl: string, videos: list<record>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($youtube_ad_group_ad_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupAdId' must be non-empty" } }
@@ -4049,8 +4059,8 @@ export def "advertisers-youtube-ad-group-ads get" [
 export def "advertisers-youtube-ad-groups list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4073,7 +4083,7 @@ export def "advertisers-youtube-ad-groups list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListYoutubeAdGroups` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<nextPageToken: string, youtubeAdGroups: table<adGroupFormat: string, adGroupId: string, advertiserId: string, biddingStrategy: record, displayName: string, entityStatus: string, lineItemId: string, name: string, productFeedData: record, targetingExpansion: record, youtubeAdIds: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -4091,8 +4101,8 @@ export def "advertisers-youtube-ad-groups get" [
   advertiser_id: string
   youtube_ad_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4111,7 +4121,7 @@ export def "advertisers-youtube-ad-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<adGroupFormat: string, adGroupId: string, advertiserId: string, biddingStrategy: record<adGroupEffectiveTargetCpaSource: string, adGroupEffectiveTargetCpaValue: string, type: string, value: string>, displayName: string, entityStatus: string, lineItemId: string, name: string, productFeedData: record<isFeedDisabled: bool, productMatchDimensions: list<record>, productMatchType: string>, targetingExpansion: record<excludeFirstPartyAudience: bool, targetingExpansionLevel: string>, youtubeAdIds: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($youtube_ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupId' must be non-empty" } }
@@ -4131,8 +4141,8 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
   youtube_ad_group_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4155,7 +4165,7 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
   --page-size: int # Requested page size. Must be between `1` and `5000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListYoutubeAdGroupAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($youtube_ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupId' must be non-empty" } }
@@ -4177,8 +4187,8 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4197,7 +4207,7 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   if ($youtube_ad_group_id | is-empty) { error make --unspanned { msg: "path parameter 'youtubeAdGroupId' must be non-empty" } }
@@ -4217,8 +4227,8 @@ export def "advertisers-youtube-ad-groups-targeting-types-assigned-targeting-opt
 export def "advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-options list" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4242,7 +4252,7 @@ export def "advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-
   --page-token: string # A token that lets the client fetch the next page of results. Typically, this is the value of next_page_token returned from the previous call to the `BulkListAdGroupAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
   --youtube-ad-group-ids: list<string> # Required. The IDs of the youtube ad groups to list assigned targeting options for.
 ]: nothing -> record<nextPageToken: string, youtubeAdGroupAssignedTargetingOptions: table<assignedTargetingOption: record, youtubeAdGroupId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "youtubeAdGroupIds" $youtube_ad_group_ids "multi")] | flatten | str join "&"
@@ -4259,8 +4269,8 @@ export def "advertisers-youtube-ad-groups-bulk-list-ad-group-assigned-targeting-
 export def "advertisers get-audit" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4280,7 +4290,7 @@ export def "advertisers get-audit" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --read-mask: string # Optional. The specific fields to return. If no mask is specified, all fields in the response proto will be filled. Valid values are: * usedLineItemsCount * usedInsertionOrdersCount * usedCampaignsCount * channelsCount * negativelyTargetedChannelsCount * negativeKeywordListsCount * adGroupCriteriaCount * campaignCriteriaCount
 ]: nothing -> record<adGroupCriteriaCount: string, campaignCriteriaCount: string, channelsCount: string, negativeKeywordListsCount: string, negativelyTargetedChannelsCount: string, usedCampaignsCount: string, usedInsertionOrdersCount: string, usedLineItemsCount: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "readMask" $read_mask "scalar")] | flatten | str join "&"
@@ -4299,8 +4309,8 @@ export def "advertisers get-audit" [
 export def "advertisers create-edit-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4322,7 +4332,7 @@ export def "advertisers create-edit-assigned-targeting-options" [
   --delete-requests: list # The assigned targeting options to delete in batch, specified as a list of `DeleteAssignedTargetingOptionsRequest`. Supported targeting types: * `TARGETING_TYPE_CHANNEL` * `TARGETING_TYPE_DIGITAL_CONTENT_LABEL_EXCLUSION` * `TARGETING_TYPE_OMID` * `TARGETING_TYPE_SENSITIVE_CATEGORY_EXCLUSION` — item shape: {assignedTargetingOptionIds?: list<string>, ... (1 more fields)}
 ]: any -> record<createdAssignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4341,8 +4351,8 @@ export def "advertisers create-edit-assigned-targeting-options" [
 export def "advertisers list-assigned-targeting-options" [
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4365,7 +4375,7 @@ export def "advertisers list-assigned-targeting-options" [
   --page-size: int # Requested page size. The size must be an integer between `1` and `5000`. If unspecified, the default is '5000'. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token that lets the client fetch the next page of results. Typically, this is the value of next_page_token returned from the previous call to `BulkListAdvertiserAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -4381,8 +4391,8 @@ export def "advertisers list-assigned-targeting-options" [
 # operationId: displayvideo.combinedAudiences.list
 export def "combined-audiences list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4407,7 +4417,7 @@ export def "combined-audiences list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCombinedAudiences` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the fetched combined audiences.
 ]: nothing -> record<combinedAudiences: table<combinedAudienceId: string, displayName: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/combinedAudiences" $qp)
@@ -4423,8 +4433,8 @@ export def "combined-audiences list" [
 export def "combined-audiences get" [
   combined_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4445,7 +4455,7 @@ export def "combined-audiences get" [
   --advertiser-id: string # The ID of the advertiser that has access to the fetched combined audience.
   --partner-id: string # The ID of the partner that has access to the fetched combined audience.
 ]: nothing -> record<combinedAudienceId: string, displayName: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($combined_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'combinedAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -4461,8 +4471,8 @@ export def "combined-audiences get" [
 # operationId: displayvideo.customBiddingAlgorithms.list
 export def "custom-bidding-algorithms list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4487,7 +4497,7 @@ export def "custom-bidding-algorithms list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCustomBiddingAlgorithms` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the DV360 partner that has access to the custom bidding algorithm.
 ]: nothing -> record<customBiddingAlgorithms: table<advertiserId: string, customBiddingAlgorithmId: string, customBiddingAlgorithmType: string, displayName: string, entityStatus: string, modelDetails: list, name: string, partnerId: string, sharedAdvertiserIds: list>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/customBiddingAlgorithms" $qp)
@@ -4503,8 +4513,8 @@ export def "custom-bidding-algorithms list" [
 # --modelDetails item shape: {advertiserId?: string, readinessState?: "READINESS_STATE_UNSPECIFIED"|"READINESS_STATE_ACTIVE"|"READINESS_STATE_INSUFFICIENT_DATA"|"READINESS_STATE_TRAINING"|"READINESS_STATE_NO_VALID_SCRIPT"}
 export def "custom-bidding-algorithms create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4530,7 +4540,7 @@ export def "custom-bidding-algorithms create" [
   --shared-advertiser-ids: list<string> # The IDs of the advertisers who have access to this algorithm. If advertiser_id is set, this field will only consist of that value. This field will not be set if the algorithm [`owner`](/display-video/api/reference/rest/v1/customBiddingAlgorithms#CustomBiddingAlgorithm.FIELDS.oneof_owner) is a partner and is being retrieved using an advertiser [`accessor`](/display-video/api/reference/rest/v1/customBiddingAlgorithms/list#body.QUERY_PARAMETERS.oneof_accessor).
 ]: any -> record<advertiserId: string, customBiddingAlgorithmId: string, customBiddingAlgorithmType: string, displayName: string, entityStatus: string, modelDetails: table<advertiserId: string, readinessState: string, suspensionState: string>, name: string, partnerId: string, sharedAdvertiserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/customBiddingAlgorithms" $qp)
@@ -4548,8 +4558,8 @@ export def "custom-bidding-algorithms create" [
 export def "custom-bidding-algorithms get" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4570,7 +4580,7 @@ export def "custom-bidding-algorithms get" [
   --advertiser-id: string # The ID of the DV360 partner that has access to the custom bidding algorithm.
   --partner-id: string # The ID of the DV360 partner that has access to the custom bidding algorithm.
 ]: nothing -> record<advertiserId: string, customBiddingAlgorithmId: string, customBiddingAlgorithmType: string, displayName: string, entityStatus: string, modelDetails: table<advertiserId: string, readinessState: string, suspensionState: string>, name: string, partnerId: string, sharedAdvertiserIds: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -4588,8 +4598,8 @@ export def "custom-bidding-algorithms get" [
 export def "custom-bidding-algorithms update" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4616,7 +4626,7 @@ export def "custom-bidding-algorithms update" [
   --shared-advertiser-ids: list<string> # The IDs of the advertisers who have access to this algorithm. If advertiser_id is set, this field will only consist of that value. This field will not be set if the algorithm [`owner`](/display-video/api/reference/rest/v1/customBiddingAlgorithms#CustomBiddingAlgorithm.FIELDS.oneof_owner) is a partner and is being retrieved using an advertiser [`accessor`](/display-video/api/reference/rest/v1/customBiddingAlgorithms/list#body.QUERY_PARAMETERS.oneof_accessor).
 ]: any -> record<advertiserId: string, customBiddingAlgorithmId: string, customBiddingAlgorithmType: string, displayName: string, entityStatus: string, modelDetails: table<advertiserId: string, readinessState: string, suspensionState: string>, name: string, partnerId: string, sharedAdvertiserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -4635,8 +4645,8 @@ export def "custom-bidding-algorithms update" [
 export def "custom-bidding-algorithms-scripts list" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4660,7 +4670,7 @@ export def "custom-bidding-algorithms-scripts list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCustomBiddingScripts` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that owns the parent custom bidding algorithm. Only this partner will have write access to this custom bidding script.
 ]: nothing -> record<customBiddingScripts: table<active: bool, createTime: string, customBiddingAlgorithmId: string, customBiddingScriptId: string, errors: list, name: string, script: record, state: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -4679,8 +4689,8 @@ export def "custom-bidding-algorithms-scripts list" [
 export def "custom-bidding-algorithms-scripts create" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4703,7 +4713,7 @@ export def "custom-bidding-algorithms-scripts create" [
   --script: record # The reference to the uploaded custom bidding script file. — shape: {resourceName?: string}
 ]: any -> record<active: bool, createTime: string, customBiddingAlgorithmId: string, customBiddingScriptId: string, errors: table<column: string, errorCode: string, errorMessage: string, line: string>, name: string, script: record<resourceName: string>, state: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -4723,8 +4733,8 @@ export def "custom-bidding-algorithms-scripts get" [
   custom_bidding_algorithm_id: string
   custom_bidding_script_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4745,7 +4755,7 @@ export def "custom-bidding-algorithms-scripts get" [
   --advertiser-id: string # The ID of the advertiser that owns the parent custom bidding algorithm.
   --partner-id: string # The ID of the partner that owns the parent custom bidding algorithm. Only this partner will have write access to this custom bidding script.
 ]: nothing -> record<active: bool, createTime: string, customBiddingAlgorithmId: string, customBiddingScriptId: string, errors: table<column: string, errorCode: string, errorMessage: string, line: string>, name: string, script: record<resourceName: string>, state: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   if ($custom_bidding_script_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingScriptId' must be non-empty" } }
@@ -4763,8 +4773,8 @@ export def "custom-bidding-algorithms-scripts get" [
 export def "custom-bidding-algorithms upload-script" [
   custom_bidding_algorithm_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4785,7 +4795,7 @@ export def "custom-bidding-algorithms upload-script" [
   --advertiser-id: string # The ID of the advertiser that owns the parent custom bidding algorithm.
   --partner-id: string # The ID of the partner that owns the parent custom bidding algorithm. Only this partner will have write access to this custom bidding script.
 ]: nothing -> record<resourceName: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_bidding_algorithm_id | is-empty) { error make --unspanned { msg: "path parameter 'customBiddingAlgorithmId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -4801,8 +4811,8 @@ export def "custom-bidding-algorithms upload-script" [
 # operationId: displayvideo.customLists.list
 export def "custom-lists list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4826,7 +4836,7 @@ export def "custom-lists list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListCustomLists` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<customLists: table<customListId: string, displayName: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/customLists" $qp)
@@ -4842,8 +4852,8 @@ export def "custom-lists list" [
 export def "custom-lists get" [
   custom_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4863,7 +4873,7 @@ export def "custom-lists get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # The ID of the DV360 advertiser that has access to the fetched custom lists.
 ]: nothing -> record<customListId: string, displayName: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($custom_list_id | is-empty) { error make --unspanned { msg: "path parameter 'customListId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
@@ -4879,8 +4889,8 @@ export def "custom-lists get" [
 # operationId: displayvideo.firstAndThirdPartyAudiences.list
 export def "first-and-third-party-audiences list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4905,7 +4915,7 @@ export def "first-and-third-party-audiences list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListFirstAndThirdPartyAudiences` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the fetched first and third party audiences.
 ]: nothing -> record<firstAndThirdPartyAudiences: table<activeDisplayAudienceSize: string, appId: string, audienceSource: string, audienceType: string, contactInfoList: record, description: string, displayAudienceSize: string, displayDesktopAudienceSize: string, displayMobileAppAudienceSize: string, displayMobileWebAudienceSize: string, displayName: string, firstAndThirdPartyAudienceId: string, firstAndThirdPartyAudienceType: string, gmailAudienceSize: string, membershipDurationDays: string, mobileDeviceIdList: record, name: string, youtubeAudienceSize: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/firstAndThirdPartyAudiences" $qp)
@@ -4922,8 +4932,8 @@ export def "first-and-third-party-audiences list" [
 # --mobileDeviceIdList shape: {mobileDeviceIds?: list<string>}
 export def "first-and-third-party-audiences create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4952,7 +4962,7 @@ export def "first-and-third-party-audiences create" [
   --mobile-device-id-list: record # Wrapper message for a list of mobile device IDs defining Customer Match audience members. — shape: {mobileDeviceIds?: list<string>}
 ]: any -> record<activeDisplayAudienceSize: string, appId: string, audienceSource: string, audienceType: string, contactInfoList: record<contactInfos: list<record>>, description: string, displayAudienceSize: string, displayDesktopAudienceSize: string, displayMobileAppAudienceSize: string, displayMobileWebAudienceSize: string, displayName: string, firstAndThirdPartyAudienceId: string, firstAndThirdPartyAudienceType: string, gmailAudienceSize: string, membershipDurationDays: string, mobileDeviceIdList: record<mobileDeviceIds: list<string>>, name: string, youtubeAudienceSize: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/firstAndThirdPartyAudiences" $qp)
@@ -4970,8 +4980,8 @@ export def "first-and-third-party-audiences create" [
 export def "first-and-third-party-audiences get" [
   first_and_third_party_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4992,7 +5002,7 @@ export def "first-and-third-party-audiences get" [
   --advertiser-id: string # The ID of the advertiser that has access to the fetched first and third party audience.
   --partner-id: string # The ID of the partner that has access to the fetched first and third party audience.
 ]: nothing -> record<activeDisplayAudienceSize: string, appId: string, audienceSource: string, audienceType: string, contactInfoList: record<contactInfos: list<record>>, description: string, displayAudienceSize: string, displayDesktopAudienceSize: string, displayMobileAppAudienceSize: string, displayMobileWebAudienceSize: string, displayName: string, firstAndThirdPartyAudienceId: string, firstAndThirdPartyAudienceType: string, gmailAudienceSize: string, membershipDurationDays: string, mobileDeviceIdList: record<mobileDeviceIds: list<string>>, name: string, youtubeAudienceSize: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($first_and_third_party_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'firstAndThirdPartyAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5011,8 +5021,8 @@ export def "first-and-third-party-audiences get" [
 export def "first-and-third-party-audiences update" [
   first_and_third_party_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5042,7 +5052,7 @@ export def "first-and-third-party-audiences update" [
   --mobile-device-id-list: record # Wrapper message for a list of mobile device IDs defining Customer Match audience members. — shape: {mobileDeviceIds?: list<string>}
 ]: any -> record<activeDisplayAudienceSize: string, appId: string, audienceSource: string, audienceType: string, contactInfoList: record<contactInfos: list<record>>, description: string, displayAudienceSize: string, displayDesktopAudienceSize: string, displayMobileAppAudienceSize: string, displayMobileWebAudienceSize: string, displayName: string, firstAndThirdPartyAudienceId: string, firstAndThirdPartyAudienceType: string, gmailAudienceSize: string, membershipDurationDays: string, mobileDeviceIdList: record<mobileDeviceIds: list<string>>, name: string, youtubeAudienceSize: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($first_and_third_party_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'firstAndThirdPartyAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -5063,8 +5073,8 @@ export def "first-and-third-party-audiences update" [
 export def "first-and-third-party-audiences create-edit-customer-match-members" [
   first_and_third_party_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5087,7 +5097,7 @@ export def "first-and-third-party-audiences create-edit-customer-match-members" 
   --advertiser-id: string # Required. The ID of the owner advertiser of the updated Customer Match FirstAndThirdPartyAudience. (format: int64)
 ]: any -> record<firstAndThirdPartyAudienceId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($first_and_third_party_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'firstAndThirdPartyAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5106,8 +5116,8 @@ export def "first-and-third-party-audiences create-edit-customer-match-members" 
 export def "floodlight-groups get" [
   floodlight_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5127,7 +5137,7 @@ export def "floodlight-groups get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --partner-id: string # Required. The partner context by which the Floodlight group is being accessed.
 ]: nothing -> record<activeViewConfig: record<displayName: string, minimumDuration: string, minimumQuartile: string, minimumViewability: string, minimumVolume: string>, customVariables: record, displayName: string, floodlightGroupId: string, lookbackWindow: record<clickDays: int, impressionDays: int>, name: string, webTagType: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($floodlight_group_id | is-empty) { error make --unspanned { msg: "path parameter 'floodlightGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5143,8 +5153,8 @@ export def "floodlight-groups get" [
 # operationId: displayvideo.googleAudiences.list
 export def "google-audiences list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5169,7 +5179,7 @@ export def "google-audiences list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListGoogleAudiences` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the fetched Google audiences.
 ]: nothing -> record<googleAudiences: table<displayName: string, googleAudienceId: string, googleAudienceType: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/googleAudiences" $qp)
@@ -5185,8 +5195,8 @@ export def "google-audiences list" [
 export def "google-audiences get" [
   google_audience_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5207,7 +5217,7 @@ export def "google-audiences get" [
   --advertiser-id: string # The ID of the advertiser that has access to the fetched Google audience.
   --partner-id: string # The ID of the partner that has access to the fetched Google audience.
 ]: nothing -> record<displayName: string, googleAudienceId: string, googleAudienceType: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($google_audience_id | is-empty) { error make --unspanned { msg: "path parameter 'googleAudienceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5223,8 +5233,8 @@ export def "google-audiences get" [
 # operationId: displayvideo.guaranteedOrders.list
 export def "guaranteed-orders list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5249,7 +5259,7 @@ export def "guaranteed-orders list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListGuaranteedOrders` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the guaranteed order.
 ]: nothing -> record<guaranteedOrders: table<defaultAdvertiserId: string, defaultCampaignId: string, displayName: string, exchange: string, guaranteedOrderId: string, legacyGuaranteedOrderId: string, name: string, publisherName: string, readAccessInherited: bool, readAdvertiserIds: list, readWriteAdvertiserId: string, readWritePartnerId: string, status: record, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/guaranteedOrders" $qp)
@@ -5265,8 +5275,8 @@ export def "guaranteed-orders list" [
 # --status shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
 export def "guaranteed-orders create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5297,7 +5307,7 @@ export def "guaranteed-orders create" [
   --status: record # The status settings of the guaranteed order. — shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
 ]: any -> record<defaultAdvertiserId: string, defaultCampaignId: string, displayName: string, exchange: string, guaranteedOrderId: string, legacyGuaranteedOrderId: string, name: string, publisherName: string, readAccessInherited: bool, readAdvertiserIds: list<string>, readWriteAdvertiserId: string, readWritePartnerId: string, status: record<configStatus: string, entityPauseReason: string, entityStatus: string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/guaranteedOrders" $qp)
@@ -5315,8 +5325,8 @@ export def "guaranteed-orders create" [
 export def "guaranteed-orders get" [
   guaranteed_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5337,7 +5347,7 @@ export def "guaranteed-orders get" [
   --advertiser-id: string # The ID of the advertiser that has access to the guaranteed order.
   --partner-id: string # The ID of the partner that has access to the guaranteed order.
 ]: nothing -> record<defaultAdvertiserId: string, defaultCampaignId: string, displayName: string, exchange: string, guaranteedOrderId: string, legacyGuaranteedOrderId: string, name: string, publisherName: string, readAccessInherited: bool, readAdvertiserIds: list<string>, readWriteAdvertiserId: string, readWritePartnerId: string, status: record<configStatus: string, entityPauseReason: string, entityStatus: string>, updateTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($guaranteed_order_id | is-empty) { error make --unspanned { msg: "path parameter 'guaranteedOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5355,8 +5365,8 @@ export def "guaranteed-orders get" [
 export def "guaranteed-orders update" [
   guaranteed_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5388,7 +5398,7 @@ export def "guaranteed-orders update" [
   --status: record # The status settings of the guaranteed order. — shape: {entityPauseReason?: string, entityStatus?: "ENTITY_STATUS_UNSPECIFIED"|"ENTITY_STATUS_ACTIVE"|"ENTITY_STATUS_ARCHIVED"|"ENTITY_STATUS_DRAFT"|"ENTITY_STATUS_PAUSED"|"ENTITY_STATUS_SCHEDULED_FOR_DELETION"}
 ]: any -> record<defaultAdvertiserId: string, defaultCampaignId: string, displayName: string, exchange: string, guaranteedOrderId: string, legacyGuaranteedOrderId: string, name: string, publisherName: string, readAccessInherited: bool, readAdvertiserIds: list<string>, readWriteAdvertiserId: string, readWritePartnerId: string, status: record<configStatus: string, entityPauseReason: string, entityStatus: string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($guaranteed_order_id | is-empty) { error make --unspanned { msg: "path parameter 'guaranteedOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -5407,8 +5417,8 @@ export def "guaranteed-orders update" [
 export def "guaranteed-orders get-edit-accessors" [
   guaranteed_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5432,7 +5442,7 @@ export def "guaranteed-orders get-edit-accessors" [
   --removed-advertisers: list<string> # The advertisers to remove as read accessors to the guaranteed order.
 ]: any -> record<readAccessInherited: bool, readAdvertiserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($guaranteed_order_id | is-empty) { error make --unspanned { msg: "path parameter 'guaranteedOrderId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5450,8 +5460,8 @@ export def "guaranteed-orders get-edit-accessors" [
 # operationId: displayvideo.inventorySourceGroups.list
 export def "inventory-source-groups list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5476,7 +5486,7 @@ export def "inventory-source-groups list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListInventorySources` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the inventory source group. A partner cannot access advertiser-owned inventory source groups.
 ]: nothing -> record<inventorySourceGroups: table<displayName: string, inventorySourceGroupId: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/inventorySourceGroups" $qp)
@@ -5491,8 +5501,8 @@ export def "inventory-source-groups list" [
 # operationId: displayvideo.inventorySourceGroups.create
 export def "inventory-source-groups create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5515,7 +5525,7 @@ export def "inventory-source-groups create" [
   --display-name: string # Required. The display name of the inventory source group. Must be UTF-8 encoded with a maximum size of 240 bytes.
 ]: any -> record<displayName: string, inventorySourceGroupId: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/inventorySourceGroups" $qp)
@@ -5533,8 +5543,8 @@ export def "inventory-source-groups create" [
 export def "inventory-source-groups delete" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5555,7 +5565,7 @@ export def "inventory-source-groups delete" [
   --advertiser-id: string # The ID of the advertiser that owns the inventory source group. The parent partner does not have access to this group.
   --partner-id: string # The ID of the partner that owns the inventory source group. Only this partner has write access to this group.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5572,8 +5582,8 @@ export def "inventory-source-groups delete" [
 export def "inventory-source-groups get" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5594,7 +5604,7 @@ export def "inventory-source-groups get" [
   --advertiser-id: string # The ID of the advertiser that has access to the inventory source group. If an inventory source group is partner-owned, only advertisers to which the group is explicitly shared can access the group.
   --partner-id: string # The ID of the partner that has access to the inventory source group. A partner cannot access an advertiser-owned inventory source group.
 ]: nothing -> record<displayName: string, inventorySourceGroupId: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5611,8 +5621,8 @@ export def "inventory-source-groups get" [
 export def "inventory-source-groups-assigned-inventory-sources list" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5637,7 +5647,7 @@ export def "inventory-source-groups-assigned-inventory-sources list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListAssignedInventorySources` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the assignment. If the parent inventory source group is advertiser-owned, the assignment cannot be accessed via a partner.
 ]: nothing -> record<assignedInventorySources: table<assignedInventorySourceId: string, inventorySourceId: string, name: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5654,8 +5664,8 @@ export def "inventory-source-groups-assigned-inventory-sources list" [
 export def "inventory-source-groups-assigned-inventory-sources create" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5678,7 +5688,7 @@ export def "inventory-source-groups-assigned-inventory-sources create" [
   --inventory-source-id: string # Required. The ID of the inventory source entity being targeted.
 ]: any -> record<assignedInventorySourceId: string, inventorySourceId: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5698,8 +5708,8 @@ export def "inventory-source-groups-assigned-inventory-sources delete" [
   inventory_source_group_id: string
   assigned_inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5720,7 +5730,7 @@ export def "inventory-source-groups-assigned-inventory-sources delete" [
   --advertiser-id: string # The ID of the advertiser that owns the parent inventory source group. The parent partner does not have access to this assigned inventory source.
   --partner-id: string # The ID of the partner that owns the parent inventory source group. Only this partner has write access to this assigned inventory source.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   if ($assigned_inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'assignedInventorySourceId' must be non-empty" } }
@@ -5739,8 +5749,8 @@ export def "inventory-source-groups-assigned-inventory-sources delete" [
 export def "inventory-source-groups-assigned-inventory-sources-bulk-edit create" [
   inventory_source_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5764,7 +5774,7 @@ export def "inventory-source-groups-assigned-inventory-sources-bulk-edit create"
   --partner-id: string # The ID of the partner that owns the inventory source group. Only this partner has write access to these assigned inventory sources. (format: int64)
 ]: any -> record<assignedInventorySources: table<assignedInventorySourceId: string, inventorySourceId: string, name: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_group_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceGroupId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5782,8 +5792,8 @@ export def "inventory-source-groups-assigned-inventory-sources-bulk-edit create"
 # operationId: displayvideo.inventorySources.list
 export def "inventory-sources list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5808,7 +5818,7 @@ export def "inventory-sources list" [
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListInventorySources` method. If not specified, the first page of results will be returned.
   --partner-id: string # The ID of the partner that has access to the inventory source.
 ]: nothing -> record<inventorySources: table<commitment: string, creativeConfigs: list, dealId: string, deliveryMethod: string, displayName: string, exchange: string, guaranteedOrderId: string, inventorySourceId: string, inventorySourceProductType: string, inventorySourceType: string, name: string, publisherName: string, rateDetails: record, readAdvertiserIds: list, readPartnerIds: list, readWriteAccessors: record, status: record, subSitePropertyId: string, timeRange: record, updateTime: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/inventorySources" $qp)
@@ -5828,8 +5838,8 @@ export def "inventory-sources list" [
 # --timeRange shape: {endTime?: string, startTime?: string}
 export def "inventory-sources create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5865,7 +5875,7 @@ export def "inventory-sources create" [
   --time-range: record # A time range. — shape: {endTime?: string, startTime?: string}
 ]: any -> record<commitment: string, creativeConfigs: table<creativeType: string, displayCreativeConfig: record, videoCreativeConfig: record>, dealId: string, deliveryMethod: string, displayName: string, exchange: string, guaranteedOrderId: string, inventorySourceId: string, inventorySourceProductType: string, inventorySourceType: string, name: string, publisherName: string, rateDetails: record<inventorySourceRateType: string, minimumSpend: record<currencyCode: string, nanos: int, units: string>, rate: record<currencyCode: string, nanos: int, units: string>, unitsPurchased: string>, readAdvertiserIds: list<string>, readPartnerIds: list<string>, readWriteAccessors: record<advertisers: record<advertiserIds: list>, partner: record<partnerId: string>>, status: record<configStatus: string, entityPauseReason: string, entityStatus: string, sellerPauseReason: string, sellerStatus: string>, subSitePropertyId: string, timeRange: record<endTime: string, startTime: string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/inventorySources" $qp)
@@ -5883,8 +5893,8 @@ export def "inventory-sources create" [
 export def "inventory-sources get" [
   inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5904,7 +5914,7 @@ export def "inventory-sources get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --partner-id: string # Required. The ID of the DV360 partner to which the fetched inventory source is permissioned.
 ]: nothing -> record<commitment: string, creativeConfigs: table<creativeType: string, displayCreativeConfig: record, videoCreativeConfig: record>, dealId: string, deliveryMethod: string, displayName: string, exchange: string, guaranteedOrderId: string, inventorySourceId: string, inventorySourceProductType: string, inventorySourceType: string, name: string, publisherName: string, rateDetails: record<inventorySourceRateType: string, minimumSpend: record<currencyCode: string, nanos: int, units: string>, rate: record<currencyCode: string, nanos: int, units: string>, unitsPurchased: string>, readAdvertiserIds: list<string>, readPartnerIds: list<string>, readWriteAccessors: record<advertisers: record<advertiserIds: list>, partner: record<partnerId: string>>, status: record<configStatus: string, entityPauseReason: string, entityStatus: string, sellerPauseReason: string, sellerStatus: string>, subSitePropertyId: string, timeRange: record<endTime: string, startTime: string>, updateTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "partnerId" $partner_id "scalar")] | flatten | str join "&"
@@ -5926,8 +5936,8 @@ export def "inventory-sources get" [
 export def "inventory-sources update" [
   inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5964,7 +5974,7 @@ export def "inventory-sources update" [
   --time-range: record # A time range. — shape: {endTime?: string, startTime?: string}
 ]: any -> record<commitment: string, creativeConfigs: table<creativeType: string, displayCreativeConfig: record, videoCreativeConfig: record>, dealId: string, deliveryMethod: string, displayName: string, exchange: string, guaranteedOrderId: string, inventorySourceId: string, inventorySourceProductType: string, inventorySourceType: string, name: string, publisherName: string, rateDetails: record<inventorySourceRateType: string, minimumSpend: record<currencyCode: string, nanos: int, units: string>, rate: record<currencyCode: string, nanos: int, units: string>, unitsPurchased: string>, readAdvertiserIds: list<string>, readPartnerIds: list<string>, readWriteAccessors: record<advertisers: record<advertiserIds: list>, partner: record<partnerId: string>>, status: record<configStatus: string, entityPauseReason: string, entityStatus: string, sellerPauseReason: string, sellerStatus: string>, subSitePropertyId: string, timeRange: record<endTime: string, startTime: string>, updateTime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "partnerId" $partner_id "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -5984,8 +5994,8 @@ export def "inventory-sources update" [
 export def "inventory-sources get-edit-write-accessors" [
   inventory_source_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6008,7 +6018,7 @@ export def "inventory-sources get-edit-write-accessors" [
   --partner-id: string # Required. The partner context by which the accessors change is being made. (format: int64)
 ]: any -> record<advertisers: record<advertiserIds: list<string>>, partner: record<partnerId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($inventory_source_id | is-empty) { error make --unspanned { msg: "path parameter 'inventorySourceId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6026,8 +6036,8 @@ export def "inventory-sources get-edit-write-accessors" [
 # operationId: displayvideo.partners.list
 export def "partners list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6050,7 +6060,7 @@ export def "partners list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListPartners` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<nextPageToken: string, partners: table<adServerConfig: record, dataAccessConfig: record, displayName: string, entityStatus: string, exchangeConfig: record, generalConfig: record, name: string, partnerId: string, updateTime: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/partners" $qp)
@@ -6066,8 +6076,8 @@ export def "partners list" [
 export def "partners get" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6086,7 +6096,7 @@ export def "partners get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<adServerConfig: record<measurementConfig: record<dv360ToCmCostReportingEnabled: bool, dv360ToCmDataSharingEnabled: bool>>, dataAccessConfig: record<sdfConfig: record<adminEmail: string, version: string>>, displayName: string, entityStatus: string, exchangeConfig: record<enabledExchanges: list<record>>, generalConfig: record<currencyCode: string, timeZone: string>, name: string, partnerId: string, updateTime: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6103,8 +6113,8 @@ export def "partners get" [
 export def "partners-channels list" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6128,7 +6138,7 @@ export def "partners-channels list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListChannels` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<channels: table<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -6145,8 +6155,8 @@ export def "partners-channels list" [
 export def "partners-channels create" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6170,7 +6180,7 @@ export def "partners-channels create" [
   --body-partner-id: string # The ID of the partner that owns the channel. (format: int64)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar")] | flatten | str join "&"
@@ -6190,8 +6200,8 @@ export def "partners-channels update" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6216,7 +6226,7 @@ export def "partners-channels update" [
   --body-partner-id: string # The ID of the partner that owns the channel. (format: int64)
 ]: any -> record<advertiserId: string, channelId: string, displayName: string, name: string, negativelyTargetedLineItemCount: string, partnerId: string, positivelyTargetedLineItemCount: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -6237,8 +6247,8 @@ export def "partners-channels-sites list" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6262,7 +6272,7 @@ export def "partners-channels-sites list" [
   --page-size: int # Requested page size. Must be between `1` and `10000`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListSites` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<nextPageToken: string, sites: table<name: string, urlOrAppId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -6282,8 +6292,8 @@ export def "partners-channels-sites delete" [
   channel_id: string
   url_or_app_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6303,7 +6313,7 @@ export def "partners-channels-sites delete" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # The ID of the advertiser that owns the parent channel.
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -6324,8 +6334,8 @@ export def "partners-channels-sites-bulk-edit create" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6349,7 +6359,7 @@ export def "partners-channels-sites-bulk-edit create" [
   --body-partner-id: string # The ID of the partner that owns the parent channel. (format: int64)
 ]: any -> record<sites: table<name: string, urlOrAppId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -6371,8 +6381,8 @@ export def "partners-channels-sites-replace update" [
   partner_id: string
   channel_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6395,7 +6405,7 @@ export def "partners-channels-sites-replace update" [
   --body-partner-id: string # The ID of the partner that owns the parent channel. (format: int64)
 ]: any -> record<sites: table<name: string, urlOrAppId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channelId' must be non-empty" } }
@@ -6416,8 +6426,8 @@ export def "partners-targeting-types-assigned-targeting-options list" [
   partner_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6440,7 +6450,7 @@ export def "partners-targeting-types-assigned-targeting-options list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListPartnerAssignedTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<assignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -6507,8 +6517,8 @@ export def "partners-targeting-types-assigned-targeting-options create" [
   partner_id: string
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6576,7 +6586,7 @@ export def "partners-targeting-types-assigned-targeting-options create" [
   --youtube-video-details: record # Details for YouTube video assigned targeting option. This will be populated in the youtube_video_details field when targeting_type is `TARGETING_TYPE_YOUTUBE_VIDEO`. — shape: {negative?: bool, videoId?: string}
 ]: any -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -6598,8 +6608,8 @@ export def "partners-targeting-types-assigned-targeting-options delete" [
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6618,7 +6628,7 @@ export def "partners-targeting-types-assigned-targeting-options delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -6639,8 +6649,8 @@ export def "partners-targeting-types-assigned-targeting-options get" [
   targeting_type: string
   assigned_targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6659,7 +6669,7 @@ export def "partners-targeting-types-assigned-targeting-options get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, appDetails: record<appId: string, appPlatform: string, displayName: string, negative: bool>, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record<excludedFirstAndThirdPartyAudienceGroup: record<settings: list>, excludedGoogleAudienceGroup: record<settings: list>, includedCombinedAudienceGroup: record<settings: list>, includedCustomListGroup: record<settings: list>, includedFirstAndThirdPartyAudienceGroups: list<record>, includedGoogleAudienceGroup: record<settings: list>>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string, targetingOptionId: string>, browserDetails: record<displayName: string, negative: bool, targetingOptionId: string>, businessChainDetails: record<displayName: string, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, carrierAndIspDetails: record<displayName: string, negative: bool, targetingOptionId: string>, categoryDetails: record<displayName: string, negative: bool, targetingOptionId: string>, channelDetails: record<channelId: string, negative: bool>, contentDurationDetails: record<contentDuration: string, targetingOptionId: string>, contentGenreDetails: record<displayName: string, negative: bool, targetingOptionId: string>, contentInstreamPositionDetails: record<adType: string, contentInstreamPosition: string>, contentOutstreamPositionDetails: record<adType: string, contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string, targetingOptionId: string>, dayAndTimeDetails: record<dayOfWeek: string, endHour: int, startHour: int, timeZoneResolution: string>, deviceMakeModelDetails: record<displayName: string, negative: bool, targetingOptionId: string>, deviceTypeDetails: record<deviceType: string, youtubeAndPartnersBidMultiplier: float>, digitalContentLabelExclusionDetails: record<excludedContentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string, negative: bool, targetingOptionId: string>, householdIncomeDetails: record<householdIncome: string>, inheritance: string, inventorySourceDetails: record<inventorySourceId: string>, inventorySourceGroupDetails: record<inventorySourceGroupId: string>, keywordDetails: record<keyword: string, negative: bool>, languageDetails: record<displayName: string, negative: bool, targetingOptionId: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, negativeKeywordListDetails: record<negativeKeywordListId: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<adType: string, onScreenPosition: string, targetingOptionId: string>, operatingSystemDetails: record<displayName: string, negative: bool, targetingOptionId: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float, proximityRadiusAmount: float, proximityRadiusUnit: string, targetingOptionId: string>, proximityLocationListDetails: record<proximityLocationListId: string, proximityRadius: float, proximityRadiusUnit: string>, regionalLocationListDetails: record<negative: bool, regionalLocationListId: string>, sensitiveCategoryExclusionDetails: record<excludedSensitiveCategory: string>, sessionPositionDetails: record<sessionPosition: string>, subExchangeDetails: record<targetingOptionId: string>, targetingType: string, thirdPartyVerifierDetails: record<adloox: record<excludedAdlooxCategories: list>, doubleVerify: record<appStarRating: record, avoidedAgeRatings: list, brandSafetyCategories: record, customSegmentId: string, displayViewability: record, fraudInvalidTraffic: record, videoViewability: record>, integralAdScience: record<customSegmentId: list, displayViewability: string, excludeUnrateable: bool, excludedAdFraudRisk: string, excludedAdultRisk: string, excludedAlcoholRisk: string, excludedDrugsRisk: string, excludedGamblingRisk: string, excludedHateSpeechRisk: string, excludedIllegalDownloadsRisk: string, excludedOffensiveLanguageRisk: string, excludedViolenceRisk: string, traqScoreOption: string, videoViewability: string>>, urlDetails: record<negative: bool, url: string>, userRewardedContentDetails: record<targetingOptionId: string, userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>, youtubeChannelDetails: record<channelId: string, negative: bool>, youtubeVideoDetails: record<negative: bool, videoId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
@@ -6680,8 +6690,8 @@ export def "partners-targeting-types-assigned-targeting-options get" [
 export def "partners create-edit-assigned-targeting-options" [
   partner_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6703,7 +6713,7 @@ export def "partners create-edit-assigned-targeting-options" [
   --delete-requests: list # The assigned targeting options to delete in batch, specified as a list of `DeleteAssignedTargetingOptionsRequest`. Supported targeting types: * `TARGETING_TYPE_CHANNEL` — item shape: {assignedTargetingOptionIds?: list<string>, ... (1 more fields)}
 ]: any -> record<createdAssignedTargetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, appDetails: record, assignedTargetingOptionId: string, assignedTargetingOptionIdAlias: string, audienceGroupDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, channelDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, dayAndTimeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelExclusionDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, inheritance: string, inventorySourceDetails: record, inventorySourceGroupDetails: record, keywordDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, negativeKeywordListDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, proximityLocationListDetails: record, regionalLocationListDetails: record, sensitiveCategoryExclusionDetails: record, sessionPositionDetails: record, subExchangeDetails: record, targetingType: string, thirdPartyVerifierDetails: record, urlDetails: record, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record, youtubeChannelDetails: record, youtubeVideoDetails: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6724,8 +6734,8 @@ export def "partners create-edit-assigned-targeting-options" [
 # --parentEntityFilter shape: {fileType?: list<string>, filterIds?: list<string>, filterType?: "FILTER_TYPE_UNSPECIFIED"|"FILTER_TYPE_NONE"|"FILTER_TYPE_ADVERTISER_ID"|"FILTER_TYPE_CAMPAIGN_ID"|"FILTER_TYPE_MEDIA_PRODUCT_ID"|"FILTER_TYPE_INSERTION_ORDER_ID"|"FILTER_TYPE_LINE_ITEM_ID"}
 export def "sdfdownloadtasks create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6751,7 +6761,7 @@ export def "sdfdownloadtasks create" [
   --version: string@version-completer # Required. The SDF version of the downloaded file. If set to `SDF_VERSION_UNSPECIFIED`, this will default to the version specified by the advertiser or partner identified by `root_id`. An advertiser inherits its SDF version from its partner unless configured otherwise.
 ]: any -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/sdfdownloadtasks" $qp)
@@ -6769,8 +6779,8 @@ export def "sdfdownloadtasks create" [
 export def "targeting-types-targeting-options list" [
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6794,7 +6804,7 @@ export def "targeting-types-targeting-options list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`. Returns error code `INVALID_ARGUMENT` if an invalid value is specified.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListTargetingOptions` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<nextPageToken: string, targetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, sensitiveCategoryDetails: record, subExchangeDetails: record, targetingOptionId: string, targetingType: string, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -6812,8 +6822,8 @@ export def "targeting-types-targeting-options get" [
   targeting_type: string
   targeting_option_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6833,7 +6843,7 @@ export def "targeting-types-targeting-options get" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --advertiser-id: string # Required. The Advertiser this request is being made in the context of.
 ]: nothing -> record<ageRangeDetails: record<ageRange: string>, appCategoryDetails: record<displayName: string>, audioContentTypeDetails: record<audioContentType: string>, authorizedSellerStatusDetails: record<authorizedSellerStatus: string>, browserDetails: record<displayName: string>, businessChainDetails: record<businessChain: string, geoRegion: string, geoRegionType: string>, carrierAndIspDetails: record<displayName: string, type: string>, categoryDetails: record<displayName: string>, contentDurationDetails: record<contentDuration: string>, contentGenreDetails: record<displayName: string>, contentInstreamPositionDetails: record<contentInstreamPosition: string>, contentOutstreamPositionDetails: record<contentOutstreamPosition: string>, contentStreamTypeDetails: record<contentStreamType: string>, deviceMakeModelDetails: record<displayName: string>, deviceTypeDetails: record<deviceType: string>, digitalContentLabelDetails: record<contentRatingTier: string>, environmentDetails: record<environment: string>, exchangeDetails: record<exchange: string>, genderDetails: record<gender: string>, geoRegionDetails: record<displayName: string, geoRegionType: string>, householdIncomeDetails: record<householdIncome: string>, languageDetails: record<displayName: string>, name: string, nativeContentPositionDetails: record<contentPosition: string>, omidDetails: record<omid: string>, onScreenPositionDetails: record<onScreenPosition: string>, operatingSystemDetails: record<displayName: string>, parentalStatusDetails: record<parentalStatus: string>, poiDetails: record<displayName: string, latitude: float, longitude: float>, sensitiveCategoryDetails: record<sensitiveCategory: string>, subExchangeDetails: record<displayName: string>, targetingOptionId: string, targetingType: string, userRewardedContentDetails: record<userRewardedContent: string>, videoPlayerSizeDetails: record<videoPlayerSize: string>, viewabilityDetails: record<viewability: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   if ($targeting_option_id | is-empty) { error make --unspanned { msg: "path parameter 'targetingOptionId' must be non-empty" } }
@@ -6854,8 +6864,8 @@ export def "targeting-types-targeting-options get" [
 export def "targeting-types-targeting-options-search list" [
   targeting_type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6881,7 +6891,7 @@ export def "targeting-types-targeting-options-search list" [
   --poi-search-terms: record # Search terms for POI targeting options. — shape: {poiQuery?: string}
 ]: any -> record<nextPageToken: string, targetingOptions: table<ageRangeDetails: record, appCategoryDetails: record, audioContentTypeDetails: record, authorizedSellerStatusDetails: record, browserDetails: record, businessChainDetails: record, carrierAndIspDetails: record, categoryDetails: record, contentDurationDetails: record, contentGenreDetails: record, contentInstreamPositionDetails: record, contentOutstreamPositionDetails: record, contentStreamTypeDetails: record, deviceMakeModelDetails: record, deviceTypeDetails: record, digitalContentLabelDetails: record, environmentDetails: record, exchangeDetails: record, genderDetails: record, geoRegionDetails: record, householdIncomeDetails: record, languageDetails: record, name: string, nativeContentPositionDetails: record, omidDetails: record, onScreenPositionDetails: record, operatingSystemDetails: record, parentalStatusDetails: record, poiDetails: record, sensitiveCategoryDetails: record, subExchangeDetails: record, targetingOptionId: string, targetingType: string, userRewardedContentDetails: record, videoPlayerSizeDetails: record, viewabilityDetails: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($targeting_type | is-empty) { error make --unspanned { msg: "path parameter 'targetingType' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6899,8 +6909,8 @@ export def "targeting-types-targeting-options-search list" [
 # operationId: displayvideo.users.list
 export def "users list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6923,7 +6933,7 @@ export def "users list" [
   --page-size: int # Requested page size. Must be between `1` and `200`. If unspecified will default to `100`.
   --page-token: string # A token identifying a page of results the server should return. Typically, this is the value of next_page_token returned from the previous call to `ListUsers` method. If not specified, the first page of results will be returned.
 ]: nothing -> record<nextPageToken: string, users: table<assignedUserRoles: list, displayName: string, email: string, name: string, userId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/users" $qp)
@@ -6939,8 +6949,8 @@ export def "users list" [
 # --assignedUserRoles item shape: {advertiserId?: string, partnerId?: string, userRole?: "USER_ROLE_UNSPECIFIED"|"ADMIN"|"ADMIN_PARTNER_CLIENT"|"STANDARD"|"STANDARD_PLANNER"|"STANDARD_PLANNER_LIMITED"|"STANDARD_PARTNER_CLIENT"|"READ_ONLY"|"REPORTING_ONLY"|"LIMITED_REPORTING_ONLY"|"CREATIVE"|"CREATIVE_ADMIN"}
 export def "users create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6963,7 +6973,7 @@ export def "users create" [
   --email: string # Required. Immutable. The email address used to identify the user.
 ]: any -> record<assignedUserRoles: table<advertiserId: string, assignedUserRoleId: string, partnerId: string, userRole: string>, displayName: string, email: string, name: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/v2/users" $qp)
@@ -6981,8 +6991,8 @@ export def "users create" [
 export def "users delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7001,7 +7011,7 @@ export def "users delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7018,8 +7028,8 @@ export def "users delete" [
 export def "users get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7038,7 +7048,7 @@ export def "users get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<assignedUserRoles: table<advertiserId: string, assignedUserRoleId: string, partnerId: string, userRole: string>, displayName: string, email: string, name: string, userId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7056,8 +7066,8 @@ export def "users get" [
 export def "users update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7081,7 +7091,7 @@ export def "users update" [
   --email: string # Required. Immutable. The email address used to identify the user.
 ]: any -> record<assignedUserRoles: table<advertiserId: string, assignedUserRoleId: string, partnerId: string, userRole: string>, displayName: string, email: string, name: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "updateMask" $update_mask "scalar")] | flatten | str join "&"
@@ -7101,8 +7111,8 @@ export def "users update" [
 export def "users create-bulk-edit-assigned-roles" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7124,7 +7134,7 @@ export def "users create-bulk-edit-assigned-roles" [
   --deleted-assigned-user-roles: list<string> # The assigned user roles to delete in batch, specified as a list of assigned_user_role_ids. The format of assigned_user_role_id is `entityType-entityid`, for example `partner-123`.
 ]: any -> record<createdAssignedUserRoles: table<advertiserId: string, assignedUserRoleId: string, partnerId: string, userRole: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7143,8 +7153,8 @@ export def "users create-bulk-edit-assigned-roles" [
 export def "sdfdownloadtasks get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7163,7 +7173,7 @@ export def "sdfdownloadtasks get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<done: bool, error: record<code: int, details: list<record>, message: string>, metadata: record, name: string, response: record> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o DISPLAY_VIDEO_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"

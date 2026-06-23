@@ -551,7 +551,7 @@ export def "posts-latest-media-uri get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --api-version: string # The requested API version (default: 1.0)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($media_type | is-empty) { error make --unspanned { msg: "path parameter 'mediaType' must be non-empty" } }

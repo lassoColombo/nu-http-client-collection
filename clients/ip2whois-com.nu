@@ -148,7 +148,7 @@ export def "api get" [
   --domain: string # Domain name for lookup purpose.
   --key: string # API key.
   --format: string # Returns the API response in json (default) or xml format.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "domain" $domain "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"

@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -146,8 +156,8 @@ export def commands []: nothing -> table {
 # --consentArtifact shape: {consent: record, signature: record}
 export def "hpcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -160,7 +170,7 @@ export def "hpcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hpcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -178,8 +188,8 @@ export def "hpcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "hscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -191,9 +201,9 @@ export def "hscer-certificate create" [
   --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer-1 # The format of the certificate in response.
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
-]: any -> any {
+]: any -> record<CertificateData: record<Examination: record<month: string, name: string, year: string>, Performance: record<Subjects: list, cgpa: string, cgpaMax: string, grade: string, marksMax: string, marksTotal: string, percentage: string, result: string, resultDate: string, updateDate: string>, School: record<code: string, name: string>>, IssuedBy: record<Organization: record<Address: record, code: string, name: string, tin: string, type: string, uid: string>>, IssuedTo: record<Person: record<Address: record, Photo: record, category: string, disabilityStatus: string, dob: string, email: string, gender: string, maritalStatus: string, motherName: string, name: string, phone: string, religion: string, swd: string, swdIndicator: string, title: string, uid: string>>, issueDate: string, issuedAt: string, language: string, name: string, number: int, status: string, type: string, validFromDate: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hscer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -211,8 +221,8 @@ export def "hscer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "hsmgr-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -225,7 +235,7 @@ export def "hsmgr-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hsmgr/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -243,8 +253,8 @@ export def "hsmgr-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "nchsc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -257,7 +267,7 @@ export def "nchsc-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nchsc/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -275,8 +285,8 @@ export def "nchsc-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "nctsc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -289,7 +299,7 @@ export def "nctsc-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nctsc/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -307,8 +317,8 @@ export def "nctsc-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "nsesc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -321,7 +331,7 @@ export def "nsesc-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nsesc/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -339,8 +349,8 @@ export def "nsesc-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "nstsc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -353,7 +363,7 @@ export def "nstsc-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nstsc/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -371,8 +381,8 @@ export def "nstsc-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "ntltr-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -385,7 +395,7 @@ export def "ntltr-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntltr/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -403,8 +413,8 @@ export def "ntltr-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "ntmks-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -417,7 +427,7 @@ export def "ntmks-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ntmks/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -435,8 +445,8 @@ export def "ntmks-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "skhsc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -449,7 +459,7 @@ export def "skhsc-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/skhsc/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -467,8 +477,8 @@ export def "skhsc-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "sktsc-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -481,7 +491,7 @@ export def "sktsc-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sktsc/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -499,8 +509,8 @@ export def "sktsc-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "spcer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -513,7 +523,7 @@ export def "spcer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/spcer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -531,8 +541,8 @@ export def "spcer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "sscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -544,9 +554,9 @@ export def "sscer-certificate create" [
   --consent-artifact: any # shape: {consent: record, signature: record}
   format: string@format-completer-1 # The format of the certificate in response.
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
-]: any -> any {
+]: any -> record<CertificateData: record<Examination: record<month: string, name: string, year: string>, Performance: record<Subjects: list, cgpa: string, cgpaMax: string, grade: string, marksMax: string, marksTotal: string, percentage: string, result: string, resultDate: string, updateDate: string>, School: record<code: string, name: string>>, IssuedBy: record<Organization: record<Address: record, code: string, name: string, tin: string, type: string, uid: string>>, IssuedTo: record<Person: record<Address: record, Photo: record, category: string, disabilityStatus: string, dob: string, email: string, gender: string, maritalStatus: string, motherName: string, name: string, phone: string, religion: string, swd: string, swdIndicator: string, title: string, uid: string>>, issueDate: string, issuedAt: string, language: string, name: string, number: int, status: string, type: string, validFromDate: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sscer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -564,8 +574,8 @@ export def "sscer-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "ssmgr-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -578,7 +588,7 @@ export def "ssmgr-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ssmgr/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -596,8 +606,8 @@ export def "ssmgr-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "tetcr-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -610,7 +620,7 @@ export def "tetcr-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tetcr/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact
@@ -628,8 +638,8 @@ export def "tetcr-certificate create" [
 # --consentArtifact shape: {consent: record, signature: record}
 export def "tetms-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -642,7 +652,7 @@ export def "tetms-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o CENTRAL_BOARD_OF_SECONDARY_EDUCATION_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/tetms/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact

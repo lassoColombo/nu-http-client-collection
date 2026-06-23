@@ -164,7 +164,7 @@ export def "about get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<commit: string, description: string, last_deployment: string, revision: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/about")
@@ -186,7 +186,7 @@ export def "architectures list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/architectures")
@@ -209,7 +209,7 @@ export def "architectures get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }
@@ -327,7 +327,7 @@ export def "attribute-meta list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<modifiable_by: table<user: string>, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -460,7 +460,7 @@ export def "attribute-meta get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<allowed: record<value: list<string>>, count: int, description: string, modifiable_by: table<user: string>, name: string, namespace: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($namespace | is-empty) { error make --unspanned { msg: "path parameter 'namespace' must be non-empty" } }
@@ -627,7 +627,7 @@ export def "build-result get" [
   --lastbuild: oneof<nothing, bool> # Show the last build result (excludes current building job states). (e.g. 1)
   --locallink: oneof<nothing, bool> # Include build results from packages with project local links. (e.g. 1)
   --multibuild: oneof<nothing, bool> # Include build results from _multibuild definitions. (e.g. 1)
-]: nothing -> any {
+]: nothing -> record<result: table<arch: string, binarylist: list, code: string, project: string, repository: string, state: string, status: list, summary: record>, state: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -708,7 +708,7 @@ export def "build-builddepinfo get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --package: string # Name of the package. Limit results to the specified package. (e.g. obs-server)
   --view: string@view-completer-1 # * `pkgnames`: Show whole package dependencies, instead of individual binaries. * `revpkgnames`: Show which packages depend on the provided project/package for the given repository/architecture, and therefore a rebuild gets triggered on change. * `order`: Show packages ordered by dependencies.
-]: nothing -> any {
+]: nothing -> record<package: table<name: string, pkgdep: list, source: string, subpkg: list>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -737,7 +737,7 @@ export def "build-repository get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<binary: table<filename: string, mtime: string, size: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -797,7 +797,7 @@ export def "build-buildinfo get-arch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<arch: string, bcnt: string, bdep: record<arch: string, name: string, notmeta: string, preinstall: string, project: string, release: string, repository: string, version: string>, debuginfo: int, file: string, package: string, path: any, project: string, release: string, repository: string, rev: int, specfile: string, srcmd5: string, subpack: string, verifymd5: string, versrel: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -828,7 +828,7 @@ export def "build-history get-arch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<entry: record<bcnt: string, duration: string, rev: string, srcmd5: string, time: string, versrel: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -858,7 +858,7 @@ export def "build-jobstatus get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, hostarch: string, jobid: string, lastduration: string, starttime: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -919,7 +919,7 @@ export def "build-reason get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<explain: string, oldsource: string, time: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -950,7 +950,7 @@ export def "build-status get-arch" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<code: string, package: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -982,7 +982,7 @@ export def "build get-by-project-name-repository-name-architecture-name-package-
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -1053,7 +1053,7 @@ export def "build get-view-fileinfo" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --view: list<string>
-]: nothing -> any {
+]: nothing -> record<arch: string, description: string, filename: string, mtime: string, name: string, provides: list<string>, provides_ext: table<dep: string>, release: string, requires: list<string>, requires_ext: table<dep: string, provided_by: record>, size: string, source: string, summary: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -1081,7 +1081,7 @@ export def "configuration get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<admin_email: string, allow_user_to_create_home_project: string, anonymous: string, change_password: string, cleanup_empty_projects: string, default_access_disabled: string, description: string, disable_publish_for_branches: string, disallow_group_creation: string, download_on_demand: string, enforce_project_keys: string, gravatar: string, hide_private_options: string, name: string, obs_url: string, registration: string, schedulers: record<arch: list<string>>, title: string, tos_url: string, unlisted_projects_filter: string, unlisted_projects_filter_description: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/configuration")
@@ -1129,7 +1129,7 @@ export def "distributions list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<distribution: table<architecture: list, icon: list, id: int, link: string, name: string, project: string, reponame: string, repository: string, vendor: string, version: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/distributions")
@@ -1348,7 +1348,7 @@ export def "group get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<maintainer: table<userid: string>, person: table<userid: string>, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group_title | is-empty) { error make --unspanned { msg: "path parameter 'group_title' must be non-empty" } }
@@ -1427,7 +1427,7 @@ export def "issue-trackers list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<description: string, enable_fetch: string, kind: string, label: string, name: string, regex: string, show_url: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/issue_trackers")
@@ -1553,7 +1553,7 @@ export def "issue-trackers-issues get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_at: string, label: string, name: string, tracker: string, updated_at: string, url: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($issue_tracker_name | is-empty) { error make --unspanned { msg: "path parameter 'issue_tracker_name' must be non-empty" } }
@@ -1656,7 +1656,7 @@ export def "person get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<email: string, globalrole: string, ignore_auth_services: bool, login: string, realname: string, state: string, watchlist: table<project: record>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
@@ -1762,7 +1762,7 @@ export def "person-token get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, entry: table<id: string, kind: string, package: string, project: string, string: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($login | is-empty) { error make --unspanned { msg: "path parameter 'login' must be non-empty" } }
@@ -1945,7 +1945,7 @@ export def "published get-by-project-name-repository-name-architecture-name-bina
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -1975,7 +1975,7 @@ export def "published get-by-project-name-repository-name-architecture-name-bina
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<group: record<distversion: string, repositories: record<repository: list>, software: record<item: record>>, xmlns: string, xmlns_os: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -2004,7 +2004,7 @@ export def "published get-by-project-name-repository-name-1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --view: string@view-completer-2 # Set this parameter to status in order to get details about the last publication. (e.g. status)
-]: nothing -> any {
+]: nothing -> record<buildid: int, code: string, endtime: int, starttime: int> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'project_name' must be non-empty" } }
@@ -2201,7 +2201,7 @@ export def "request create-by-id-1" [
   --diff-to-superseded: string # Diff relative to a given superseded request. State the id of the corresponding superseded request. (e.g. 10401)
   --view: string@view-completer-3 # Set this parameter to xml in order to receive a structured diff instead of plain text.
   --withissues: string@withissues-completer # Include parsed issues
-]: nothing -> any {
+]: nothing -> record<action: record<options: record<sourceupdate: string>, source: record<package: string, project: string, rev: string>, sourcediff: record<files: list, issues: list, key: string, new: any, old: record>, target: record<package: string, project: string>, type: string>, actions: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2235,7 +2235,7 @@ export def "request-viewcollection get" [
   --withfullhistory: string # Includes both, request and review history in the results. (e.g. 1)
   --limit: int # Limit the results to the specified amount of requests. (e.g. 7)
   --ids: string # Limit the result to specified request id's. Multiple id's can be provided as a comma separated list. (e.g. 15,19,23)
-]: nothing -> any {
+]: nothing -> record<matches: string, request: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user" $user "scalar") (serialize-qp "project" $project "scalar") (serialize-qp "package" $package "scalar") (serialize-qp "states" $states "scalar") (serialize-qp "types" $types "scalar") (serialize-qp "roles" $roles "scalar") (serialize-qp "withhistory" $withhistory "scalar") (serialize-qp "withfullhistory" $withfullhistory "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "ids" $ids "scalar")] | flatten | str join "&"
@@ -2258,7 +2258,7 @@ export def "worker-status get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<blocked: table<arch: string, jobs: string>, buildavg: table<arch: string, buildavg: string>, building: table<arch: string, hostarch: string, package: string, project: string, repository: string, starttime: string, workerid: string>, clients: int, down: table<hostarch: string, workerid: string>, idle: table<hostarch: string, workerid: string>, partition: table<daemon: list, name: string>, waiting: table<arch: string, jobs: string>> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/worker/status")
@@ -2282,7 +2282,7 @@ export def "worker get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<hardware: record<cpu: record<flag: list>, jobs: string, processors: string>, hostarch: string, hostlabel: string, linux: record<flavor: string, version: string>, registerserver: string, sandbox: string, workerid: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($architecture_name | is-empty) { error make --unspanned { msg: "path parameter 'architecture_name' must be non-empty" } }

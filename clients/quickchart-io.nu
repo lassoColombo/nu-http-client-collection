@@ -154,7 +154,7 @@ export def "chart get" [
   --height: int # The height of the chart in pixels.
   --format: string # The output format of the chart, e.g., 'png', 'jpg', 'svg', or 'webp'.
   --background-color: string # The background color of the chart.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "chart" $chart "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "backgroundColor" $background_color "scalar")] | flatten | str join "&"
@@ -183,7 +183,7 @@ export def "chart create" [
   --format: string # The output format of the chart, e.g., 'png', 'jpg', 'svg', or 'webp'.
   --height: int # The height of the chart in pixels.
   --width: int # The width of the chart in pixels.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +214,7 @@ export def "qr get" [
   --height: int # The height of the QR code in pixels.
   --format: string # The output format of the QR code, e.g., 'png' or 'svg'.
   --margin: int # The margin around the QR code in pixels.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "margin" $margin "scalar")] | flatten | str join "&"
@@ -243,7 +243,7 @@ export def "qr create" [
   --margin: int # The margin around the QR code in pixels.
   --text: string # The text to be encoded in the QR code.
   --width: int # The width of the QR code in pixels.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

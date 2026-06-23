@@ -202,7 +202,7 @@ export def "achmeainsurancecontracts get-achmea-insurance-contracts-by-user" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<belongsToEmployerId: string, contractNumber: string, endDate: string, id: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -235,7 +235,7 @@ export def "achmeainsurancecontracts-insuredwagecalculationpercentages get-wage-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, holidayAllowancePercentage: float, id: string, startDate: string, yearEndPercentage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($achmea_insurance_contract_id | is-empty) { error make --unspanned { msg: "path parameter 'achmeaInsuranceContractId' must be non-empty" } }
@@ -265,7 +265,7 @@ export def "aow-date get-by-of-birth" [
   --date-of-birth: string # The date of birth of the employee (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<aowDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "dateOfBirth" $date_of_birth "scalar")] | flatten | str join "&"
@@ -294,7 +294,7 @@ export def "applications-authorizations get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<activity: string, allowedRoles: list, displayName: string, id: string, requiredEmployerModules: list, requiredUserAuthorizations: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -324,7 +324,7 @@ export def "applications-logo get" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -353,7 +353,7 @@ export def "chamberofcommerce-companyinformation get-company-information-by-cham
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, houseNumber: int, houseNumberAddition: string, postalCode: string, street: string>, deviatingPostalAddress: record<city: string, country: record, houseNumber: int, houseNumberAddition: string, poBox: int, postalCode: string, street: string>, legalForm: record<key: int, value: string>, name: string, sbi: record<key: int, sbiCode: string, value: string>, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chamber_of_commerce_number | is-empty) { error make --unspanned { msg: "path parameter 'chamberOfCommerceNumber' must be non-empty" } }
@@ -381,7 +381,7 @@ export def "datanewbusiness-functions get-data-new-business" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<functionName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datanewbusiness/functions")
@@ -408,7 +408,7 @@ export def "datanewbusiness-token get-data-new-business" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dataNewBusinessToken: string, expiresIn: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/datanewbusiness/token")
@@ -437,7 +437,7 @@ export def "locationservices-address get-by-postal-code-and-house-number" [
   --house-number: int # A valid house number (without addition) (e.g. 1)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<city: string, coordinates: record<latitude: float, longitude: float>, houseNumber: int, postalCode: string, province: record<key: int, value: string>, street: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "postalCode" $postal_code "scalar") (serialize-qp "houseNumber" $house_number "scalar")] | flatten | str join "&"
@@ -469,7 +469,7 @@ export def "providers get-by-user" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -531,7 +531,7 @@ export def "providers-applicationsets update-application-by-application" [
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --data: string # Contains an array of objects in json structure. (e.g. json object)
   --name: string # Name of the exportset (e.g. Exportset Dienstverband)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applicationSetType: string, data: string, id: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -564,7 +564,7 @@ export def "providers-authorizationsets get-authorization-sets-by-authorization-
   --authorization-set-id: string # The unique identifier of an authorization set (format: uuid)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<authorizations: list<record>, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($authorizationsetid | is-empty) { error make --unspanned { msg: "path parameter 'authorizationsetid' must be non-empty" } }
@@ -659,7 +659,7 @@ export def "providers-employers get-by-user" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<address: record, branch: record, chamberOfCommerceNumber: string, companyName: string, contact: record, contactInformation: record, deviatingPostalAddress: record, employerLogo: string, employerNumber: int, id: string, legalForm: record, providerLogo: string, providerSettings: record, sbi: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -688,7 +688,7 @@ export def "providers-employers-announcements update" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -753,7 +753,7 @@ export def "providers-employers-benefitinkindtypes get-benefit-in-kind-type-by-b
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($benefit_in_kind_type_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindTypeId' must be non-empty" } }
@@ -785,7 +785,7 @@ export def "providers-employers-benefitinkindtypes update-benefit-in-kind-type-b
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --description: string # The description of the benifit in kind type (e.g. Laptop)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -819,7 +819,7 @@ export def "providers-employers-conceptemployees-import update-concept-employees
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: string
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<failed: list<record>, successfull: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -861,7 +861,7 @@ export def "providers-employers-conceptemployees-metadata-payroll-administration
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> list<table<startDate: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -893,7 +893,7 @@ export def "providers-employers-conceptemployees-minimized get-concept-employee-
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, street: string>, contactInformation: record<emailAddress: string, faxNumber: string, mobilePhoneNumber: string, phoneNumber: string>, iban: string, id: string, personalDetails: record<civilStatus: record, dateOfBirth: string, firstName: string, formattedName: string, gender: record, howToFormatLastName: record, initials: string, lastName: string, lastNamePartner: string, nationality: record, placeOfBirth: string, prefix: string, prefixPartner: string, title: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -930,7 +930,7 @@ export def "providers-employers-conceptemployees-minimized update-concept-employ
   --contact-information: record # Contact information for the employee (nullable) — shape: {emailAddress?: string, faxNumber?: string, mobilePhoneNumber?: string, phoneNumber?: string}
   --iban: string # International Bank Account Number. Only IBAN without spaces are accepted. (nullable, e.g. NL52ABNA0424968264)
   --personal-details: record # The personal details of the employee. e.g. Name, civil status en gender — shape: {civilStatus?: record, dateOfBirth?: string, firstName?: string, gender?: record, howToFormatLastName?: record, initials?: string, lastName?: string, lastNamePartner?: string, nationality?: record, placeOfBirth?: string, prefix?: string, prefixPartner?: string, title?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, street: string>, contactInformation: record<emailAddress: string, faxNumber: string, mobilePhoneNumber: string, phoneNumber: string>, iban: string, id: string, personalDetails: record<civilStatus: record, dateOfBirth: string, firstName: string, formattedName: string, gender: record, howToFormatLastName: record, initials: string, lastName: string, lastNamePartner: string, nationality: record, placeOfBirth: string, prefix: string, prefixPartner: string, title: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -992,7 +992,7 @@ export def "providers-employers-conceptemployees get-concept-employee-by-concept
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<creationDate: string, employeeData: record<address: record, contactInformation: record, deviatingPostalAddress: record, employeeNumber: int, iban: string, identityDocument: record, personalDetails: record>, employmentData: record<calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record, commissionUntilDate: string, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record, employmentContractType: record, employmentDurationType: record, essMutationSet: record, exemptionInsuranceObligation: record, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, namePayslip: string, nonPayrollAdministration: record, participation55plusRegulationUWV: bool, payrollAdministration: record, periodPayGradeAdjustment: int, professionCode: int, sendMdvNotification: bool, signalPayGradeAdjustment: bool, specialIncomeRatio: record, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, typeOfEmployee: record, typeOfParticipation: record, vacationCoupons: record, valueOfParticipation: record, writtenEmploymentContract: bool>, fiscalData: record<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record, applyPayrollTaxDeduction: bool, applyStudentDeduction: bool, deviatingCalculationRulePayrollTax: record, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record, residentOf: record>, id: string, organizationalEntityData: record<department: record, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record, function: record, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record>, otherPayrollVariablesData: record<deviatingPremiumGroup: record>, selfService: record<status: string>, socialSecurityData: record<healthCareInsuranceActType: record, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool>, uniqueName: string, wageData: record<applyPayGrade: bool, grossWage: float, grossWageType: record, netWage: float, netWageType: record, payGrade: record, payScale: record>, workingHoursData: record<averageParttimeFactor: float, calculateUsingWorkPattern: record, contractCode: record, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: float, flexibleHoursContract: record, regularWorkPattern: bool, shift: record, workPattern: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1039,7 +1039,7 @@ export def "providers-employers-conceptemployees update-concept-employee-by-conc
   --unique-name: string # The unique name for this concept employment. It is commonly used as a displayname in the user interface to select this entry in a dropdown box. (e.g. Sollicitant 013)
   --wage-data: record # nullable — shape: {applyPayGrade?: bool, grossWage?: float, grossWageType?: record, netWage?: float, netWageType?: record, payGrade?: record, payScale?: record}
   --working-hours-data: record # nullable — shape: {averageParttimeFactor?: float, calculateUsingWorkPattern?: record, contractCode?: record, deviatingHoursPerWeek?: float, deviatingSvDaysPerPeriod?: float, flexibleHoursContract?: record, regularWorkPattern?: bool, shift?: record, workPattern?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<creationDate: string, employeeData: record<address: record, contactInformation: record, deviatingPostalAddress: record, employeeNumber: int, iban: string, identityDocument: record, personalDetails: record>, employmentData: record<calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record, commissionUntilDate: string, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record, employmentContractType: record, employmentDurationType: record, essMutationSet: record, exemptionInsuranceObligation: record, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, namePayslip: string, nonPayrollAdministration: record, participation55plusRegulationUWV: bool, payrollAdministration: record, periodPayGradeAdjustment: int, professionCode: int, sendMdvNotification: bool, signalPayGradeAdjustment: bool, specialIncomeRatio: record, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, typeOfEmployee: record, typeOfParticipation: record, vacationCoupons: record, valueOfParticipation: record, writtenEmploymentContract: bool>, fiscalData: record<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record, applyPayrollTaxDeduction: bool, applyStudentDeduction: bool, deviatingCalculationRulePayrollTax: record, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record, residentOf: record>, id: string, organizationalEntityData: record<department: record, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record, function: record, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record>, otherPayrollVariablesData: record<deviatingPremiumGroup: record>, selfService: record<status: string>, socialSecurityData: record<healthCareInsuranceActType: record, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool>, uniqueName: string, wageData: record<applyPayGrade: bool, grossWage: float, grossWageType: record, netWage: float, netWageType: record, payGrade: record, payScale: record>, workingHoursData: record<averageParttimeFactor: float, calculateUsingWorkPattern: record, contractCode: record, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: float, flexibleHoursContract: record, regularWorkPattern: bool, shift: record, workPattern: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1104,7 +1104,7 @@ export def "providers-employers-conceptemployees-citizenservicenumber get-citize
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<citizenServiceNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1135,7 +1135,7 @@ export def "providers-employers-conceptemployees-citizenservicenumber update-cit
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --citizen-service-number: string # The social security number of the employee used in communication with the Dutch tax authorities. The number has to be a valid Dutch citizen service number (BSN). (nullable, e.g. 042168588)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<citizenServiceNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1169,7 +1169,7 @@ export def "providers-employers-conceptemployees-convert-to-employee update-by-c
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --x-validate-only: oneof<nothing, bool> # If set to true only the validations will be performed no changes will be committed.
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1202,7 +1202,7 @@ export def "providers-employers-conceptemployees-documents get-by-concept-employ
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<isInitiateSignDocumentRequestPossible: bool, signDocumentStatus: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1370,7 +1370,7 @@ export def "providers-employers-conceptemployees-documents-audittrail get-audit-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<attribute: string, category: string, dateOfAlert: string, description: string, endUser: string, event: string, eventDate: string, role: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1433,7 +1433,7 @@ export def "providers-employers-conceptemployees-documents-signature get-by-conc
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: record<signDocumentStatus: record<Key: string, Value: string>, signerStatus: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1465,7 +1465,7 @@ export def "providers-employers-conceptemployees-documents-signature-initiate cr
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<signDocumentStatus: record<Key: string, Value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1499,7 +1499,7 @@ export def "providers-employers-conceptemployees-documents-signature-report get-
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1578,7 +1578,7 @@ export def "providers-employers-conceptemployees-documenttemplates-generatedocum
   --reference-date: string # This date will be used to select date depending data such as department and function. (format: date, e.g. 2020-05-08)
   --template-employer-id: string # The unique identifier of the employer to which the template belongs (GUID/UUID). (format: uuid, e.g. b14acd0d-75d7-4fc8-8b22-4a3924585cab)
   --year: int # The year the document relates to. Qwoater: Docfield 86 Jaar (nullable, format: int32, e.g. 2017)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1640,7 +1640,7 @@ export def "providers-employers-conceptemployees-dossier get-document-count-by-c
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<numberOfDocuments: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1670,7 +1670,7 @@ export def "providers-employers-conceptemployees-preboardingtrajectory update-pr
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   action: string@action-completer # The action to perform on PreboardingTrajectory
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1703,7 +1703,7 @@ export def "providers-employers-conceptemployees-preboardingtrajectory create-pr
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: record
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1740,7 +1740,7 @@ export def "providers-employers-conceptemployees-selfservice get-concept-employe
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<conceptEmployee: record<emailAddress: string, employeeNumber: int, firstName: string, formattedName: string, id: string, initials: string, lastName: string, prefix: string>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($concept_employee_id | is-empty) { error make --unspanned { msg: "path parameter 'conceptEmployeeId' must be non-empty" } }
@@ -1804,7 +1804,7 @@ export def "providers-employers-contractcodes get-contract-code-by-contract-code
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: int, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contract_code_id | is-empty) { error make --unspanned { msg: "path parameter 'contractCodeId' must be non-empty" } }
@@ -1837,7 +1837,7 @@ export def "providers-employers-contractcodes update-contract-code-by-contract-c
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --code: int # An unique code for the contract code within the scope of the employer (format: int32, e.g. 1022)
   --description: string # The description of the contract code (e.g. Special contract)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: int, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1903,7 +1903,7 @@ export def "providers-employers-customfields get-custom-field-by-custom-field" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'customFieldId' must be non-empty" } }
@@ -1935,7 +1935,7 @@ export def "providers-employers-customfields update-custom-field-by-custom-field
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --description: string # The description for the custom field which can be used at the employee and employment level (e.g. Shoe size)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2001,7 +2001,7 @@ export def "providers-employers-customholidays get-custom-holiday-by-custom-holi
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<date: string, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_holiday_id | is-empty) { error make --unspanned { msg: "path parameter 'customHolidayId' must be non-empty" } }
@@ -2034,7 +2034,7 @@ export def "providers-employers-customholidays update-custom-holiday-by-custom-h
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --date: string # The date for the custom holiday. (format: date, e.g. 2021-01-01)
   --description: string # The description for the custom holiday. (e.g. Company 100th year anniversary)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<date: string, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2066,7 +2066,7 @@ export def "providers-employers-departments get-by-department-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: int, description: string, emailLeaveRequest: string, id: string, subDepartmentOf: record<code: int, description: string, key: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($department_id | is-empty) { error make --unspanned { msg: "path parameter 'departmentId' must be non-empty" } }
@@ -2100,7 +2100,7 @@ export def "providers-employers-departments update" [
   --description: string # The visible description (i.e. name) of the department. (e.g. Verkoop Binnendienst)
   --email-leave-request: string # Recipient e-mail adress for notification in case of leave requests. Typically this is the mailadress of a manager that would get a notification mail when a new leave requet is to be processed. (nullable, e.g. api@loket.nl)
   --sub-department-of: record # If the department is a sub department (i.e. underlying) of another department, then the key-field of that other department may be entered here. (nullable, format: metadata) — shape: {key?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: int, description: string, emailLeaveRequest: string, id: string, subDepartmentOf: record<code: int, description: string, key: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2166,7 +2166,7 @@ export def "providers-employers-educationfurtherindications get-education-furthe
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: string, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($education_further_indication_id | is-empty) { error make --unspanned { msg: "path parameter 'educationFurtherIndicationId' must be non-empty" } }
@@ -2199,7 +2199,7 @@ export def "providers-employers-educationfurtherindications update-education-fur
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --code: string # An unique code for the eduction further indication within the scope of the employer (e.g. lts)
   --description: string # The description of the education furhter indication (e.g. Lagere technische school)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: string, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2265,7 +2265,7 @@ export def "providers-employers-educationtypes get-education-type-by-education-t
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: string, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($education_type_id | is-empty) { error make --unspanned { msg: "path parameter 'educationTypeId' must be non-empty" } }
@@ -2298,7 +2298,7 @@ export def "providers-employers-educationtypes update-education-type-by-educatio
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --code: string # An unique code for the eduction type within the scope of the employer (e.g. WO)
   --description: string # The description of the education type (e.g. Wetenschappelijk onderwijs)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: string, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2421,7 +2421,7 @@ export def "providers-employers-employees-absences-absencecontact-history get-co
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<contactDate: string, contactMethod: record<key: int, value: string>, id: string, summary: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($absencecontact_history_id | is-empty) { error make --unspanned { msg: "path parameter 'absencecontactHistoryId' must be non-empty" } }
@@ -2455,7 +2455,7 @@ export def "providers-employers-employees-absences-absencecontact-history update
   --contact-date: string # The date on which the contact was initiated. (format: date, e.g. 2018-01-01)
   --contact-method: record # The method of contacting the person (format: metadata) — shape: {key?: int}
   --summary: string # Summary of the contact. (nullable)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<contactDate: string, contactMethod: record<key: int, value: string>, id: string, summary: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2517,7 +2517,7 @@ export def "providers-employers-employees-absences-absenceprogress get-progress-
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<comments: string, endDate: string, id: string, incapacityPercentage: int, startDate: string, typeOfWorkResumption: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($absence_progress_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceProgressId' must be non-empty" } }
@@ -2552,7 +2552,7 @@ export def "providers-employers-employees-absences-absenceprogress update-progre
   --incapacity-percentage: int # percentage of not being able to work (e.g. 100)
   --start-date: string # start dat of the incapacityPercentage (format: date, e.g. 2018-01-21)
   --type-of-work-resumption: record # The type of work the work the employee is fulfilling when partly returning to work. (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<comments: string, endDate: string, id: string, incapacityPercentage: int, startDate: string, typeOfWorkResumption: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2614,7 +2614,7 @@ export def "providers-employers-employees-absences get-by-absence-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accidentType: record<key: int, value: string>, actionToBeTakenByOccupationalHealthAndSafetyService: record<key: int, value: string>, caseManager: record<function: string, name: string, organization: string, phoneNumber: string>, causeOfAbsence: record<key: int, value: string>, comments: string, contactInformation: record<city: string, country: record, endDate: string, furtherIndication: record, houseNumber: int, houseNumberAddition: string, locationType: record, name: string, phoneNumber: string, postalCode: string, startDate: string, street: string>, expectedDateOfChildbirth: string, expectedDuration: record<key: int, value: string>, expectedEndDateOfMaternityLeave: string, hasMobilityIssue: bool, hoursWorkedOnFirstDayOfAbsence: int, id: string, isDisruptedEmploymentRelationship: bool, isHospitalised: bool, isRecoveredWithinTwoWeeks: bool, isThirdPartyLiability: bool, isWorkRelatedIllness: bool, progress: record<currentIncapacityPercentage: int, endOfAbsence: record, startDate: string>, reintegration: record<dateOfFinalizingPlanOfAction: string, reintegrationGoal: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
@@ -2668,7 +2668,7 @@ export def "providers-employers-employees-absences update" [
   --is-third-party-liability: oneof<nothing, bool> # This field is related to `accidentType`. When `accidentType` is specified, this field indicates whether a third party is liable for the accident. (nullable, e.g. false)
   --is-work-related-illness: oneof<nothing, bool> # Beroepsziekte (e.g. false)
   --reintegration: record # nullable — shape: {dateOfFinalizingPlanOfAction?: string, reintegrationGoal?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accidentType: record<key: int, value: string>, actionToBeTakenByOccupationalHealthAndSafetyService: record<key: int, value: string>, caseManager: record<function: string, name: string, organization: string, phoneNumber: string>, causeOfAbsence: record<key: int, value: string>, comments: string, contactInformation: record<city: string, country: record, endDate: string, furtherIndication: record, houseNumber: int, houseNumberAddition: string, locationType: record, name: string, phoneNumber: string, postalCode: string, startDate: string, street: string>, expectedDateOfChildbirth: string, expectedDuration: record<key: int, value: string>, expectedEndDateOfMaternityLeave: string, hasMobilityIssue: bool, hoursWorkedOnFirstDayOfAbsence: int, id: string, isDisruptedEmploymentRelationship: bool, isHospitalised: bool, isRecoveredWithinTwoWeeks: bool, isThirdPartyLiability: bool, isWorkRelatedIllness: bool, progress: record<currentIncapacityPercentage: int, endOfAbsence: record, startDate: string>, reintegration: record<dateOfFinalizingPlanOfAction: string, reintegrationGoal: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2704,7 +2704,7 @@ export def "providers-employers-employees-absences-absencecontact-history get-co
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<contactDate: string, contactMethod: record, id: string, summary: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
@@ -2738,7 +2738,7 @@ export def "providers-employers-employees-absences-absencecontact-history create
   --contact-date: string # The date on which the contact was initiated. (format: date, e.g. 2018-01-01)
   --contact-method: record # The method of contacting the person (format: metadata) — shape: {key?: int}
   --summary: string # Summary of the contact. (nullable)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<contactDate: string, contactMethod: record<key: int, value: string>, id: string, summary: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2774,7 +2774,7 @@ export def "providers-employers-employees-absences-absenceprogress get-progress"
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<comments: string, endDate: string, id: string, incapacityPercentage: int, startDate: string, typeOfWorkResumption: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($absence_id | is-empty) { error make --unspanned { msg: "path parameter 'absenceId' must be non-empty" } }
@@ -2809,7 +2809,7 @@ export def "providers-employers-employees-absences-absenceprogress create-progre
   --incapacity-percentage: int # percentage of not being able to work (e.g. 100)
   --start-date: string # start dat of the incapacityPercentage (format: date, e.g. 2018-01-21)
   --type-of-work-resumption: record # The type of work the work the employee is fulfilling when partly returning to work. (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<comments: string, endDate: string, id: string, incapacityPercentage: int, startDate: string, typeOfWorkResumption: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2844,7 +2844,7 @@ export def "providers-employers-employees-absences-closeabsence update-close" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --end-of-absence: record # date and reason for the closing/end of the absence (format: metadata) — shape: {date?: string, reason?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2878,7 +2878,7 @@ export def "providers-employers-employees-absences-reopenabsence update-reopen" 
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --body: record
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2940,7 +2940,7 @@ export def "providers-employers-employees-children get-child-by-child" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dateOfBirth: string, dateOfDeath: string, firstName: string, gender: record<key: int, value: string>, id: string, initials: string, lastName: string, prefix: string, residenceStatus: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($child_id | is-empty) { error make --unspanned { msg: "path parameter 'childId' must be non-empty" } }
@@ -2980,7 +2980,7 @@ export def "providers-employers-employees-children update-child-by-child" [
   --last-name: string # The last name, family name or surname as part of a persons personal name. (e.g. Bergen)
   --prefix: string # The prefix to the last name (nullable, e.g. van)
   --residence-status: record # Indicator to tell if the child is living at home or not. Use null if unknown. (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dateOfBirth: string, dateOfDeath: string, firstName: string, gender: record<key: int, value: string>, id: string, initials: string, lastName: string, prefix: string, residenceStatus: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3042,7 +3042,7 @@ export def "providers-employers-employees-contacts get-by-contact-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, houseNumber: int, houseNumberAddition: string, postalCode: string, street: string>, description: string, id: string, name: string, particularities: string, phoneNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -3078,7 +3078,7 @@ export def "providers-employers-employees-contacts update" [
   --name: string # Name of the contact (e.g. Johanna Bakker)
   --particularities: string # Extra information about the contact (nullable, e.g. Genoemd adres is een priveadres)
   --phone-number: string # The phone number of the contact (nullable, e.g. 013-12345678)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, houseNumber: int, houseNumberAddition: string, postalCode: string, street: string>, description: string, id: string, name: string, particularities: string, phoneNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3144,7 +3144,7 @@ export def "providers-employers-employees-customfields get-custom-field-by-custo
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<customField: record, id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeCustomFieldId' must be non-empty" } }
@@ -3177,7 +3177,7 @@ export def "providers-employers-employees-customfields update-custom-field-by-cu
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --value: string # The value for the custom field for the employee (e.g. 41)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<customField: record<description: string, id: string>, id: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3239,7 +3239,7 @@ export def "providers-employers-employees-educations get-by-employee-education-i
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<educationLevel: record<key: int, value: string>, employeeCosts: float, employerCosts: float, endDate: string, endOfValidityDate: string, furtherIndication: record<code: string, description: string, key: string>, hasDiploma: record<key: int, value: string>, id: string, institute: record<Name: string, city: string>, name: string, particularities: string, startDate: string, typeOfEducation: record<code: string, description: string, key: string>, yearOfDiploma: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_education_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeEducationId' must be non-empty" } }
@@ -3287,7 +3287,7 @@ export def "providers-employers-employees-educations update" [
   --start-date: string # The date on which this education starts. (nullable, format: date, e.g. 2018-01-01)
   --type-of-education: record # The type of the education. `type of education` is a metadata field within the employer context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: string}
   --year-of-diploma: int # Year in which the diploma was aquired (nullable, format: int32, e.g. 1995)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<educationLevel: record<key: int, value: string>, employeeCosts: float, employerCosts: float, endDate: string, endOfValidityDate: string, furtherIndication: record<code: string, description: string, key: string>, hasDiploma: record<key: int, value: string>, id: string, institute: record<Name: string, city: string>, name: string, particularities: string, startDate: string, typeOfEducation: record<code: string, description: string, key: string>, yearOfDiploma: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3319,7 +3319,7 @@ export def "providers-employers-employees-employments-wage-proposals update" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3384,7 +3384,7 @@ export def "providers-employers-employees-employments-abpfunds get-abp-fund-by-a
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<deviations: record, endDate: string, fixedContribution: record, fund: record, id: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($abp_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'abpFundId' must be non-empty" } }
@@ -3421,7 +3421,7 @@ export def "providers-employers-employees-employments-abpfunds update-abp-fund-b
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --fixed-contribution: record # With the underlying elements fixed values (money) can be set as the result of the Fund calculation. In doing so the actual calculation for the `fund` will no longer take place as the outcome is fixed. This has the side effect that the "grondslag" is no longer calculated. In the data exchange with certain parties the "grondslag" has to be communicated allongside the contribution. In those cases do not use this option as the calculation is disabled. Setting a fixed contribution is done on either all the fields or none. __Note:__ `deviations` and `fixedContribution` are mutually exclusive. (nullable) — shape: {employmentContribution?: float, totalContribution?: float}
   --start-date: string # The date on which this fund starts. A (linked chain)[./#section/Data/Date-chains] per fund is maintained within this resource. So multiple funds can be active at the same time but one specific fund can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<employmentContributionPercentage: float, totalContributionPercentage: float>, endDate: string, fixedContribution: record<employmentContribution: float, totalContribution: float>, fund: record<description: string, key: int>, id: string, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3483,7 +3483,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings get-
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<beneficiary: record<city: string, name: string>, creditor: record<priority: int, type: record>, description1: string, description2: string, descriptionPayslip: string, endDate: string, fixedPaymentPerPayrollPeriod: float, iban: string, id: string, startDate: string, totalAmount: record<owed: float, paid: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_of_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentOfEarningsId' must be non-empty" } }
@@ -3526,7 +3526,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings upda
   --iban: string # International Bank Account Number (IBAN). Only IBAN without spaces are accepted. (e.g. NL52ABNA0424968264)
   --start-date: string # Start date of this record __NOTE :__ at the moment of performing a payroll run it will be checked what record is applicable for splitting from net salary at that date (based on the start- and enddate). (format: date, e.g. 2018-01-01)
   --total-amount: record # shape: {owed?: float}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<beneficiary: record<city: string, name: string>, creditor: record<priority: int, type: record>, description1: string, description2: string, descriptionPayslip: string, endDate: string, fixedPaymentPerPayrollPeriod: float, iban: string, id: string, startDate: string, totalAmount: record<owed: float, paid: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3592,7 +3592,7 @@ export def "providers-employers-employees-employments-basesforcalculation get-ba
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<ageBasedMaximum: record<key: int, value: string>, ageBasedMinimum: record<key: int, value: string>, deviations: record<financialReservationPercentage: float, percentage: float, reservationPercentage: float>, endDate: string, id: string, startDate: string, base: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($baseforcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforcalculationId' must be non-empty" } }
@@ -3631,7 +3631,7 @@ export def "providers-employers-employees-employments-basesforcalculation update
   --deviations: record # Only set a value for the underlying fields if you want to deviate from the values as defined by the selected `base`. Set `deviations` to null if no deviations apply. Deviating is done on either all the fields or none. (nullable) — shape: {financialReservationPercentage?: float, percentage?: float, reservationPercentage?: float}
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --start-date: string # The date on which this base starts. A (linked chain)[./#section/Data/Date-chains] per base is maintained within this resource. So multiple bases can be active at the same time but one specific base can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<ageBasedMaximum: record<key: int, value: string>, ageBasedMinimum: record<key: int, value: string>, deviations: record<financialReservationPercentage: float, percentage: float, reservationPercentage: float>, endDate: string, id: string, startDate: string, base: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3697,7 +3697,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<base: float, endDate: string, id: string, origin: record<key: int, value: string>, startDate: string, payrollComponent: record<description: string, key: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($baseforemploymentfundcalculation_id | is-empty) { error make --unspanned { msg: "path parameter 'baseforemploymentfundcalculationId' must be non-empty" } }
@@ -3731,7 +3731,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   --body-base: float # The base (amount of money) to be used in the fund calculation (format: double, e.g. 25000)
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --start-date: string # The date on which this base for calculation starts. A (linked chain)[./#section/Data/Date-chains] per base for calculation is maintained within this resource. So multiple bases can be active at the same time for different payrollcomponents (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<base: float, endDate: string, id: string, origin: record<key: int, value: string>, startDate: string, payrollComponent: record<description: string, key: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3793,7 +3793,7 @@ export def "providers-employers-employees-employments-benefits-and-deductions ge
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payrollComponent: record<category: record, deductionOrPayment: record, description: string, key: int>, startDate: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($benefitsanddeductions_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitsanddeductionsId' must be non-empty" } }
@@ -3827,7 +3827,7 @@ export def "providers-employers-employees-employments-benefits-and-deductions up
   --end-date: string # The end date for the information in the record. (nullable, format: date)
   --start-date: string # The start date for the information in the record. A (linked chain)[./#section/Data/Date-chains] per payroll component is maintained within this resource. (format: date, e.g. 1995-05-21)
   --value: float # The value for the selected payroll component. (e.g. 50.87)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payrollComponent: record<category: record, deductionOrPayment: record, description: string, key: int>, startDate: string, value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3893,7 +3893,7 @@ export def "providers-employers-employees-employments-benefitsinkind get-benefit
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<benefitInKindType: record, brand: string, endDate: string, id: string, particularities: string, startDate: string, supplier: string, type: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($benefit_in_kind_id | is-empty) { error make --unspanned { msg: "path parameter 'benefitInKindId' must be non-empty" } }
@@ -3933,7 +3933,7 @@ export def "providers-employers-employees-employments-benefitsinkind update-bene
   --supplier: string # The supplier of the benefit in kind. (nullable, e.g. Mediamarkt)
   --type: string # The type of the benefit in kind. (nullable, e.g. Iphone 11)
   --value: float # The value for the selected benefit of kind. (e.g. 1100)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<benefitInKindType: record<description: string, id: string>, brand: string, endDate: string, id: string, particularities: string, startDate: string, supplier: string, type: string, value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3995,7 +3995,7 @@ export def "providers-employers-employees-employments-companycars get-company-ca
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<brand: string, catalogValue: float, comments: string, endDate: string, fuelCardNumber: string, id: string, kilometersPrivateUse: int, lease: record<contractNumber: string, endDate: string, startDate: string>, leaseOrBuy: record<key: int, value: string>, licensePlateNumber: string, model: string, startDate: string, supplier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'companyCarId' must be non-empty" } }
@@ -4039,7 +4039,7 @@ export def "providers-employers-employees-employments-companycars update-company
   --model: string # Model of the vehicle. (nullable, e.g. V60)
   --start-date: string # The start date of the entity. (format: date, e.g. 2021-01-01)
   --supplier: string # Name of the company the delivered the company car. (nullable, e.g. Leasemaatschappij Tilburg)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<brand: string, catalogValue: float, comments: string, endDate: string, fuelCardNumber: string, id: string, kilometersPrivateUse: int, lease: record<contractNumber: string, endDate: string, startDate: string>, leaseOrBuy: record<key: int, value: string>, licensePlateNumber: string, model: string, startDate: string, supplier: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4104,7 +4104,7 @@ export def "providers-employers-employees-employments-costperhour get-cost-per-h
   --cost-per-hour-id: string # The unique identifier of the record (format: uuid)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<costPerHour: float, id: string, payrollPeriods: record, registrationMethod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($costperhour_id | is-empty) { error make --unspanned { msg: "path parameter 'costperhourId' must be non-empty" } }
@@ -4137,7 +4137,7 @@ export def "providers-employers-employees-employments-costperhour update" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --cost-per-hour: float # The cost per hour for the employment (format: double, e.g. 21.2)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<costPerHour: float, id: string, payrollPeriods: record<endDate: string, id: int, periodNumber: int, startDate: string, year: int>, registrationMethod: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4204,7 +4204,7 @@ export def "providers-employers-employees-employments-customfields get-custom-fi
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<customField: record, id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_custom_field_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentCustomFieldId' must be non-empty" } }
@@ -4237,7 +4237,7 @@ export def "providers-employers-employees-employments-customfields update-custom
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --value: string # The value for the custom field for the employment (e.g. 41)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<customField: record<description: string, id: string>, id: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4303,7 +4303,7 @@ export def "providers-employers-employees-employments-customnotifications get-cu
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<expirationDate: string, id: string, notificationDate: string, notificationText: string, recurrencePattern: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($custom_notification_id | is-empty) { error make --unspanned { msg: "path parameter 'customNotificationId' must be non-empty" } }
@@ -4339,7 +4339,7 @@ export def "providers-employers-employees-employments-customnotifications update
   --notification-date: string # The date on which the first notification occurs. (format: date, e.g. 2021-01-01)
   --notification-text: string # The description of the signal (e.g. Signal renew document)
   --recurrence-pattern: record # Define a pattern for repeating the notification. This pattern is used to create Notifications after the initial notification as defined in the notificationDate. (nullable, format: metadata) — shape: {numberOfRepetitionsAfterFirstNotification?: int, recurrenceNumber?: int, recurrencePeriod?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<expirationDate: string, id: string, notificationDate: string, notificationText: string, recurrencePattern: record<numberOfRepetitionsAfterFirstNotification: int, recurrenceNumber: int, recurrencePeriod: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4370,7 +4370,7 @@ export def "providers-employers-employees-employments-declarations-process updat
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4401,7 +4401,7 @@ export def "providers-employers-employees-employments-declarations-review update
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4436,7 +4436,7 @@ export def "providers-employers-employees-employments-declarations get-by-declar
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dateOfLastChangeByEmployee: string, dateOfSubmissionByEmployee: string, declarationComment: string, declarationDate: string, declarationStatus: record, id: string, numberOfUnits: float, payrollComponent: record, processedInPayrollPeriod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'declarationId' must be non-empty" } }
@@ -4498,7 +4498,7 @@ export def "providers-employers-employees-employments-declarations-audittrail ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<comment: string, id: string, performedBy: record, performedOn: string, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'declarationId' must be non-empty" } }
@@ -4558,7 +4558,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, id: string, startPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, typeOfDeviatingAwfContribution: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deviating_awf_contribution_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingAwfContributionId' must be non-empty" } }
@@ -4594,7 +4594,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   --end-period: record # nullable, format: metadata — shape: {periodNumber?: int, year?: int}
   --start-period: record # format: metadata — shape: {periodNumber?: int, year?: int}
   --type-of-deviating-awf-contribution: record # format: metadata — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, id: string, startPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, typeOfDeviatingAwfContribution: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4660,7 +4660,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages get-d
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, payrollComponent: record, startDate: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($deviating_hourly_wage_id | is-empty) { error make --unspanned { msg: "path parameter 'deviatingHourlyWageId' must be non-empty" } }
@@ -4695,7 +4695,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages updat
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --start-date: string # The date on which this DeviatingHouryWage starts. A (broken chain)[./#section/Data/Date-chains] per DeviatingHouryWage is maintained within this resource. So multiple DeviatingHouryWages can be active at the same time but one specific DeviatingHouryWage can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
   --value: float # The value for the selected payroll component. (e.g. 50.87)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payrollComponent: record<description: string, key: int>, startDate: string, value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4761,7 +4761,7 @@ export def "providers-employers-employees-employments-employmentfunds get-fund-b
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<deviations: record, endDate: string, fixedContribution: record, fund: record, id: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_fund_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentFundId' must be non-empty" } }
@@ -4798,7 +4798,7 @@ export def "providers-employers-employees-employments-employmentfunds update-fun
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --fixed-contribution: record # With the underlying elements fixed values (money) can be set as the result of the Fund calculation. In doing so the actual calculation for the `fund` will no longer take place as the outcome is fixed. This has the side effect that the "grondslag" is no longer calculated. In the data exchange with certain parties the "grondslag" has to be communicated allongside the contribution. In those cases do not use this option as the calculation is disabled. Setting a fixed contribution is done on either all the fields or none. __Note:__ `deviations` and `fixedContribution` are mutually exclusive. (nullable) — shape: {employmentContribution?: float, totalContribution?: float}
   --start-date: string # The date on which this fund starts. A (linked chain)[./#section/Data/Date-chains] per fund is maintained within this resource. So multiple funds can be active at the same time but one specific fund can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<employmentContributionPercentage: float, totalContributionPercentage: float>, endDate: string, fixedContribution: record<employmentContribution: float, totalContribution: float>, fund: record<description: string, key: int>, id: string, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4860,7 +4860,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars get-fisc
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalTaxLiabilityGroup: record<key: int, value: string>, dateOfFirstAdmission: string, deviatingAdditionalTaxLiability: float, endDate: string, id: string, licensePlateNumber: string, reasonForNoAdditionalTaxLiability: record<key: int, value: string>, startDate: string, taxableBenefitForPrivateUse: float, valueForTaxPurposes: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fiscal_company_car_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalCompanyCarId' must be non-empty" } }
@@ -4901,7 +4901,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars update-f
   --start-date: string # The start date of the entity. A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2021-01-01)
   --taxable-benefit-for-private-use: float # Taxable benefit for private use (eigen bijdrage van de werknemer) may be entered here, this will lower the tax liability to be paid in the payrolling process. (nullable, format: double, e.g. 2000)
   --value-for-tax-purposes: float # The value of the car for tax purposes. This field may only be NULL if a reason for no additional tax liability (reden voor geen bijtelling) is provided. It is possible to acquire a value for this field based on the RDW-registration by calling that supplementary endpoint. (nullable, format: double, e.g. 20000)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalTaxLiabilityGroup: record<key: int, value: string>, dateOfFirstAdmission: string, deviatingAdditionalTaxLiability: float, endDate: string, id: string, licensePlateNumber: string, reasonForNoAdditionalTaxLiability: record<key: int, value: string>, startDate: string, taxableBenefitForPrivateUse: float, valueForTaxPurposes: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4963,7 +4963,7 @@ export def "providers-employers-employees-employments-fiscalproperties get-fisca
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record<key: int, value: string>, applyPayrollTaxDeduction: bool, applySalarysplit: record<key: any, value: string>, applyStudentDeduction: bool, contributionReductionEducation: record<key: any, value: string>, deviatingCalculationRulePayrollTax: record<key: int, value: string>, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record<key: int, value: string>, deviatingPercentageThirtyPercentFacility: float, deviatingSmallJobsArrangement: bool, deviatingTaxTableCode: record<key: int, value: string>, doesWageIncludeAow: bool, doesWageIncludeWajong: bool, endDate: string, hasEmployeeLoan: bool, id: string, percentageForeignIncome: float, residentOf: record<key: int, value: string>, specialIndication: record<four: int, one: int, three: int, two: int>, startDate: string, thirtyPercentFacility: record<key: int, value: string>, usesTransportByWithholdingAgent: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($fiscal_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'fiscalPropertiesId' must be non-empty" } }
@@ -5022,7 +5022,7 @@ export def "providers-employers-employees-employments-fiscalproperties update-fi
   --start-date: string # The start date of the entity. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
   --thirty-percent-facility: record # If the employee comes to work in the Netherlands from another country, the employer may grant an untaxed reimbursement. (30%-regeling). (nullable, format: metadata) — shape: {key?: int}
   --uses-transport-by-withholding-agent: oneof<nothing, bool> # The so-called 'vervoer vanwege inhoudingsplichtige' is a tax rule that may apply. By example when the employer organizes the transport for the employee. (e.g. false)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record<key: int, value: string>, applyPayrollTaxDeduction: bool, applySalarysplit: record<key: any, value: string>, applyStudentDeduction: bool, contributionReductionEducation: record<key: any, value: string>, deviatingCalculationRulePayrollTax: record<key: int, value: string>, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record<key: int, value: string>, deviatingPercentageThirtyPercentFacility: float, deviatingSmallJobsArrangement: bool, deviatingTaxTableCode: record<key: int, value: string>, doesWageIncludeAow: bool, doesWageIncludeWajong: bool, endDate: string, hasEmployeeLoan: bool, id: string, percentageForeignIncome: float, residentOf: record<key: int, value: string>, specialIndication: record<four: int, one: int, three: int, two: int>, startDate: string, thirtyPercentFacility: record<key: int, value: string>, usesTransportByWithholdingAgent: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5084,7 +5084,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalContributionEmployer: float, additionalPremium: float, endDate: string, healthcareInsuranceActType: record<key: int, value: string>, id: string, nominalPremium: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($healthcare_insurance_act_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'healthcareInsuranceActConfigurationId' must be non-empty" } }
@@ -5120,7 +5120,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   --healthcare-insurance-act-type: record # Indicates what type of Health Care Insurance Act (Zvw) is applicable for this employment (format: metadata) — shape: {key?: int}
   --nominal-premium: float # A nominal premium (nominale premie) for the Healthcare Insurance Act may be registered here, if applicable. (nullable, format: double, e.g. 320)
   --start-date: string # The start date of the entity. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalContributionEmployer: float, additionalPremium: float, endDate: string, healthcareInsuranceActType: record<key: int, value: string>, id: string, nominalPremium: float, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5182,7 +5182,7 @@ export def "providers-employers-employees-employments-journalallocations get-jou
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<allocationBasedOnActualHours: record<costCenter: record, costUnit: record>, allocationBasedOnFixedWeights: list<record>, endPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, id: string, journalProfileConfiguration: record<endPeriod: record, id: string, journalProfile: record, startPeriod: record>, startPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journal_allocation_id | is-empty) { error make --unspanned { msg: "path parameter 'journalAllocationId' must be non-empty" } }
@@ -5221,7 +5221,7 @@ export def "providers-employers-employees-employments-journalallocations update-
   --allocation-based-on-fixed-weights: list # Provide the allocation details within this object when allocation based on weights (=factor) is applicable. Functional effect; if the costCenter and/or costUnit are provided within this object than the journal run calculations will use these fixed weights when performing calculations. Any costCenters and costUnits in the PayrollPeriodData records will be ignored for the calculations in that case. Please note that this object MUST be null when `allocationBasedOnActualHours` is to be applied. Only one of the two may be provided. (nullable) — item shape: {costCenter?: record, costUnit?: record, weight?: int}
   --end-period: record # nullable, format: metadata — shape: {periodNumber?: int, year?: int}
   --start-period: record # format: metadata — shape: {periodNumber?: int, year?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<allocationBasedOnActualHours: record<costCenter: record, costUnit: record>, allocationBasedOnFixedWeights: list<record>, endPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, id: string, journalProfileConfiguration: record<endPeriod: record, id: string, journalProfile: record, startPeriod: record>, startPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5287,7 +5287,7 @@ export def "providers-employers-employees-employments-leave get-by-leave-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<comment: string, endDate: string, id: string, isAccrual: bool, leaveType: record<balanceExceedsYear: bool, key: int, value: string>, numberOfUnits: float, origin: record<leavePolicy: record, meansOfCreation: record>, relatedLeave: record<id: string>, relatedLeaveRequest: record<id: string>, startDate: string, unitType: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveId' must be non-empty" } }
@@ -5328,7 +5328,7 @@ export def "providers-employers-employees-employments-leave update" [
   --leave-type: record # The type of leave requested by the employee `leaveType` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
   --number-of-units: float # The number of leave units requested (format: double, e.g. 8)
   --start-date: string # The start date of the leave requested (format: date, e.g. 2017-11-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<comment: string, endDate: string, id: string, isAccrual: bool, leaveType: record<balanceExceedsYear: bool, key: int, value: string>, numberOfUnits: float, origin: record<leavePolicy: record, meansOfCreation: record>, relatedLeave: record<id: string>, relatedLeaveRequest: record<id: string>, startDate: string, unitType: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5364,7 +5364,7 @@ export def "providers-employers-employees-employments-leave-metadata get-by-leav
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<field: string, options: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveId' must be non-empty" } }
@@ -5394,7 +5394,7 @@ export def "providers-employers-employees-employments-leaverequests update-leave
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5429,7 +5429,7 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<commentEmployee: string, commentHandler: string, currentlyAvailableUnits: float, endDate: string, handledBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, handledTime: string, id: string, isAccrual: bool, leaveRequestStatus: record<key: int, value: string>, leaveType: record<key: int, value: string>, numberOfUnits: float, startDate: string, submittedBy: record<dateOfBirth: string, employeeNumber: int, firstName: string, formattedName: string, id: string, initials: string, lastName: string, lastNamePartner: string, photo: string, prefix: string, prefixPartner: string>, submittedOn: string, unitType: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_request_id | is-empty) { error make --unspanned { msg: "path parameter 'leaveRequestId' must be non-empty" } }
@@ -5469,7 +5469,7 @@ export def "providers-employers-employees-employments-leaverequests update-leave
   --leave-type: record # The type of leave requested by the employee `leaveType` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
   --number-of-units: float # The number of leave units requested (format: double, e.g. 8)
   --start-date: string # The start date of the leave requested (format: date, e.g. 2017-11-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<commentEmployee: string, commentHandler: string, currentlyAvailableUnits: float, endDate: string, handledBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, handledTime: string, id: string, isAccrual: bool, leaveRequestStatus: record<key: int, value: string>, leaveType: record<key: int, value: string>, numberOfUnits: float, startDate: string, submittedBy: record<dateOfBirth: string, employeeNumber: int, firstName: string, formattedName: string, id: string, initials: string, lastName: string, lastNamePartner: string, photo: string, prefix: string, prefixPartner: string>, submittedOn: string, unitType: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5535,7 +5535,7 @@ export def "providers-employers-employees-employments-notes get-by-note-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
@@ -5570,7 +5570,7 @@ export def "providers-employers-employees-employments-notes update" [
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5632,7 +5632,7 @@ export def "providers-employers-employees-employments-organizationalentities get
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<department: record<code: int, description: string, key: string>, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record<code: int, description: string, key: string>, endDate: string, function: record<description: string, group: string, key: string>, id: string, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record<category: int, code: string, key: int, value: string>, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($organizational_entity_id | is-empty) { error make --unspanned { msg: "path parameter 'organizationalEntityId' must be non-empty" } }
@@ -5675,7 +5675,7 @@ export def "providers-employers-employees-employments-organizationalentities upd
   --place-of-employment: string # The standard working location (standplaats) for the employment. (nullable, e.g. Amsterdam office)
   --standard-function: record # The standard (cao)function of the employment. `standardFunction` is a metadata field within the payroll administration context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: int}
   --start-date: string # The start date of the entity. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<department: record<code: int, description: string, key: string>, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record<code: int, description: string, key: string>, endDate: string, function: record<description: string, group: string, key: string>, id: string, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record<category: int, code: string, key: int, value: string>, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5741,7 +5741,7 @@ export def "providers-employers-employees-employments-other-payroll-variables ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, insuranceProperties: record, payrollProperties: record, pensionProperties: record, productivityPercentage: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($other_payroll_variables_id | is-empty) { error make --unspanned { msg: "path parameter 'otherPayrollVariablesId' must be non-empty" } }
@@ -5781,7 +5781,7 @@ export def "providers-employers-employees-employments-other-payroll-variables up
   --pension-properties: record # shape: {annualCalculationBaseAbp?: float, applyDispensationRiskFund?: bool, compulsoryEducationDays?: int, deviatingDisabilityInsuranceActPercentageForCordares?: record, leaveAbp?: record, occupationalPensionFund?: int, specificationOfIncomeRelationshipApg?: record}
   --productivity-percentage: float # productivityPercentage (Productiviteitspercentage) can be used to indicate the productivity percentage of an employment. (format: double, e.g. 100)
   --start-date: string # The date on which this record starts. A (broken chain)[./#section/Data/Date-chains] is maintained with this record. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, insuranceProperties: record<applicableForNoRiskPolicy: bool>, payrollProperties: record<applyMinimumWageVocationalLearningPathway: bool, applyYearlyHoursNorm: bool, collectiveLaborAgreementCodeHiringEmployer: record, deviatingPremiumGroup: record, incidentalIncomeDeduction: record, occupationalDisabilityDeductionAfter2009: float, occupationalDisabilityDeductionTo2009: float, occupationalDisabilityPremiumDiscount: record, phaseClassification: record, terminateIncomenumberFlexibleEmployment: record, wageCostBenefit: record, wajongWithWageDispensation: bool>, pensionProperties: record<annualCalculationBaseAbp: float, applyDispensationRiskFund: bool, compulsoryEducationDays: int, deviatingDisabilityInsuranceActPercentageForCordares: record, leaveAbp: record, occupationalPensionFund: int, specificationOfIncomeRelationshipApg: record>, productivityPercentage: float, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5843,7 +5843,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<bank: record<address: string, bankIdentifierCode: string, city: string, country: record, name: string>, bankAccountNumber: string, beneficiary: record<address: string, city: string, country: record, name: string>, id: string, payrollComponent: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_information_non_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationNonSepaId' must be non-empty" } }
@@ -5880,7 +5880,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   --bank-account-number: string # The bank account number (e.g. 0403830171874018)
   --beneficiary: record # Information regarding the beneficiary coresponding with the bank account number — shape: {address?: string, city?: string, country?: record, name?: string}
   --payroll-component: record # The payroll component for which the outgoing payment records applies. Each payroll component can only be used once per employment. `payrollComponent` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metaData) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<bank: record<address: string, bankIdentifierCode: string, city: string, country: record, name: string>, bankAccountNumber: string, beneficiary: record<address: string, city: string, country: record, name: string>, id: string, payrollComponent: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5943,7 +5943,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa get
   --accept: string@accept-completer-1 # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<bic: string, cityBeneficiary: string, description1: string, description2: string, iban: string, id: string, nameBeneficiary: string, payrollComponent: record<key: int, value: string>, visibleOnPayslip: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_information_sepa_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaId' must be non-empty" } }
@@ -5983,7 +5983,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa upd
   --name-beneficiary: string # Name of beneficiary. (nullable, e.g. Ben Hur)
   --payroll-component: record # The payroll component for which the outgoing payment records applies. `payrollComponent` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metaData) — shape: {key?: int}
   --visible-on-payslip: oneof<nothing, bool> # Indicates whether the payment-component is visible on a payslip. (e.g. true)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<bic: string, cityBeneficiary: string, description1: string, description2: string, iban: string, id: string, nameBeneficiary: string, payrollComponent: record<key: int, value: string>, visibleOnPayslip: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6045,7 +6045,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<amount: float, cityBeneficiary: string, description1: string, description2: string, endDate: string, iban: string, id: string, nameBeneficiary: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_information_sepa_separate_payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentInformationSepaSeparatePaymentId' must be non-empty" } }
@@ -6083,7 +6083,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   --iban: string # International Bank Account Number (IBAN). Only IBAN without spaces are accepted. (e.g. NL52ABNA0424968264)
   --name-beneficiary: string # Name of beneficiary (e.g. Ben Hur)
   --start-date: string # Start date of this record __NOTE :__ at the moment of performing a payroll run it will be checked what record is applicable for splitting from net salary at that date (based on the start- and enddate). (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<amount: float, cityBeneficiary: string, description1: string, description2: string, endDate: string, iban: string, id: string, nameBeneficiary: string, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6145,7 +6145,7 @@ export def "providers-employers-employees-employments-payrollperioddata get-payr
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<costCenter: record<code: string, description: string, key: int>, costUnit: record<code: string, description: string, key: int>, distributionUnit: record<code: int, description: string, key: string>, id: string, payrollComponents: list<record>, payrollPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, payslipText: string, payslipType: record<key: int, value: string>, shift: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollperioddata_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollperioddataId' must be non-empty" } }
@@ -6186,7 +6186,7 @@ export def "providers-employers-employees-employments-payrollperioddata update-p
   --payroll-components: list # item shape: {isSupplement?: bool, payrollComponent?: record, value?: float}
   --payslip-text: string # A custom text to be displayed on the payslip. (nullable, e.g. Additional payslip for bonus)
   --shift: record # The shift determines the full-time hours and bonus percentage. (format: metadata) — shape: {shiftNumber?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<costCenter: record<code: string, description: string, key: int>, costUnit: record<code: string, description: string, key: int>, distributionUnit: record<code: int, description: string, key: string>, id: string, payrollComponents: list<record>, payrollPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, payslipText: string, payslipType: record<key: int, value: string>, shift: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6252,7 +6252,7 @@ export def "providers-employers-employees-employments-pensionbenefits get-pensio
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, payout: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($pension_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'pensionBenefitId' must be non-empty" } }
@@ -6285,7 +6285,7 @@ export def "providers-employers-employees-employments-pensionbenefits update-pen
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --payout: float # The ammount of (gross) pension received (format: double, e.g. 2569)
   --start-date: string # The date on which this pension benefit starts A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payout: float, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6347,7 +6347,7 @@ export def "providers-employers-employees-employments-protectedearnings get-prot
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, threshold: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($protected_earnings_id | is-empty) { error make --unspanned { msg: "path parameter 'protectedEarningsId' must be non-empty" } }
@@ -6380,7 +6380,7 @@ export def "providers-employers-employees-employments-protectedearnings update-p
   --end-date: string # The end date of the record (nullable, format: date, e.g. 2018-10-23)
   --start-date: string # Start date of this record A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. __NOTE :__ at the moment of performing a payroll run it will be checked what record is applicable for protected earning (based on the start- and enddate, not based on the payroll period of the payroll run). (format: date, e.g. 2018-01-01)
   --threshold: any # The total amount of net wage that is protected. (format: double, e.g. 50)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, threshold: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6442,7 +6442,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits get
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, supplementation: record<percentage: float, type: record>, benefit: record<percentage: float, type: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($social_security_benefit_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityBenefitId' must be non-empty" } }
@@ -6478,7 +6478,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits upd
   --start-date: string # The start date of the entity. Valide values are either the startDate of the employment or the firstday of a payrolling year. A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
   --supplementation: record # shape: {percentage?: float, type?: record}
   --benefit: record # shape: {percentage?: float}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, supplementation: record<percentage: float, type: record>, benefit: record<percentage: float, type: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6540,7 +6540,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($social_security_configuration_id | is-empty) { error make --unspanned { msg: "path parameter 'socialSecurityConfigurationId' must be non-empty" } }
@@ -6574,7 +6574,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   --is-insured-for-sickness-benefits-act: oneof<nothing, bool> # Will contributions for the Sickness Benefits Act (ZW) be payed for this employment (e.g. true)
   --is-insured-for-unemployment-insurance-act: oneof<nothing, bool> # Will contributions for the Unemployment Insurance Act (WW) be payed for this employment (e.g. true)
   --start-date: string # The start date of the entity. Valide values are either the startDate of the employment or the firstday of a payrolling year. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6639,7 +6639,7 @@ export def "providers-employers-employees-employments-wachtgeld get-by-wachtegel
   --wachtgeld-id: string # The unique identifier of the record (format: uuid)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, startDate: string, value: float, valueAdditionalIncomeCivilService: float, valueAdditionalIncomeNonCivilService: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($wachtegelden_id | is-empty) { error make --unspanned { msg: "path parameter 'wachtegeldenId' must be non-empty" } }
@@ -6675,7 +6675,7 @@ export def "providers-employers-employees-employments-wachtgeld update" [
   --value: float # The value for the wachtgeld. (nullable, e.g. 50.87)
   --value-additional-income-civil-service: float # The value of additional income civil service (Neveninkomsten ambtelijk). (nullable, e.g. 50.87)
   --value-additional-income-non-civil-service: float # The value of additional income non civil service (Neveninkomsten niet ambtelijk). (nullable, e.g. 50.87)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, value: float, valueAdditionalIncomeCivilService: float, valueAdditionalIncomeNonCivilService: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6738,7 +6738,7 @@ export def "providers-employers-employees-employments-wages get-by-wage-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applyPayGrade: bool, employerCosts: float, employerCostsType: record<key: int, value: string>, endDate: string, grossWage: float, grossWageType: record<key: int, value: string>, id: string, isGrossWageFullTime: bool, netWage: float, netWageType: record<key: int, value: string>, payGrade: record<key: int, value: string>, payScale: record<key: int, value: string>, payrollPeriodType: record<key: int, value: string>, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($wage_id | is-empty) { error make --unspanned { msg: "path parameter 'wageId' must be non-empty" } }
@@ -6783,7 +6783,7 @@ export def "providers-employers-employees-employments-wages update" [
   --pay-grade: record # The pay grade indicates on what level (cel) of the paygrade the employment is. The level is multi dimensional where the description indicates both the level and for example the number of years of service within the given level. `payGrade` is a metadata field within the payroll administration/payScale context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: int}
   --pay-scale: record # A pay scale (also known as a salary structure) is a system that determines how much an employee is to be paid as a wage or salary, based on one or more factors such as the employee's level, rank or status within the employer's organization, the length of time that the employee has been employed, and the difficulty of the specific work performed. After selecting a pay scale a pay grade needs to be selected to determine the actual wage. Only works with `grossWage`. The value of `grossWage` will be updated server side after the submit. `payScale` is a metadata field within the payroll administration context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: int}
   --start-date: string # The start date for the information in the record. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. __Note__ It is posible to have no wage record. (format: date, e.g. 1995-05-21)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applyPayGrade: bool, employerCosts: float, employerCostsType: record<key: int, value: string>, endDate: string, grossWage: float, grossWageType: record<key: int, value: string>, id: string, isGrossWageFullTime: bool, netWage: float, netWageType: record<key: int, value: string>, payGrade: record<key: int, value: string>, payScale: record<key: int, value: string>, payrollPeriodType: record<key: int, value: string>, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6845,7 +6845,7 @@ export def "providers-employers-employees-employments-workinghours get-working-h
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<aggregatedHoursPerWeek: float, averageHoursPerWeek: float, averageParttimeFactor: float, calculateUsingWorkPattern: record<daysDailyRate: bool, deviatingDaysAndHours: bool, hoursBrokenPeriod: bool, hoursRegularPeriod: bool, leaveHours: bool>, contractCode: record<code: int, description: string, key: string>, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: int, endDate: string, flexibleHoursContract: record<key: int, value: string>, id: string, regularWorkPattern: bool, shift: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>, shiftRateSickLeave: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>, startDate: string, workPattern: record<evenWeeks: record, oddWeeks: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workinghours_id | is-empty) { error make --unspanned { msg: "path parameter 'workinghoursId' must be non-empty" } }
@@ -6893,7 +6893,7 @@ export def "providers-employers-employees-employments-workinghours update-workin
   --shift-rate-sick-leave: record # The shift determines the full-time hours and bonus percentage. `shiftRateSickLeave` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {shiftNumber?: int}
   --start-date: string # Start date of the record. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
   --work-pattern: record # The applicable work pattern for a period of 2 weeks can be stored in this object. Each field contains the number of work hours for that day in the 2-week period. Please note that the workPattern should be left NULL if no data is present (as opposed to filling all fields with 0) Each field represent the number of hours the employee normally works on that day. (nullable) — shape: {evenWeeks?: record, oddWeeks?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<aggregatedHoursPerWeek: float, averageHoursPerWeek: float, averageParttimeFactor: float, calculateUsingWorkPattern: record<daysDailyRate: bool, deviatingDaysAndHours: bool, hoursBrokenPeriod: bool, hoursRegularPeriod: bool, leaveHours: bool>, contractCode: record<code: int, description: string, key: string>, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: int, endDate: string, flexibleHoursContract: record<key: int, value: string>, id: string, regularWorkPattern: bool, shift: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>, shiftRateSickLeave: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>, startDate: string, workPattern: record<evenWeeks: record, oddWeeks: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6925,7 +6925,7 @@ export def "providers-employers-employees-employments get-by-employment-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employee: record<dateOfBirth: string, employeeNumber: int, firstName: string, formattedName: string, id: string, initials: string, lastName: string, lastNamePartner: string, photo: string, prefix: string, prefixPartner: string>, calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record<key: int, value: string>, commissionUntilDate: string, commissionUntilDate1: string, commissionUntilDate2: string, commissionUntilDate3: string, commissionUntilDate4: string, commissionUntilDate5: string, commissionUntilDate6: string, deviatingCLAExternalParty: int, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record<key: int, value: string>, employmentCategoryType: record<key: int, value: string>, employmentContractType: record<key: int, value: string>, employmentDurationType: record<key: int, value: string>, endDate: string, endOfEmploymentDueToIllness: bool, endOfEmploymentReason: record<key: int, value: string>, endOfEmploymentReasonTaxAuthorities: record<key: int, value: string>, essMutationSet: record<key: int, value: string>, exemptionInsuranceObligation: record<key: int, value: string>, exemptionPremiumWaiverMarginalLabour: bool, exemptionWorkRelatedExpenseScheme: bool, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, id: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, linkedEmployment: string, namePayslip: string, nonPayrollAdministration: record<description: string, id: string, name: string>, participation55plusRegulationUWV: bool, payrollAdministration: record<clientNumber: int, description: string, id: string, name: string>, payrollId: int, periodPayGradeAdjustment: int, professionCode: int, sendToExternalParty: record<key: int, value: string>, signalPayGradeAdjustment: bool, specialIncomeRatio: record<key: int, value: string>, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, temporaryTaxExemption: record<key: int, value: string>, typeOfEmployee: record<key: int, value: string>, typeOfParticipation: record<key: int, value: string>, vacationCoupons: record<key: int, value: string>, valueOfParticipation: record<key: int, value: string>, wachtgeldOldRegulation: bool, writtenEmploymentContract: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -6958,7 +6958,7 @@ export def "providers-employers-employees-employments update-type-of-category-ty
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --employment-category-type: record # A selection of special pre defined employment-types for the employment. NL: Type dienstverband (format: metadata) — shape: {key?: int}
   --linked-employment: string # The unique identifier of an object (GUID/UUID) (nullable, format: uuid, e.g. b14acd0d-75d7-4fc8-8b22-4a3924585cab)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentCategoryType: record<key: int, value: string>, linkedEmployment: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7053,7 +7053,7 @@ export def "providers-employers-employees-employments update" [
   --value-of-participation: record # The value of participation (waarde van deelnemerschap) is only applicable in case the person related to this employment is eligible for pension (product required). NL: WaardeDeelnemerschap (nullable, format: metadata) — shape: {key?: int}
   --wachtgeld-old-regulation: oneof<nothing, bool> # Indicates whether the (old) wachtgeld regulation is applicable for the employment. NL: WachtgeldOudeRegeling (e.g. false)
   --written-employment-contract: oneof<nothing, bool> # Did the employment and employer make a written contract? NL: Schriftelijke overeenkomst (e.g. true)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employee: record<dateOfBirth: string, employeeNumber: int, firstName: string, formattedName: string, id: string, initials: string, lastName: string, lastNamePartner: string, photo: string, prefix: string, prefixPartner: string>, calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record<key: int, value: string>, commissionUntilDate: string, commissionUntilDate1: string, commissionUntilDate2: string, commissionUntilDate3: string, commissionUntilDate4: string, commissionUntilDate5: string, commissionUntilDate6: string, deviatingCLAExternalParty: int, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record<key: int, value: string>, employmentCategoryType: record<key: int, value: string>, employmentContractType: record<key: int, value: string>, employmentDurationType: record<key: int, value: string>, endDate: string, endOfEmploymentDueToIllness: bool, endOfEmploymentReason: record<key: int, value: string>, endOfEmploymentReasonTaxAuthorities: record<key: int, value: string>, essMutationSet: record<key: int, value: string>, exemptionInsuranceObligation: record<key: int, value: string>, exemptionPremiumWaiverMarginalLabour: bool, exemptionWorkRelatedExpenseScheme: bool, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, id: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, linkedEmployment: string, namePayslip: string, nonPayrollAdministration: record<description: string, id: string, name: string>, participation55plusRegulationUWV: bool, payrollAdministration: record<clientNumber: int, description: string, id: string, name: string>, payrollId: int, periodPayGradeAdjustment: int, professionCode: int, sendToExternalParty: record<key: int, value: string>, signalPayGradeAdjustment: bool, specialIncomeRatio: record<key: int, value: string>, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, temporaryTaxExemption: record<key: int, value: string>, typeOfEmployee: record<key: int, value: string>, typeOfParticipation: record<key: int, value: string>, vacationCoupons: record<key: int, value: string>, valueOfParticipation: record<key: int, value: string>, wachtgeldOldRegulation: bool, writtenEmploymentContract: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7089,7 +7089,7 @@ export def "providers-employers-employees-employments-abpfunds get-abp-funds" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<deviations: record, endDate: string, fixedContribution: record, fund: record, id: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7127,7 +7127,7 @@ export def "providers-employers-employees-employments-abpfunds create-abp-fund" 
   --fixed-contribution: record # With the underlying elements fixed values (money) can be set as the result of the Fund calculation. In doing so the actual calculation for the `fund` will no longer take place as the outcome is fixed. This has the side effect that the "grondslag" is no longer calculated. In the data exchange with certain parties the "grondslag" has to be communicated allongside the contribution. In those cases do not use this option as the calculation is disabled. Setting a fixed contribution is done on either all the fields or none. __Note:__ `deviations` and `fixedContribution` are mutually exclusive. (nullable) — shape: {employmentContribution?: float, totalContribution?: float}
   --fund: record # format: metadata — shape: {key?: int}
   --start-date: string # The date on which this fund starts. A (linked chain)[./#section/Data/Date-chains] per fund is maintained within this resource. So multiple funds can be active at the same time but one specific fund can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<employmentContributionPercentage: float, totalContributionPercentage: float>, endDate: string, fixedContribution: record<employmentContribution: float, totalContribution: float>, fund: record<description: string, key: int>, id: string, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7163,7 +7163,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings get-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<beneficiary: record, creditor: record, description1: string, description2: string, descriptionPayslip: string, endDate: string, fixedPaymentPerPayrollPeriod: float, iban: string, id: string, startDate: string, totalAmount: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7194,7 +7194,7 @@ export def "providers-employers-employees-employments-attachmentsofearnings crea
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: any
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<beneficiary: record<city: string, name: string>, creditor: record<priority: int, type: record>, description1: string, description2: string, descriptionPayslip: string, endDate: string, fixedPaymentPerPayrollPeriod: float, iban: string, id: string, startDate: string, totalAmount: record<owed: float, paid: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7230,7 +7230,7 @@ export def "providers-employers-employees-employments-basesforcalculation get-ba
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<ageBasedMaximum: record, ageBasedMinimum: record, deviations: record, endDate: string, id: string, startDate: string, base: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7270,7 +7270,7 @@ export def "providers-employers-employees-employments-basesforcalculation create
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --start-date: string # The date on which this base starts. A (linked chain)[./#section/Data/Date-chains] per base is maintained within this resource. So multiple bases can be active at the same time but one specific base can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
   --body-base: record # `base` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<ageBasedMaximum: record<key: int, value: string>, ageBasedMinimum: record<key: int, value: string>, deviations: record<financialReservationPercentage: float, percentage: float, reservationPercentage: float>, endDate: string, id: string, startDate: string, base: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7306,7 +7306,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<base: float, endDate: string, id: string, origin: record, startDate: string, payrollComponent: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7341,7 +7341,7 @@ export def "providers-employers-employees-employments-basesforemploymentfundcalc
   --end-date: string # The end date of the entity. The date is up to and including. (nullable, format: date, e.g. 2018-10-23)
   --start-date: string # The date on which this base for calculation starts. A (linked chain)[./#section/Data/Date-chains] per base for calculation is maintained within this resource. So multiple bases can be active at the same time for different payrollcomponents (format: date, e.g. 2018-01-01)
   --payroll-component: record # A payroll component is the link to the salary calculation. In this case only specific payrollcomponents are available. The payroll components that are reserved for use as the base for fund calculations `payrollComponent` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<base: float, endDate: string, id: string, origin: record<key: int, value: string>, startDate: string, payrollComponent: record<description: string, key: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7377,7 +7377,7 @@ export def "providers-employers-employees-employments-benefits-in-kind get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<benefitInKindType: record, brand: string, endDate: string, id: string, particularities: string, startDate: string, supplier: string, type: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7416,7 +7416,7 @@ export def "providers-employers-employees-employments-benefits-in-kind create" [
   --supplier: string # The supplier of the benefit in kind. (nullable, e.g. Mediamarkt)
   --type: string # The type of the benefit in kind. (nullable, e.g. Iphone 11)
   --value: float # The value for the selected benefit of kind. (e.g. 1100)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<benefitInKindType: record<description: string, id: string>, brand: string, endDate: string, id: string, particularities: string, startDate: string, supplier: string, type: string, value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7452,7 +7452,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions get-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, payrollComponent: record, startDate: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7487,7 +7487,7 @@ export def "providers-employers-employees-employments-benefitsanddeductions crea
   --payroll-component: record # A payroll component is the link to the salary calculation. By setting the value of a component the salary calculation will take this value into account when calculating the wage of the employment. `payrollComponent` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
   --start-date: string # The start date for the information in the record. A (linked chain)[./#section/Data/Date-chains] per payroll component is maintained with this resource. (format: date, e.g. 1995-05-21)
   --value: float # The value for the selected payroll component. (e.g. 50.87)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payrollComponent: record<category: record, deductionOrPayment: record, description: string, key: int>, startDate: string, value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7523,7 +7523,7 @@ export def "providers-employers-employees-employments-companycars get-company-ca
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<brand: string, catalogValue: float, comments: string, endDate: string, fuelCardNumber: string, id: string, kilometersPrivateUse: int, lease: record, leaseOrBuy: record, licensePlateNumber: string, model: string, startDate: string, supplier: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7567,7 +7567,7 @@ export def "providers-employers-employees-employments-companycars create-company
   --model: string # Model of the vehicle. (nullable, e.g. V60)
   --start-date: string # The start date of the entity. (format: date, e.g. 2021-01-01)
   --supplier: string # Name of the company the delivered the company car. (nullable, e.g. Leasemaatschappij Tilburg)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<brand: string, catalogValue: float, comments: string, endDate: string, fuelCardNumber: string, id: string, kilometersPrivateUse: int, lease: record<contractNumber: string, endDate: string, startDate: string>, leaseOrBuy: record<key: int, value: string>, licensePlateNumber: string, model: string, startDate: string, supplier: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7600,7 +7600,7 @@ export def "providers-employers-employees-employments-correctstartdate update-co
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --start-date: string # The date on which this employment starts (=first day of the employment). (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7637,7 +7637,7 @@ export def "providers-employers-employees-employments-costperhour get-cost-per-h
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<costPerHour: float, id: string, payrollPeriods: record, registrationMethod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7670,7 +7670,7 @@ export def "providers-employers-employees-employments-costperhour create-cost-pe
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --cost-per-hour: float # The cost per hour for the employment (format: double, e.g. 21.2)
   --payroll-periods: record # The period of the kpu record. — shape: {id?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<costPerHour: float, id: string, payrollPeriods: record<endDate: string, id: int, periodNumber: int, startDate: string, year: int>, registrationMethod: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7706,7 +7706,7 @@ export def "providers-employers-employees-employments-customfields get-custom-fi
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<customField: record, id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7739,7 +7739,7 @@ export def "providers-employers-employees-employments-customfields create-custom
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --custom-field: record # The custom field as defined at the employer-level. The value can only be set in the POST (it cannot be changed with a PUT). (format: metadata) — shape: {id?: string}
   --value: string # The value for the custom field for the employment (e.g. 41)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<customField: record<description: string, id: string>, id: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7775,7 +7775,7 @@ export def "providers-employers-employees-employments-customnotifications get-cu
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<expirationDate: string, id: string, notificationDate: string, notificationText: string, recurrencePattern: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7810,7 +7810,7 @@ export def "providers-employers-employees-employments-customnotifications create
   --notification-date: string # The date on which the first notification occurs. (format: date, e.g. 2021-01-01)
   --notification-text: string # The description of the signal (e.g. Signal renew document)
   --recurrence-pattern: record # Define a pattern for repeating the notification. This pattern is used to create Notifications after the initial notification as defined in the notificationDate. (nullable, format: metadata) — shape: {numberOfRepetitionsAfterFirstNotification?: int, recurrenceNumber?: int, recurrencePeriod?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<expirationDate: string, id: string, notificationDate: string, notificationText: string, recurrencePattern: record<numberOfRepetitionsAfterFirstNotification: int, recurrenceNumber: int, recurrencePeriod: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7846,7 +7846,7 @@ export def "providers-employers-employees-employments-declarations get-by-employ
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dateOfLastChangeByEmployee: string, dateOfSubmissionByEmployee: string, declarationComment: string, declarationDate: string, declarationStatus: record, id: string, numberOfUnits: float, payrollComponent: record, processedInPayrollPeriod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7880,7 +7880,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endPeriod: record, id: string, startPeriod: record, typeOfDeviatingAwfContribution: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7916,7 +7916,7 @@ export def "providers-employers-employees-employments-deviatingawfcontributions 
   --end-period: record # nullable, format: metadata — shape: {periodNumber?: int, year?: int}
   --start-period: record # format: metadata — shape: {periodNumber?: int, year?: int}
   --type-of-deviating-awf-contribution: record # format: metadata — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, id: string, startPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, typeOfDeviatingAwfContribution: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7952,7 +7952,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages get-d
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, payrollComponent: record, startDate: string, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -7987,7 +7987,7 @@ export def "providers-employers-employees-employments-deviatinghourlywages creat
   --payroll-component: record # A payroll component is the link to the salary calculation. By setting the value of a component the salary calculation will take this value into account when calculating the wage of the employment. `payrollComponent` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
   --start-date: string # The date on which this DeviatingHouryWage starts. A (broken chain)[./#section/Data/Date-chains] per DeviatingHouryWage is maintained within this resource. So multiple DeviatingHouryWages can be active at the same time but one specific DeviatingHouryWage can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
   --value: float # The value for the selected payroll component. (e.g. 50.87)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payrollComponent: record<description: string, key: int>, startDate: string, value: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8023,7 +8023,7 @@ export def "providers-employers-employees-employments-documents get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<isInitiateSignDocumentRequestPossible: bool, signDocumentStatus: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8192,7 +8192,7 @@ export def "providers-employers-employees-employments-documents-audittrail get-a
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<attribute: string, category: string, dateOfAlert: string, description: string, endUser: string, event: string, eventDate: string, role: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8255,7 +8255,7 @@ export def "providers-employers-employees-employments-documents-signature get-by
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: record<signDocumentStatus: record<Key: string, Value: string>, signerStatus: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8287,7 +8287,7 @@ export def "providers-employers-employees-employments-documents-signature-initia
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<signDocumentStatus: record<Key: string, Value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8321,7 +8321,7 @@ export def "providers-employers-employees-employments-documents-signature-report
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8401,7 +8401,7 @@ export def "providers-employers-employees-employments-documenttemplates-generate
   --reference-date: string # This date will be used to select date depending data such as department and function. (format: date, e.g. 2020-05-08)
   --template-employer-id: string # The unique identifier of the employer to which the template belongs (GUID/UUID). (format: uuid, e.g. b14acd0d-75d7-4fc8-8b22-4a3924585cab)
   --year: int # The year the document relates to. Qwoater: Docfield 86 Jaar (nullable, format: int32, e.g. 2017)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8436,7 +8436,7 @@ export def "providers-employers-employees-employments-employeeprofile update-pro
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --activation-date: string # The date on which the profile should be activated. (format: date, e.g. 2021-01-01)
   --employee-profile-id: int # The Id of the employeeProfile. If not provided, the employeeProfile which is set at employment level, is used. (nullable, format: int32, e.g. 1)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<basesForCalculation: list<string>, benefitsAndDeductions: list<string>, employmentFunds: list<string>, employmentFundsABP: list<string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8472,7 +8472,7 @@ export def "providers-employers-employees-employments-employmentfunds get-funds"
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<deviations: record, endDate: string, fixedContribution: record, fund: record, id: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8510,7 +8510,7 @@ export def "providers-employers-employees-employments-employmentfunds create-fun
   --fixed-contribution: record # With the underlying elements fixed values (money) can be set as the result of the Fund calculation. In doing so the actual calculation for the `fund` will no longer take place as the outcome is fixed. This has the side effect that the "grondslag" is no longer calculated. In the data exchange with certain parties the "grondslag" has to be communicated allongside the contribution. In those cases do not use this option as the calculation is disabled. Setting a fixed contribution is done on either all the fields or none. __Note:__ `deviations` and `fixedContribution` are mutually exclusive. (nullable) — shape: {employmentContribution?: float, totalContribution?: float}
   --fund: record # format: metadata — shape: {key?: int}
   --start-date: string # The date on which this fund starts. A (linked chain)[./#section/Data/Date-chains] per fund is maintained within this resource. So multiple funds can be active at the same time but one specific fund can never be active multiple times at the same time. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<employmentContributionPercentage: float, totalContributionPercentage: float>, endDate: string, fixedContribution: record<employmentContribution: float, totalContribution: float>, fund: record<description: string, key: int>, id: string, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8546,7 +8546,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars get-fisc
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<additionalTaxLiabilityGroup: record, dateOfFirstAdmission: string, deviatingAdditionalTaxLiability: float, endDate: string, id: string, licensePlateNumber: string, reasonForNoAdditionalTaxLiability: record, startDate: string, taxableBenefitForPrivateUse: float, valueForTaxPurposes: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8587,7 +8587,7 @@ export def "providers-employers-employees-employments-fiscalcompanycars create-f
   --start-date: string # The start date of the entity. A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2021-01-01)
   --taxable-benefit-for-private-use: float # Taxable benefit for private use (eigen bijdrage van de werknemer) may be entered here, this will lower the tax liability to be paid in the payrolling process. (nullable, format: double, e.g. 2000)
   --value-for-tax-purposes: float # The value of the car for tax purposes. This field may only be NULL if a reason for no additional tax liability (reden voor geen bijtelling) is provided. It is possible to acquire a value for this field based on the RDW-registration by calling that supplementary endpoint. (nullable, format: double, e.g. 20000)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalTaxLiabilityGroup: record<key: int, value: string>, dateOfFirstAdmission: string, deviatingAdditionalTaxLiability: float, endDate: string, id: string, licensePlateNumber: string, reasonForNoAdditionalTaxLiability: record<key: int, value: string>, startDate: string, taxableBenefitForPrivateUse: float, valueForTaxPurposes: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8623,7 +8623,7 @@ export def "providers-employers-employees-employments-fiscalproperties get-fisca
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record, applyPayrollTaxDeduction: bool, applySalarysplit: record, applyStudentDeduction: bool, contributionReductionEducation: record, deviatingCalculationRulePayrollTax: record, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record, deviatingPercentageThirtyPercentFacility: float, deviatingSmallJobsArrangement: bool, deviatingTaxTableCode: record, doesWageIncludeAow: bool, doesWageIncludeWajong: bool, endDate: string, hasEmployeeLoan: bool, id: string, percentageForeignIncome: float, residentOf: record, specialIndication: record, startDate: string, thirtyPercentFacility: record, usesTransportByWithholdingAgent: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8682,7 +8682,7 @@ export def "providers-employers-employees-employments-fiscalproperties create-fi
   --start-date: string # The start date of the entity. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
   --thirty-percent-facility: record # If the employee comes to work in the Netherlands from another country, the employer may grant an untaxed reimbursement. (30%-regeling). (nullable, format: metadata) — shape: {key?: int}
   --uses-transport-by-withholding-agent: oneof<nothing, bool> # The so-called 'vervoer vanwege inhoudingsplichtige' is a tax rule that may apply. By example when the employer organizes the transport for the employee. (e.g. false)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record<key: int, value: string>, applyPayrollTaxDeduction: bool, applySalarysplit: record<key: any, value: string>, applyStudentDeduction: bool, contributionReductionEducation: record<key: any, value: string>, deviatingCalculationRulePayrollTax: record<key: int, value: string>, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record<key: int, value: string>, deviatingPercentageThirtyPercentFacility: float, deviatingSmallJobsArrangement: bool, deviatingTaxTableCode: record<key: int, value: string>, doesWageIncludeAow: bool, doesWageIncludeWajong: bool, endDate: string, hasEmployeeLoan: bool, id: string, percentageForeignIncome: float, residentOf: record<key: int, value: string>, specialIndication: record<four: int, one: int, three: int, two: int>, startDate: string, thirtyPercentFacility: record<key: int, value: string>, usesTransportByWithholdingAgent: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8718,7 +8718,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<additionalContributionEmployer: float, additionalPremium: float, endDate: string, healthcareInsuranceActType: record, id: string, nominalPremium: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8754,7 +8754,7 @@ export def "providers-employers-employees-employments-healthcareinsuranceactconf
   --healthcare-insurance-act-type: record # Indicates what type of Health Care Insurance Act (Zvw) is applicable for this employment (format: metadata) — shape: {key?: int}
   --nominal-premium: float # A nominal premium (nominale premie) for the Healthcare Insurance Act may be registered here, if applicable. (nullable, format: double, e.g. 320)
   --start-date: string # The start date of the entity. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalContributionEmployer: float, additionalPremium: float, endDate: string, healthcareInsuranceActType: record<key: int, value: string>, id: string, nominalPremium: float, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8790,7 +8790,7 @@ export def "providers-employers-employees-employments-journalallocations get-jou
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<allocationBasedOnActualHours: record, allocationBasedOnFixedWeights: list, endPeriod: record, id: string, journalProfileConfiguration: record, startPeriod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8829,7 +8829,7 @@ export def "providers-employers-employees-employments-journalallocations create-
   --allocation-based-on-fixed-weights: list # Provide the allocation details within this object when allocation based on weights (=factor) is applicable. Functional effect; if the costCenter and/or costUnit are provided within this object than the journal run calculations will use these fixed weights when performing calculations. Any costCenters and costUnits in the PayrollPeriodData records will be ignored for the calculations in that case. Please note that this object MUST be null when `allocationBasedOnActualHours` is to be applied. Only one of the two may be provided. (nullable) — item shape: {costCenter?: record, costUnit?: record, weight?: int}
   --end-period: record # nullable, format: metadata — shape: {periodNumber?: int, year?: int}
   --start-period: record # format: metadata — shape: {periodNumber?: int, year?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<allocationBasedOnActualHours: record<costCenter: record, costUnit: record>, allocationBasedOnFixedWeights: list<record>, endPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, id: string, journalProfileConfiguration: record<endPeriod: record, id: string, journalProfile: record, startPeriod: record>, startPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8865,7 +8865,7 @@ export def "providers-employers-employees-employments-leave get-by-employment-id
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<comment: string, endDate: string, id: string, isAccrual: bool, leaveType: record, numberOfUnits: float, origin: record, relatedLeave: record, relatedLeaveRequest: record, startDate: string, unitType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8905,7 +8905,7 @@ export def "providers-employers-employees-employments-leave create" [
   --leave-type: record # The type of leave requested by the employee `leaveType` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {key?: int}
   --number-of-units: float # The number of leave units requested (format: double, e.g. 8)
   --start-date: string # The start date of the leave requested (format: date, e.g. 2017-11-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<comment: string, endDate: string, id: string, isAccrual: bool, leaveType: record<balanceExceedsYear: bool, key: int, value: string>, numberOfUnits: float, origin: record<leavePolicy: record, meansOfCreation: record>, relatedLeave: record<id: string>, relatedLeaveRequest: record<id: string>, startDate: string, unitType: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8941,7 +8941,7 @@ export def "providers-employers-employees-employments-leave-defaults get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<comment: string, endDate: string, id: string, isAccrual: bool, leaveType: record, numberOfUnits: float, origin: record, relatedLeave: record, relatedLeaveRequest: record, startDate: string, unitType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -8975,7 +8975,7 @@ export def "providers-employers-employees-employments-leave-metadata get-by-empl
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<field: string, options: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9006,7 +9006,7 @@ export def "providers-employers-employees-employments-leave-overview get-by-idan
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9042,7 +9042,7 @@ export def "providers-employers-employees-employments-leave-proposedleavehours g
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalInformation: string, employmentId: string, methodOfCalculation: string, proposedLeaveHours: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9076,7 +9076,7 @@ export def "providers-employers-employees-employments-leavebalances get-leave-ba
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accrual: float, balance: float, balancePreviousYear: float, expires: float, leaveType: record, unitType: record, usageAfterToday: float, usageThroughToday: float, usageTotal: float, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9110,7 +9110,7 @@ export def "providers-employers-employees-employments-leavepolicies get-leave-po
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, leaveUnitType: record, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9141,7 +9141,7 @@ export def "providers-employers-employees-employments-leavepolicies update-leave
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9177,7 +9177,7 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<commentEmployee: string, commentHandler: string, currentlyAvailableUnits: float, endDate: string, handledBy: record, handledTime: string, id: string, isAccrual: bool, leaveRequestStatus: record, leaveType: record, numberOfUnits: float, startDate: string, submittedBy: record, submittedOn: string, unitType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9211,7 +9211,7 @@ export def "providers-employers-employees-employments-notes get-by-employment-id
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9245,7 +9245,7 @@ export def "providers-employers-employees-employments-notes create" [
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9281,7 +9281,7 @@ export def "providers-employers-employees-employments-organizationalentities get
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<department: record, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record, endDate: string, function: record, id: string, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9324,7 +9324,7 @@ export def "providers-employers-employees-employments-organizationalentities cre
   --place-of-employment: string # The standard working location (standplaats) for the employment. (nullable, e.g. Amsterdam office)
   --standard-function: record # The standard (cao)function of the employment. `standardFunction` is a metadata field within the payroll administration context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: int}
   --start-date: string # The start date of the entity. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<department: record<code: int, description: string, key: string>, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record<code: int, description: string, key: string>, endDate: string, function: record<description: string, group: string, key: string>, id: string, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record<category: int, code: string, key: int, value: string>, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9360,7 +9360,7 @@ export def "providers-employers-employees-employments-other-payroll-variables ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, insuranceProperties: record, payrollProperties: record, pensionProperties: record, productivityPercentage: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9399,7 +9399,7 @@ export def "providers-employers-employees-employments-other-payroll-variables cr
   --pension-properties: record # shape: {annualCalculationBaseAbp?: float, applyDispensationRiskFund?: bool, compulsoryEducationDays?: int, deviatingDisabilityInsuranceActPercentageForCordares?: record, leaveAbp?: record, occupationalPensionFund?: int, specificationOfIncomeRelationshipApg?: record}
   --productivity-percentage: float # productivityPercentage (Productiviteitspercentage) can be used to indicate the productivity percentage of an employment. (format: double, e.g. 100)
   --start-date: string # The date on which this record starts. A (broken chain)[./#section/Data/Date-chains] is maintained with this record. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, insuranceProperties: record<applicableForNoRiskPolicy: bool>, payrollProperties: record<applyMinimumWageVocationalLearningPathway: bool, applyYearlyHoursNorm: bool, collectiveLaborAgreementCodeHiringEmployer: record, deviatingPremiumGroup: record, incidentalIncomeDeduction: record, occupationalDisabilityDeductionAfter2009: float, occupationalDisabilityDeductionTo2009: float, occupationalDisabilityPremiumDiscount: record, phaseClassification: record, terminateIncomenumberFlexibleEmployment: record, wageCostBenefit: record, wajongWithWageDispensation: bool>, pensionProperties: record<annualCalculationBaseAbp: float, applyDispensationRiskFund: bool, compulsoryEducationDays: int, deviatingDisabilityInsuranceActPercentageForCordares: record, leaveAbp: record, occupationalPensionFund: int, specificationOfIncomeRelationshipApg: record>, productivityPercentage: float, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9435,7 +9435,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<bank: record, bankAccountNumber: string, beneficiary: record, id: string, payrollComponent: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9466,7 +9466,7 @@ export def "providers-employers-employees-employments-paymentinformationnonsepa 
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: any
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<bank: record<address: string, bankIdentifierCode: string, city: string, country: record, name: string>, bankAccountNumber: string, beneficiary: record<address: string, city: string, country: record, name: string>, id: string, payrollComponent: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9503,7 +9503,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa get
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<bic: string, cityBeneficiary: string, description1: string, description2: string, iban: string, id: string, nameBeneficiary: string, payrollComponent: record, visibleOnPayslip: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9535,7 +9535,7 @@ export def "providers-employers-employees-employments-paymentinformationsepa cre
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: any
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<bic: string, cityBeneficiary: string, description1: string, description2: string, iban: string, id: string, nameBeneficiary: string, payrollComponent: record<key: int, value: string>, visibleOnPayslip: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9571,7 +9571,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<amount: float, cityBeneficiary: string, description1: string, description2: string, endDate: string, iban: string, id: string, nameBeneficiary: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9602,7 +9602,7 @@ export def "providers-employers-employees-employments-paymentinformationsepasepa
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: any
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<amount: float, cityBeneficiary: string, description1: string, description2: string, endDate: string, iban: string, id: string, nameBeneficiary: string, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9638,7 +9638,7 @@ export def "providers-employers-employees-employments-payroll-simulator-data get
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<payrollPeriodType: record<key: int, value: string>, startDateDeviations: string, wage: record<class: string, currentWage: float, type: record>, workingHours: record<currentHoursPerWeek: float, shift: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9672,7 +9672,7 @@ export def "providers-employers-employees-employments-payrollperioddata get-payr
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<costCenter: record, costUnit: record, distributionUnit: record, id: string, payrollComponents: list, payrollPeriod: record, payslipText: string, payslipType: record, shift: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9769,7 +9769,7 @@ export def "providers-employers-employees-employments-payrollperioddata create-p
   --payslip-text: string # A custom text to be displayed on the payslip. (nullable, e.g. Additional payslip for bonus)
   --payslip-type: record # The type of payslip (as defined by the Dutch tax authorities) (format: metadata) — shape: {key?: int}
   --shift: record # The shift determines the full-time hours and bonus percentage. `shift` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {shiftNumber?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<costCenter: record<code: string, description: string, key: int>, costUnit: record<code: string, description: string, key: int>, distributionUnit: record<code: int, description: string, key: string>, id: string, payrollComponents: list<record>, payrollPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, payslipText: string, payslipType: record<key: int, value: string>, shift: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9802,7 +9802,7 @@ export def "providers-employers-employees-employments-payrollperiodresults-year 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentId: string, payrollPeriods: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9836,7 +9836,7 @@ export def "providers-employers-employees-employments-payslips get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<approvalTime: string, numberOfPayslips: int, payrollPeriod: record, payrollrunId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9867,7 +9867,7 @@ export def "providers-employers-employees-employments-payslips-summary get-payro
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9899,7 +9899,7 @@ export def "providers-employers-employees-employments-payslips get-by-and-payrol
   --accept: string@accept-completer-2 # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentId: string, payrollPeriods: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9930,7 +9930,7 @@ export def "providers-employers-employees-employments-payslips get-by-and" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9964,7 +9964,7 @@ export def "providers-employers-employees-employments-pensionbenefits get-pensio
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, payout: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -9996,7 +9996,7 @@ export def "providers-employers-employees-employments-pensionbenefits create-pen
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --payout: float # The ammount of (gross) pension received (format: double, e.g. 2569)
   --start-date: string # The date on which this pension benefit starts A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, payout: float, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10032,7 +10032,7 @@ export def "providers-employers-employees-employments-protectedearnings get-prot
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, startDate: string, threshold: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10063,7 +10063,7 @@ export def "providers-employers-employees-employments-protectedearnings create-p
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: any
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, threshold: any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10096,7 +10096,7 @@ export def "providers-employers-employees-employments-reinstate update" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: record
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10132,7 +10132,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits get
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, startDate: string, supplementation: record, benefit: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10168,7 +10168,7 @@ export def "providers-employers-employees-employments-socialsecuritybenefits cre
   --start-date: string # The start date of the entity. Valide values are either the startDate of the employment or the firstday of a payrolling year. A (broken chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
   --supplementation: record # shape: {percentage?: float, type?: record}
   --benefit: record # shape: {percentage?: float, type?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, supplementation: record<percentage: float, type: record>, benefit: record<percentage: float, type: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10204,7 +10204,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10238,7 +10238,7 @@ export def "providers-employers-employees-employments-socialsecurityconfiguratio
   --is-insured-for-sickness-benefits-act: oneof<nothing, bool> # Will contributions for the Sickness Benefits Act (ZW) be payed for this employment (e.g. true)
   --is-insured-for-unemployment-insurance-act: oneof<nothing, bool> # Will contributions for the Unemployment Insurance Act (WW) be payed for this employment (e.g. true)
   --start-date: string # The start date of the entity. Valide values are either the startDate of the employment or the firstday of a payrolling year. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10276,7 +10276,7 @@ export def "providers-employers-employees-employments-terminate update" [
   --end-date: string # The date on which the employment ends (=last day of the employment). (format: date, e.g. 2018-10-23)
   --end-of-employment-due-to-illness: oneof<nothing, bool> # Indicates whether the reason for the termination of an employment is due to long-term illness. Mandatory if endDate is filled, else leave empty. (e.g. false)
   --end-of-employment-reason: record # The reason for the end of the employment. Mandatory if endDate is filled, else leave empty. (format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10309,7 +10309,7 @@ export def "providers-employers-employees-employments-transitioncompensation cre
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: record
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10347,7 +10347,7 @@ export def "providers-employers-employees-employments-transitioncompensation-cal
   --gross-monthly-wage: float # Gross wage/ basic wage for the employment per month. (format: double, e.g. 2300)
   --shift-bonus-percentage: float # The bonus percentage used in wage calculations based on given shift. (format: double, e.g. 12)
   --start-date: string # The date on which this employment starts. (format: date, e.g. 2018-01-01)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentDurationInDecimalYears: float, monthlyWage: float, transitionCompensationAmount: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10379,7 +10379,7 @@ export def "providers-employers-employees-employments-transitioncompensation-cal
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<baseCalculationsBonusPercentage: float, endDate: string, grossMonthlySupplement: float, grossMonthlyWage: float, shiftBonusPercentage: float, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10412,7 +10412,7 @@ export def "providers-employers-employees-employments-wachtgeld get-by-employmen
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, id: string, startDate: string, value: float, valueAdditionalIncomeCivilService: float, valueAdditionalIncomeNonCivilService: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10446,7 +10446,7 @@ export def "providers-employers-employees-employments-wachtgeld create" [
   --value: float # The value for the wachtgeld. (nullable, e.g. 50.87)
   --value-additional-income-civil-service: float # The value of additional income civil service (Neveninkomsten ambtelijk). (nullable, e.g. 50.87)
   --value-additional-income-non-civil-service: float # The value of additional income non civil service (Neveninkomsten niet ambtelijk). (nullable, e.g. 50.87)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<endDate: string, id: string, startDate: string, value: float, valueAdditionalIncomeCivilService: float, valueAdditionalIncomeNonCivilService: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10481,7 +10481,7 @@ export def "providers-employers-employees-employments-wageprojection create-wage
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --calculate-using-next-years-values: oneof<nothing, bool> # If set to true the wage projection will use the (government) salary values of the next payroll year to calculate the wages. This gives some insight in what the employments wages will do next year based on the government's tax plans." (nullable, default: false, e.g. true)
   --deviations: record # This endpoint can only be used for employments that are already known in the loket.nl system. If however you want to perform a calculation with different parameters then that are known in the loket system they can be set here (nullable) — shape: {hoursPerWeek?: float, percentageChange?: float, startDate?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentId: string, payrollPeriods: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10530,7 +10530,7 @@ export def "providers-employers-employees-employments-wageprojection-based-on-de
   --holiday-allowance: record # nullable — shape: {percentage?: float, resultPayrollComponent?: record}
   --hours-per-week: float # The hours per week te be used in the wage calculation. Please note that currently this endpoint will always calculate as if the hours provided are full time hours. (format: double, e.g. 24.5)
   --payments: record # nullable — shape: {gross?: float, net?: float}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentId: string, payrollPeriods: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10566,7 +10566,7 @@ export def "providers-employers-employees-employments-wages get-by-employment-id
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<applyPayGrade: bool, employerCosts: float, employerCostsType: record, endDate: string, grossWage: float, grossWageType: record, id: string, isGrossWageFullTime: bool, netWage: float, netWageType: record, payGrade: record, payScale: record, payrollPeriodType: record, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10611,7 +10611,7 @@ export def "providers-employers-employees-employments-wages create" [
   --pay-grade: record # The pay grade indicates on what level (cel) of the paygrade the employment is. The level is multi dimensional where the description indicates both the level and for example the number of years of service within the given level. `payGrade` is a metadata field within the payroll administration/payScale context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: int}
   --pay-scale: record # A pay scale (also known as a salary structure) is a system that determines how much an employee is to be paid as a wage or salary, based on one or more factors such as the employee's level, rank or status within the employer's organization, the length of time that the employee has been employed, and the difficulty of the specific work performed. After selecting a pay scale a pay grade needs to be selected to determine the actual wage. Only works with `grossWage`. The value of `grossWage` will be updated server side after the submit. `payScale` is a metadata field within the payroll administration context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: int}
   --start-date: string # The start date for the information in the record. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. __Note__ It is posible to have no wage record. (format: date, e.g. 1995-05-21)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applyPayGrade: bool, employerCosts: float, employerCostsType: record<key: int, value: string>, endDate: string, grossWage: float, grossWageType: record<key: int, value: string>, id: string, isGrossWageFullTime: bool, netWage: float, netWageType: record<key: int, value: string>, payGrade: record<key: int, value: string>, payScale: record<key: int, value: string>, payrollPeriodType: record<key: int, value: string>, startDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10644,7 +10644,7 @@ export def "providers-employers-employees-employments-wagesheet get-wage-sheet-b
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10678,7 +10678,7 @@ export def "providers-employers-employees-employments-workinghours get-working-h
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<aggregatedHoursPerWeek: float, averageHoursPerWeek: float, averageParttimeFactor: float, calculateUsingWorkPattern: record, contractCode: record, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: int, endDate: string, flexibleHoursContract: record, id: string, regularWorkPattern: bool, shift: record, shiftRateSickLeave: record, startDate: string, workPattern: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10726,7 +10726,7 @@ export def "providers-employers-employees-employments-workinghours create-workin
   --shift-rate-sick-leave: record # The shift determines the full-time hours and bonus percentage. `shiftRateSickLeave` is a metadata field within the payroll administration context. Possible values can be managed by the user. (format: metadata) — shape: {shiftNumber?: int}
   --start-date: string # Start date of the record. A (linked chain)[./#section/Data/Date-chains] is maintained within this resource. (format: date, e.g. 2018-01-01)
   --work-pattern: record # The applicable work pattern for a period of 2 weeks can be stored in this object. Each field contains the number of work hours for that day in the 2-week period. Please note that the workPattern should be left NULL if no data is present (as opposed to filling all fields with 0) Each field represent the number of hours the employee normally works on that day. (nullable) — shape: {evenWeeks?: record, oddWeeks?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<aggregatedHoursPerWeek: float, averageHoursPerWeek: float, averageParttimeFactor: float, calculateUsingWorkPattern: record<daysDailyRate: bool, deviatingDaysAndHours: bool, hoursBrokenPeriod: bool, hoursRegularPeriod: bool, leaveHours: bool>, contractCode: record<code: int, description: string, key: string>, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: int, endDate: string, flexibleHoursContract: record<key: int, value: string>, id: string, regularWorkPattern: bool, shift: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>, shiftRateSickLeave: record<bonusPercentage: float, fullTimeHoursPerWeek: float, shiftNumber: int>, startDate: string, workPattern: record<evenWeeks: record, oddWeeks: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10762,7 +10762,7 @@ export def "providers-employers-employees-employments-yearendstatements get-year
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10793,7 +10793,7 @@ export def "providers-employers-employees-employments-yearendstatements get-end-
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employment_id | is-empty) { error make --unspanned { msg: "path parameter 'employmentId' must be non-empty" } }
@@ -10857,7 +10857,7 @@ export def "providers-employers-employees-notes get-by-note-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
@@ -10892,7 +10892,7 @@ export def "providers-employers-employees-notes update" [
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10954,7 +10954,7 @@ export def "providers-employers-employees-partners get-by-partner-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dateOfBirth: string, dateOfDeath: string, endDate: string, firstName: string, gender: record<key: int, value: string>, howToFormatLastName: record<key: int, value: string>, id: string, initials: string, lastName: string, placeOfBirth: string, prefix: string, startDate: string, title: record<key: int, value: string>, waoClassification: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerId' must be non-empty" } }
@@ -11001,7 +11001,7 @@ export def "providers-employers-employees-partners update" [
   --start-date: string # startdate (nullable, format: date, e.g. 1995-05-21)
   --title: record # The title to be used (if any). (nullable, format: metadata) — shape: {key?: int}
   --wao-classification: record # The occupational disability classification in the form of a percentage range. (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dateOfBirth: string, dateOfDeath: string, endDate: string, firstName: string, gender: record<key: int, value: string>, howToFormatLastName: record<key: int, value: string>, id: string, initials: string, lastName: string, placeOfBirth: string, prefix: string, startDate: string, title: record<key: int, value: string>, waoClassification: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11033,7 +11033,7 @@ export def "providers-employers-employees-selfservice update-self-service-access
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11065,7 +11065,7 @@ export def "providers-employers-employees get-by-employee-id" [
   --accept: string@accept-completer-4 # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, street: string>, contactInformation: record<emailAddress: string, faxNumber: string, mobilePhoneNumber: string, phoneNumber: string>, deviatingPostalAddress: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, street: string>, employeeNumber: int, exclusionFromAbsenceStatus: bool, id: string, identityDocument: record<documentIdentification: string, typeOfDocument: record>, personalDetails: record<aowDate: string, civilStatus: record, dateOfBirth: string, dateOfDeath: string, firstName: string, formattedName: string, gender: record, howToFormatLastName: record, initials: string, lastName: string, lastNamePartner: string, nationality: record, photo: string, placeOfBirth: string, prefix: string, prefixPartner: string, title: record>, revokeEmployeeSelfServiceAccessOn: string, statusEmployeeSelfService: record<key: int, value: string>, travel: record<travelDistanceToWork: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11110,7 +11110,7 @@ export def "providers-employers-employees update" [
   --identity-document: record # nullable — shape: {documentIdentification?: string, typeOfDocument?: record}
   --personal-details: record # shape: {civilStatus?: record, dateOfBirth?: string, dateOfDeath?: string, firstName?: string, gender?: record, howToFormatLastName?: record, initials?: string, lastName?: string, lastNamePartner?: string, nationality?: record, placeOfBirth?: string, prefix?: string, prefixPartner?: string, title?: record}
   --travel: record # shape: {travelDistanceToWork?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, street: string>, contactInformation: record<emailAddress: string, faxNumber: string, mobilePhoneNumber: string, phoneNumber: string>, deviatingPostalAddress: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, street: string>, employeeNumber: int, exclusionFromAbsenceStatus: bool, id: string, identityDocument: record<documentIdentification: string, typeOfDocument: record>, personalDetails: record<aowDate: string, civilStatus: record, dateOfBirth: string, dateOfDeath: string, firstName: string, formattedName: string, gender: record, howToFormatLastName: record, initials: string, lastName: string, lastNamePartner: string, nationality: record, photo: string, placeOfBirth: string, prefix: string, prefixPartner: string, title: record>, revokeEmployeeSelfServiceAccessOn: string, statusEmployeeSelfService: record<key: int, value: string>, travel: record<travelDistanceToWork: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11146,7 +11146,7 @@ export def "providers-employers-employees-absences get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accidentType: record, actionToBeTakenByOccupationalHealthAndSafetyService: record, caseManager: record, causeOfAbsence: record, comments: string, contactInformation: record, expectedDateOfChildbirth: string, expectedDuration: record, expectedEndDateOfMaternityLeave: string, hasMobilityIssue: bool, hoursWorkedOnFirstDayOfAbsence: int, id: string, isDisruptedEmploymentRelationship: bool, isHospitalised: bool, isRecoveredWithinTwoWeeks: bool, isThirdPartyLiability: bool, isWorkRelatedIllness: bool, progress: record, reintegration: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11202,7 +11202,7 @@ export def "providers-employers-employees-absences create" [
   --is-work-related-illness: oneof<nothing, bool> # Beroepsziekte (e.g. false)
   --progress: record # shape: {currentIncapacityPercentage?: int, startDate?: string}
   --reintegration: record # nullable — shape: {dateOfFinalizingPlanOfAction?: string, reintegrationGoal?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accidentType: record<key: int, value: string>, actionToBeTakenByOccupationalHealthAndSafetyService: record<key: int, value: string>, caseManager: record<function: string, name: string, organization: string, phoneNumber: string>, causeOfAbsence: record<key: int, value: string>, comments: string, contactInformation: record<city: string, country: record, endDate: string, furtherIndication: record, houseNumber: int, houseNumberAddition: string, locationType: record, name: string, phoneNumber: string, postalCode: string, startDate: string, street: string>, expectedDateOfChildbirth: string, expectedDuration: record<key: int, value: string>, expectedEndDateOfMaternityLeave: string, hasMobilityIssue: bool, hoursWorkedOnFirstDayOfAbsence: int, id: string, isDisruptedEmploymentRelationship: bool, isHospitalised: bool, isRecoveredWithinTwoWeeks: bool, isThirdPartyLiability: bool, isWorkRelatedIllness: bool, progress: record<currentIncapacityPercentage: int, endOfAbsence: record, startDate: string>, reintegration: record<dateOfFinalizingPlanOfAction: string, reintegrationGoal: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11236,7 +11236,7 @@ export def "providers-employers-employees-absences-overview get" [
   --end-date: string # The end date (e.g. 2020-08-31)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11266,7 +11266,7 @@ export def "providers-employers-employees-benifyurl get-benify-url" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11369,7 +11369,7 @@ export def "providers-employers-employees-children get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dateOfBirth: string, dateOfDeath: string, firstName: string, gender: record, id: string, initials: string, lastName: string, prefix: string, residenceStatus: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11409,7 +11409,7 @@ export def "providers-employers-employees-children create-child" [
   --last-name: string # The last name, family name or surname as part of a persons personal name. (e.g. Bergen)
   --prefix: string # The prefix to the last name (nullable, e.g. van)
   --residence-status: record # Indicator to tell if the child is living at home or not. Use null if unknown. (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dateOfBirth: string, dateOfDeath: string, firstName: string, gender: record<key: int, value: string>, id: string, initials: string, lastName: string, prefix: string, residenceStatus: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11441,7 +11441,7 @@ export def "providers-employers-employees-citizenservicenumber get-citizen-servi
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<citizenServiceNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11472,7 +11472,7 @@ export def "providers-employers-employees-citizenservicenumber update-citizen-se
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --citizen-service-number: string # The social security number of the employee used in communication with the Dutch tax authorities. The number has to be a valid Dutch citizen service number (BSN). (nullable, e.g. 042168588)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<citizenServiceNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11508,7 +11508,7 @@ export def "providers-employers-employees-contacts get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<address: record, description: string, id: string, name: string, particularities: string, phoneNumber: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11544,7 +11544,7 @@ export def "providers-employers-employees-contacts create" [
   --name: string # Name of the contact (e.g. Johanna Bakker)
   --particularities: string # Extra information about the contact (nullable, e.g. Genoemd adres is een priveadres)
   --phone-number: string # The phone number of the contact (nullable, e.g. 013-12345678)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, houseNumber: int, houseNumberAddition: string, postalCode: string, street: string>, description: string, id: string, name: string, particularities: string, phoneNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11580,7 +11580,7 @@ export def "providers-employers-employees-customfields get-custom-fieldss" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<customField: record, id: string, value: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11613,7 +11613,7 @@ export def "providers-employers-employees-customfields create-custom-field" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --custom-field: record # The custom field as defined at the employer-level. The value can only be set in the POST (it cannot be changed with a PUT). (format: metadata) — shape: {id?: string}
   --value: string # The value for the custom field for the employee (e.g. 41)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<customField: record<description: string, id: string>, id: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11649,7 +11649,7 @@ export def "providers-employers-employees-educations get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<educationLevel: record, employeeCosts: float, employerCosts: float, endDate: string, endOfValidityDate: string, furtherIndication: record, hasDiploma: record, id: string, institute: record, name: string, particularities: string, startDate: string, typeOfEducation: record, yearOfDiploma: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11697,7 +11697,7 @@ export def "providers-employers-employees-educations create" [
   --start-date: string # The date on which this education starts. (nullable, format: date, e.g. 2018-01-01)
   --type-of-education: record # The type of the education. `type of education` is a metadata field within the employer context. Possible values can be managed by the user. (nullable, format: metadata) — shape: {key?: string}
   --year-of-diploma: int # Year in which the diploma was aquired (nullable, format: int32, e.g. 1995)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<educationLevel: record<key: int, value: string>, employeeCosts: float, employerCosts: float, endDate: string, endOfValidityDate: string, furtherIndication: record<code: string, description: string, key: string>, hasDiploma: record<key: int, value: string>, id: string, institute: record<Name: string, city: string>, name: string, particularities: string, startDate: string, typeOfEducation: record<code: string, description: string, key: string>, yearOfDiploma: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11733,7 +11733,7 @@ export def "providers-employers-employees-employments get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record, commissionUntilDate: string, commissionUntilDate1: string, commissionUntilDate2: string, commissionUntilDate3: string, commissionUntilDate4: string, commissionUntilDate5: string, commissionUntilDate6: string, deviatingCLAExternalParty: int, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record, employmentCategoryType: record, employmentContractType: record, employmentDurationType: record, endDate: string, endOfEmploymentDueToIllness: bool, endOfEmploymentReason: record, endOfEmploymentReasonTaxAuthorities: record, essMutationSet: record, exemptionInsuranceObligation: record, exemptionPremiumWaiverMarginalLabour: bool, exemptionWorkRelatedExpenseScheme: bool, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, id: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, linkedEmployment: string, namePayslip: string, nonPayrollAdministration: record, participation55plusRegulationUWV: bool, payrollAdministration: record, payrollId: int, periodPayGradeAdjustment: int, professionCode: int, sendToExternalParty: record, signalPayGradeAdjustment: bool, specialIncomeRatio: record, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, temporaryTaxExemption: record, typeOfEmployee: record, typeOfParticipation: record, vacationCoupons: record, valueOfParticipation: record, wachtgeldOldRegulation: bool, writtenEmploymentContract: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11779,7 +11779,7 @@ export def "providers-employers-employees-employments create" [
   --social-security-data: record # shape: {healthCareInsuranceActType?: record, isInsuredForOccupationalDisabilityInsuranceAct?: bool, isInsuredForSicknessBenefitsAct?: bool, isInsuredForUnemploymentInsuranceAct?: bool}
   --wage-data: record # shape: {applyPayGrade?: bool, grossWage?: float, grossWageType?: record, netWage?: float, netWageType?: record, payGrade?: record, payScale?: record}
   --working-hours-data: record # shape: {averageParttimeFactor?: float, calculateUsingWorkPattern?: record, contractCode?: record, deviatingHoursPerWeek?: float, deviatingSvDaysPerPeriod?: float, flexibleHoursContract?: record, regularWorkPattern?: bool, shift?: record, workPattern?: record}
-]: any -> any {
+]: any -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11815,7 +11815,7 @@ export def "providers-employers-employees-notes get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11849,7 +11849,7 @@ export def "providers-employers-employees-notes create" [
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11885,7 +11885,7 @@ export def "providers-employers-employees-occupationaldisabilities get-occupatio
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<classification: record, endDate: string, id: string, isExWAO: bool, isOccupationallyDisabled: bool, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11919,7 +11919,7 @@ export def "providers-employers-employees-partners get-by-employee-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dateOfBirth: string, dateOfDeath: string, endDate: string, firstName: string, gender: record, howToFormatLastName: record, id: string, initials: string, lastName: string, placeOfBirth: string, prefix: string, startDate: string, title: record, waoClassification: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -11966,7 +11966,7 @@ export def "providers-employers-employees-partners create" [
   --start-date: string # startdate (nullable, format: date, e.g. 1995-05-21)
   --title: record # The title to be used (if any). (nullable, format: metadata) — shape: {key?: int}
   --wao-classification: record # The occupational disability classification in the form of a percentage range. (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dateOfBirth: string, dateOfDeath: string, endDate: string, firstName: string, gender: record<key: int, value: string>, howToFormatLastName: record<key: int, value: string>, id: string, initials: string, lastName: string, placeOfBirth: string, prefix: string, startDate: string, title: record<key: int, value: string>, waoClassification: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12028,7 +12028,7 @@ export def "providers-employers-employees-photo get" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -12093,7 +12093,7 @@ export def "providers-employers-employees-photo get-by-and" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -12124,7 +12124,7 @@ export def "providers-employers-employees-revoke-employee-self-service-access up
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --revoke-employee-self-service-access-on: string # The date on which the Employees access to ESS (werknemer.loket) will be automatically revoked. (nullable, format: date, e.g. 2018-10-23)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12160,7 +12160,7 @@ export def "providers-employers-employees-selfservice get-self-service-by-employ
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employee: record<emailAddress: string, employeeNumber: int, firstName: string, formattedName: string, id: string, initials: string, lastName: string, prefix: string>, hasTwoFactorAuthentication: bool, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employee_id | is-empty) { error make --unspanned { msg: "path parameter 'employeeId' must be non-empty" } }
@@ -12190,7 +12190,7 @@ export def "providers-employers-functions get-by-function-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, group: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
@@ -12222,7 +12222,7 @@ export def "providers-employers-functions update" [
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --description: string # e.g. Directeur
   --group: string # nullable, e.g. Var
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, group: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12257,7 +12257,7 @@ export def "providers-employers-lastmodifiedversionnumbers get-last-modified-ver
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, lastModifiedVersionNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -12320,7 +12320,7 @@ export def "providers-employers-leave-policies-agebasedleave get-age-based-by-ag
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<from: record<numberOfMonths: int, numberOfYears: int>, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncluding: record<numberOfMonths: int, numberOfYears: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($age_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'ageBasedLeaveId' must be non-empty" } }
@@ -12357,7 +12357,7 @@ export def "providers-employers-leave-policies-agebasedleave update-age-based-by
   --body-from: record # shape: {numberOfMonths?: int, numberOfYears?: int}
   --leave-entitlement: record # shape: {excessLeaveToStatutory?: float, wtr?: float}
   --up-to-and-including: record # shape: {numberOfMonths?: int, numberOfYears?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<from: record<numberOfMonths: int, numberOfYears: int>, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncluding: record<numberOfMonths: int, numberOfYears: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12423,7 +12423,7 @@ export def "providers-employers-leave-policies-wagebasedleave get-wage-based-by-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<fromWage: float, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncludingWage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($wage_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'wageBasedLeaveId' must be non-empty" } }
@@ -12458,7 +12458,7 @@ export def "providers-employers-leave-policies-wagebasedleave update-wage-based-
   --from-wage: float # the from wage the employment has to earn to be applicable for the additional leave (format: double, e.g. 40)
   --leave-entitlement: record # shape: {excessLeaveToStatutory?: float, wtr?: float}
   --up-to-and-including-wage: float # the up to and including wage the employment has to earn to be applicable for the additional leave (format: double, e.g. 40)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<fromWage: float, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncludingWage: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12524,7 +12524,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave get-year
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<from: record<numberOfMonths: int, numberOfYears: int>, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncluding: record<numberOfMonths: int, numberOfYears: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($years_of_service_based_leave_id | is-empty) { error make --unspanned { msg: "path parameter 'yearsOfServiceBasedLeaveId' must be non-empty" } }
@@ -12561,7 +12561,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave update-y
   --body-from: record # shape: {numberOfMonths?: int, numberOfYears?: int}
   --leave-entitlement: record # shape: {excessLeaveToStatutory?: float, wtr?: float}
   --up-to-and-including: record # shape: {numberOfMonths?: int, numberOfYears?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<from: record<numberOfMonths: int, numberOfYears: int>, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncluding: record<numberOfMonths: int, numberOfYears: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12627,7 +12627,7 @@ export def "providers-employers-leave-policies get-policy-by-policy" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accrualType: record<key: int, value: string>, additionalLeave: record<allocationType: record, referenceDate1: record, referenceDate2: record>, dayOfTheMonthToPerformAutomaticLeaveCalculationOn: int, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, statutory: float, wtr: float>, leaveRequest: record<applyLeaveSchedule: bool, leavePattern: record, useHolidaysInCalculation: bool>, leaveUnitType: record<key: int, value: string>, name: string, payoutLeaveImmediately: bool, roundTo: record<key: int, value: string>, roundingMethod: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -12675,7 +12675,7 @@ export def "providers-employers-leave-policies update-policy-by-policy" [
   --payout-leave-immediately: oneof<nothing, bool> # If leave `accrualType` is set to based on hours worked (uren) then this field allows for the leave hours to be paid out directly instead of being accrued. (e.g. false)
   --round-to: record # Indicates to how many digits after the decimal point to round the numbers (format: metadata) — shape: {key?: int}
   --rounding-method: record # Indicates how to round the numbers (format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accrualType: record<key: int, value: string>, additionalLeave: record<allocationType: record, referenceDate1: record, referenceDate2: record>, dayOfTheMonthToPerformAutomaticLeaveCalculationOn: int, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, statutory: float, wtr: float>, leaveRequest: record<applyLeaveSchedule: bool, leavePattern: record, useHolidaysInCalculation: bool>, leaveUnitType: record<key: int, value: string>, name: string, payoutLeaveImmediately: bool, roundTo: record<key: int, value: string>, roundingMethod: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12711,7 +12711,7 @@ export def "providers-employers-leave-policies-agebasedleave get-age-based-by-po
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<from: record, id: string, leaveEntitlement: record, upToAndIncluding: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -12747,7 +12747,7 @@ export def "providers-employers-leave-policies-agebasedleave create-age-based-by
   --body-from: record # shape: {numberOfMonths?: int, numberOfYears?: int}
   --leave-entitlement: record # shape: {excessLeaveToStatutory?: float, wtr?: float}
   --up-to-and-including: record # shape: {numberOfMonths?: int, numberOfYears?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<from: record<numberOfMonths: int, numberOfYears: int>, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncluding: record<numberOfMonths: int, numberOfYears: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12783,7 +12783,7 @@ export def "providers-employers-leave-policies-wagebasedleave get-wage-based-by-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<fromWage: float, id: string, leaveEntitlement: record, upToAndIncludingWage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -12817,7 +12817,7 @@ export def "providers-employers-leave-policies-wagebasedleave create-wage-based-
   --from-wage: float # the from wage the employment has to earn to be applicable for the additional leave (format: double, e.g. 40)
   --leave-entitlement: record # shape: {excessLeaveToStatutory?: float, wtr?: float}
   --up-to-and-including-wage: float # the up to and including wage the employment has to earn to be applicable for the additional leave (format: double, e.g. 40)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<fromWage: float, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncludingWage: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12853,7 +12853,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave get-year
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<from: record, id: string, leaveEntitlement: record, upToAndIncluding: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -12889,7 +12889,7 @@ export def "providers-employers-leave-policies-yearsofservicebasedleave create-y
   --body-from: record # shape: {numberOfMonths?: int, numberOfYears?: int}
   --leave-entitlement: record # shape: {excessLeaveToStatutory?: float, wtr?: float}
   --up-to-and-including: record # shape: {numberOfMonths?: int, numberOfYears?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<from: record<numberOfMonths: int, numberOfYears: int>, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, wtr: float>, upToAndIncluding: record<numberOfMonths: int, numberOfYears: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12924,7 +12924,7 @@ export def "providers-employers-leavepolicies-employments get-by-leave-policy" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, endDate: string, id: string, incomeRelationshipNumber: int, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -12955,7 +12955,7 @@ export def "providers-employers-leavepolicies-employments update-by-leave-policy
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12990,7 +12990,7 @@ export def "providers-employers-minimized get-by-user" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<address: record, branch: record, companyName: string, contact: record, contactInformation: record, employerLogo: string, id: string, providerLogo: string, providerSettings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -13053,7 +13053,7 @@ export def "providers-employers-notes get-by-note-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
@@ -13088,7 +13088,7 @@ export def "providers-employers-notes update" [
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13120,7 +13120,7 @@ export def "providers-employers-notifications update" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13150,7 +13150,7 @@ export def "providers-employers-payroll-administrations-mdv-notifications update
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, employment: record, payrollAdministration: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -13183,7 +13183,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<apgPensionDeclarationStatus: record<key: int, value: string>, approvalTime: string, approvedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, cancelledBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, cancelledTime: string, creationTime: string, customerGroupNumber: int, externalParty: record<key: int, value: string>, id: string, messageReference: string, methodOfCreation: record<key: int, value: string>, period: record<periodEndDate: string, periodId: int, periodNumber: int, periodStartDate: string, periodType: record, year: int>, removeTime: string, removedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, requestTime: string, requestedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, responseMessages: list<record>, sentTime: string, withholdingAgentName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
@@ -13214,7 +13214,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations up
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   action: string@action-completer-1 # The action to perform on the apg pensiondeclaration
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13246,7 +13246,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations-me
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
@@ -13275,7 +13275,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations-ov
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($apg_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'apgPensionDeclarationId' must be non-empty" } }
@@ -13304,7 +13304,7 @@ export def "providers-employers-payrolladministrations-journalruns get-journal-r
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<id: string, journalRunStatus: record<key: int, value: string>, methodOfCreation: record<key: int, value: string>, payrollRun: record<payrollPeriod: record, payrollRunId: string, sequenceNumberApproved: int>, processingFinishedTime: string, removeTime: string, removedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, requestTime: string, requestedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, sequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
@@ -13337,7 +13337,7 @@ export def "providers-employers-payrolladministrations-journalruns update-journa
   --action: string@action-completer-2 # The action to perform on the journal run * MarkAsProcessed --> (from the loket.nl point of view) Indicates that the client succesfully processed the data (indicating that the results were imported in the financial application). * MarkAsProcessingFailed --> (from the loket.nl point of view) Indicates that the client was unable to process the results. Use the `message` field to communicate the error(s).
   --application: record # The application that downloaded and processed the results (format: metadata) — shape: {key?: int}
   --message: string # Message to be displayed to the loket.nl user (nullable)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13372,7 +13372,7 @@ export def "providers-employers-payrolladministrations-journalruns-download crea
   --date: string # Date (format: date, e.g. 2022-01-01)
   --include-cost-center: oneof<nothing, bool> # Indicates whether cost centers are included in the journal. (e.g. true)
   --include-cost-unit: oneof<nothing, bool> # Indicates whether cost units are included in the journal. (e.g. false)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<date: string, includeCostCenter: bool, includeCostUnit: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13404,7 +13404,7 @@ export def "providers-employers-payrolladministrations-journalruns-errors get-jo
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<PayrollEmployeeNumber: int, costCenter: record, costUnit: record, error: record, generalLedgerAccount: record, id: string, payrollComponent: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
@@ -13437,7 +13437,7 @@ export def "providers-employers-payrolladministrations-journalruns-export-audit-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<exportStatus: record, exportedBy: record, exportedOn: string, exportedTo: record, id: string, methodOfExporting: record, returendErrorMessage: string, sequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
@@ -13467,7 +13467,7 @@ export def "providers-employers-payrolladministrations-journalruns-results get-j
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<costCenter: record, costUnit: record, creditAmount: float, debetAmount: float, generalLedgerAccount: record, payrollComponent: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
@@ -13502,7 +13502,7 @@ export def "providers-employers-payrolladministrations-journalruns-runoverview g
   --report-date: string # A valid booking date to be shown on the report. (format: date, e.g. 2018-01-01)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
@@ -13538,7 +13538,7 @@ export def "providers-employers-payrolladministrations-journalruns-runoverviewpe
   --report-date: string # A valid booking date to be shown on the report. (format: date, e.g. 2018-01-01)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($journalrun_id | is-empty) { error make --unspanned { msg: "path parameter 'journalrunId' must be non-empty" } }
@@ -13586,7 +13586,7 @@ export def "providers-employers-payrolladministrations-journalruns-send create-j
   --link-cost-unit-to-group: string # The Group to which the CostUnit will be linked. (nullable, format: uuid, e.g. b14acd0d-75d7-4fc8-8b22-4a3924585cab)
   --period: int # the period to which the journal should be added. (nullable, format: int32, e.g. 2)
   --sub-administration: record # The subadministration in the journalapplication to which the journal will be added. (nullable) — shape: {Id?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<account: record<id: int, value: string>, accountKey: string, administration: record<id: int, value: string>, date: string, description: string, deviatingJournalSeries: string, financialYear: int, includeCostCenter: bool, includeCostUnit: bool, journalCode: string, journalNumber: int, linkCostCenterToGroup: string, linkCostUnitToGroup: string, period: int, subAdministration: record<Id: int, Name: string>, user: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13618,7 +13618,7 @@ export def "providers-employers-payrolladministrations-payrollruns update-by-pay
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13683,7 +13683,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes get-pay
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($note_id | is-empty) { error make --unspanned { msg: "path parameter 'noteId' must be non-empty" } }
@@ -13718,7 +13718,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes update-
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13753,7 +13753,7 @@ export def "providers-employers-payrolladministrations-payrollruns-sepafiles get
   --requested-execution-date: string # This value is used when creating the sepa file to set the value of \<ReqdExctnDt\> (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sepafile_id | is-empty) { error make --unspanned { msg: "path parameter 'sepafileId' must be non-empty" } }
@@ -13783,7 +13783,7 @@ export def "providers-employers-payrolladministrations-payrollruns get-payroll-r
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<approvalTime: string, approvedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, availableForEmployeeDate: string, errorsAndWarnings: record<hasErrors: bool, hasWarnings: bool>, id: string, methodOfCreation: record<key: int, value: string>, payrollPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, testYear: bool, year: int>, payrollRunStatus: record<key: int, value: string>, processingFinishedTime: string, removeTime: string, removedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, requestTime: string, requestedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, sendEmailToEmployee: bool, sequenceNumber: int, sequenceNumberApproved: int, textPaySlip: string, textPayment: string, textTariffPaySlip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -13813,7 +13813,7 @@ export def "providers-employers-payrolladministrations-payrollruns-balance-sheet
   --accept: string@accept-completer-5 # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<journalAllocation: list, payrollComponent: record, value: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -13842,7 +13842,7 @@ export def "providers-employers-payrolladministrations-payrollruns-defaultset ge
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -13871,7 +13871,7 @@ export def "providers-employers-payrolladministrations-payrollruns-errorsandwarn
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -13900,7 +13900,7 @@ export def "providers-employers-payrolladministrations-payrollruns-journalentrie
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -13933,7 +13933,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes get-pay
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -13967,7 +13967,7 @@ export def "providers-employers-payrolladministrations-payrollruns-notes create-
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13999,7 +13999,7 @@ export def "providers-employers-payrolladministrations-payrollruns-paymentovervi
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14028,7 +14028,7 @@ export def "providers-employers-payrolladministrations-payrollruns-payrollcontro
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14057,7 +14057,7 @@ export def "providers-employers-payrolladministrations-payrollruns-payslips get-
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14086,7 +14086,7 @@ export def "providers-employers-payrolladministrations-payrollruns-results get-p
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employmentId: string, payrollPeriods: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14115,7 +14115,7 @@ export def "providers-employers-payrolladministrations-payrollruns-runoverviews 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14144,7 +14144,7 @@ export def "providers-employers-payrolladministrations-payrollruns-sepafiles get
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> table<description: string, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14176,7 +14176,7 @@ export def "providers-employers-payrolladministrations-payrollruns-totalsepafile
   --requested-execution-date: string # This value is used when creating the sepa file to set the value of \<ReqdExctnDt\> (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14236,7 +14236,7 @@ export def "providers-employers-payrolladministrations-payrollruns-wagesheets ge
   --accept: string@accept-completer-6 # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrollrun_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollrunId' must be non-empty" } }
@@ -14265,7 +14265,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns update-
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14297,7 +14297,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns update-
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   action: string@action-completer-1 # The action to perform on the payroll tax return
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14330,7 +14330,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sendres
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --response-message-file: string # base64 encoded xml file of the response message (e.g. PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iSVNPLTg4NTktMSI/Pgo8UmVzcG9uc2VtZXNzYWdlIHZlcnNpb249IjIwMDYuMSI+Cgk8SWRlbnRpZmljYXRpb24+CgkJPE1lc3NhZ2VJZD5BLWVmMmJmMTQwMjMxYzExZTA4MWM5MGE5ZTA0MGIxMjM0PC9NZXNzYWdlSWQ+CgkJPFJlZmVyc1RvTWVzc2FnZUlkPlZTUDAwMTAwMTE4MzcyMkwwNDAwMDAwMTIwMTIzNDwvUmVmZXJzVG9NZXNzYWdlSWQ+CgkJPE1lc3NhZ2VJZEJkPmVmMmJmMTQwMjMxYzExZTA4MWM5MGE5ZTA0MGIxMjM0PC9NZXNzYWdlSWRCZD4KCQk8RGF0dW1UaWpkT250dmFuZ3N0PjIwMjAtMDEtMThUMTY6MDY6MzlaPC9EYXR1bVRpamRPbnR2YW5nc3Q+CgkJPFJlc3BvbnNlVHlwZT5hY2tub3dsZWRnZW1lbnQ8L1Jlc3BvbnNlVHlwZT4KCTwvSWRlbnRpZmljYXRpb24+CjwvUmVzcG9uc2VtZXNzYWdlPgo)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14362,7 +14362,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns get-pay
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<approvalTime: string, approvedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, cancelledBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, cancelledTime: string, correctionAmount: float, deadlineForPayment: string, emailAddressPayrollTaxReturnRunStarted: string, externalIdentification: string, iban: string, id: string, inTheNameOf: string, isCorrectionMessagePriorYear: bool, messageCreationTime: string, messageReference: string, methodOfCreation: record<key: int, value: string>, paymentReference: string, payrollPeriodType: record<key: int, value: string>, payrollTaxReturnParty: record<key: int, value: string>, payrollTaxReturnStatus: record<key: int, value: string>, payrollTaxReturnType: record<key: int, value: string>, period: record<periodEndDate: string, periodNumber: int, periodStartDate: string, year: int>, periodAmount: float, processingFinishedTime: string, removalTime: string, removedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, requestTime: string, requestedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, responseMessages: list<record>, sendTime: string, sequenceNumber: int, taxReturnMessageReference: string, totalAmount: float, wageTaxNumber: string, withholdingParty: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
@@ -14391,7 +14391,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-ideal g
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<url: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
@@ -14420,7 +14420,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-ideal-p
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<lastStatusRequest: string, status: record<code: string, reason: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
@@ -14449,7 +14449,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-message
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
@@ -14478,7 +14478,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-overvie
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payrolltaxreturn_id | is-empty) { error make --unspanned { msg: "path parameter 'payrolltaxreturnId' must be non-empty" } }
@@ -14544,7 +14544,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<approvalTime: string, approvedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, cancelledBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, cancelledTime: string, creationTime: string, externalParty: record<key: int, value: string>, id: string, messageReference: string, methodOfCreation: record<key: int, value: string>, payrollTaxesNumber: string, period: record<periodEndDate: string, periodId: int, periodNumber: int, periodStartDate: string, periodType: record, year: int>, removeTime: string, removedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, requestTime: string, requestedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, responseMessages: list<record>, sendingPartyNumber: string, sentTime: string, upaPensionDeclarationStatus: record<key: int, value: string>, withholdingAgentName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upa_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'upaPensionDeclarationId' must be non-empty" } }
@@ -14575,7 +14575,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations up
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   action: string@action-completer-1 # The action to perform on the upa pensiondeclaration
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14607,7 +14607,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations-me
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($upa_pension_declaration_id | is-empty) { error make --unspanned { msg: "path parameter 'upaPensionDeclarationId' must be non-empty" } }
@@ -14640,7 +14640,7 @@ export def "providers-employers-payrolladministrations-accumulatedbasicjournalre
   --end-period: int # Last period (=up to and including) of the requested timebox. Use the following 'YYYYPP' (e.g. 201912)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/pdf)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14674,7 +14674,7 @@ export def "providers-employers-payrolladministrations-accumulationsandbalancesr
   --include-employments-that-ended-before-start-of-the-year: oneof<nothing, bool> # If set to true employments with an enddate before the start of the reportYear will be included in the output. (e.g. false)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/pdf)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14705,7 +14705,7 @@ export def "providers-employers-payrolladministrations-annualpayrolltaxreturnrep
   --report-year: int # A valid year for which the information is requested. (e.g. 2023)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14739,7 +14739,7 @@ export def "providers-employers-payrolladministrations-annualwagesheetreport get
   --end-period: int # Last period (=up to and including) of the requested timebox. Use the following 'YYYYPP' (e.g. 201912)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/pdf)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14773,7 +14773,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<apgPensionDeclarationStatus: record, approvalTime: string, approvedBy: record, cancelledBy: record, cancelledTime: string, creationTime: string, customerGroupNumber: int, externalParty: record, id: string, messageReference: string, methodOfCreation: record, period: record, removeTime: string, removedBy: record, requestTime: string, requestedBy: record, responseMessages: list, sentTime: string, withholdingAgentName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14803,7 +14803,7 @@ export def "providers-employers-payrolladministrations-apgpensiondeclarations-in
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14833,7 +14833,7 @@ export def "providers-employers-payrolladministrations-attachmentsofearningsrepo
   --report-year: int # A valid year for which the information is requested. (e.g. 2023)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/pdf)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14868,7 +14868,7 @@ export def "providers-employers-payrolladministrations-audit-trail-payroll-perio
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, employer: record, employment: record, field: record, identification: record, mutationOrigin: record, mutationType: record, newValue: string, oldValue: string, payrollAdministration: record, payrollComponentCategory: record, performedBy: record, timeStamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14898,7 +14898,7 @@ export def "providers-employers-payrolladministrations-availablepayrollcomponent
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: list<record<description: string, id: string, isDefaultForBrowserPayrollPeriodData: bool, isDefaultForPayrollPeriodData: bool, isDefinedOnProviderLevel: bool, payrollComponents: list>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14928,7 +14928,7 @@ export def "providers-employers-payrolladministrations-deviatingpremiumswab get-
   --report-year: int # A valid year for which the information is requested. (e.g. 2023)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/pdf)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14960,7 +14960,7 @@ export def "providers-employers-payrolladministrations-employment-payroll-data-a
   --end-date: string # The end date (e.g. 2020-08-31)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -14994,7 +14994,7 @@ export def "providers-employers-payrolladministrations-journalruns get-journal-r
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, journalRunStatus: record, methodOfCreation: record, payrollRun: record, processingFinishedTime: string, removeTime: string, removedBy: record, requestTime: string, requestedBy: record, sequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15024,7 +15024,7 @@ export def "providers-employers-payrolladministrations-journalruns-initiate crea
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<id: string, journalRunStatus: record<key: int, value: string>, methodOfCreation: record<key: int, value: string>, payrollRun: record<payrollPeriod: record, payrollRunId: string, sequenceNumberApproved: int>, processingFinishedTime: string, removeTime: string, removedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, requestTime: string, requestedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, sequenceNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15055,7 +15055,7 @@ export def "providers-employers-payrolladministrations-payroll-period-data-audit
   --end-date: string # The end date (e.g. 2020-08-31)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15093,7 +15093,7 @@ export def "providers-employers-payrolladministrations-payroll-periods-payrollpe
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<costCenter: record, costUnit: record, distributionUnit: record, employee: record, employment: record, payrollComponents: list, payrollPeriod: record, payslipType: record, shift: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15125,7 +15125,7 @@ export def "providers-employers-payrolladministrations-payrolladministrationsett
   --report-year: int # A valid year for which the information is requested. (e.g. 2023)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15156,7 +15156,7 @@ export def "providers-employers-payrolladministrations-payrollcomponents-year ge
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<canBeSupplemented: bool, category: record, deductionOrPayment: record, definedAtLevel: string, description: string, key: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15186,7 +15186,7 @@ export def "providers-employers-payrolladministrations-payrollperiods get-payrol
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<automaticProcessing: record, endDate: string, id: int, payrollPeriodType: record, payrollRuns: list, periodNumber: int, startDate: string, testYear: bool, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15216,7 +15216,7 @@ export def "providers-employers-payrolladministrations-payrollperiods-compare ge
   --payroll-period-id: int # The unique identifier of the payroll period (format: int32, e.g. 202001)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<numberOfPayrolledEmployments: int, payrollComponentResults: list, payrollPeriod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15284,7 +15284,7 @@ export def "providers-employers-payrolladministrations-payrollperiods-minimized 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<endDate: string, hasApprovedPayrollRun: bool, id: int, payrollPeriodType: record, periodNumber: int, startDate: string, testYear: bool, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15316,7 +15316,7 @@ export def "providers-employers-payrolladministrations-payrollperiods-payrollres
   --payroll-component-set: string # A predifined set of payroll components to filter what payroll components are returned (format: uuid)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employmentId: string, payrollPeriods: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15349,7 +15349,7 @@ export def "providers-employers-payrolladministrations-payrollprocessoverview ge
   --payroll-period-id-end: int # The unique identifier of the last payroll period to return (format: int32, e.g. 202006)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<journal: record, payroll: record, payrollPeriod: record, payrollTaxReturn: record, pensionDeclaration: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15383,7 +15383,7 @@ export def "providers-employers-payrolladministrations-payrollruns get-payroll-r
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<approvalTime: string, approvedBy: record, availableForEmployeeDate: string, errorsAndWarnings: record, id: string, methodOfCreation: record, payrollPeriod: record, payrollRunStatus: record, processingFinishedTime: string, removeTime: string, removedBy: record, requestTime: string, requestedBy: record, sendEmailToEmployee: bool, sequenceNumber: int, sequenceNumberApproved: int, textPaySlip: string, textPayment: string, textTariffPaySlip: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15422,7 +15422,7 @@ export def "providers-employers-payrolladministrations-payrollruns-initiate crea
   --text-payment: string # An optional text provided by an authorized user that will be displayed as a description for the payment. (nullable)
   --text-tariff-pay-slip: string # An additional text to be displayed on the tariff payslip. (nullable)
   --initiation-parameters: record # shape: {emailAddressPayrollRunFinished?: string, emailAddressPayrollRunStarted?: string, typeOfInitiation?: "regular"|"withoutEmploymentData"}
-]: any -> any {
+]: any -> record<content: record<id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15457,7 +15457,7 @@ export def "providers-employers-payrolladministrations-payrollruns-initiationval
   --payroll-period-id: int # The unique identifier of the payroll period (format: int32, e.g. 202103)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<availableForEmployeeDate: string, emailAddressPayrollRunApproved: string, emailAddressPayrollRunFinished: string, emailAddressPayrollRunStarted: string, payrollPeriod: record<periodEndDate: string, periodNumber: int, periodStartDate: string, testYear: bool, year: int>, sendEmailToEmployee: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15492,7 +15492,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns get-pay
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<approvalTime: string, approvedBy: record, cancelledBy: record, cancelledTime: string, correctionAmount: float, deadlineForPayment: string, emailAddressPayrollTaxReturnRunStarted: string, externalIdentification: string, iban: string, id: string, inTheNameOf: string, isCorrectionMessagePriorYear: bool, messageCreationTime: string, messageReference: string, methodOfCreation: record, paymentReference: string, payrollPeriodType: record, payrollTaxReturnParty: record, payrollTaxReturnStatus: record, payrollTaxReturnType: record, period: record, periodAmount: float, processingFinishedTime: string, removalTime: string, removedBy: record, requestTime: string, requestedBy: record, responseMessages: list, sendTime: string, sequenceNumber: int, taxReturnMessageReference: string, totalAmount: float, wageTaxNumber: string, withholdingParty: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15523,7 +15523,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-initiat
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --notify-of-initiation: string
-]: any -> any {
+]: any -> record<content: record<id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15557,7 +15557,7 @@ export def "providers-employers-payrolladministrations-payrolltaxreturns-sepafil
   --requested-execution-date: string # This value is used when creating the sepa file to set the value of \<ReqdExctnDt\> (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15627,7 +15627,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations ge
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<approvalTime: string, approvedBy: record, cancelledBy: record, cancelledTime: string, creationTime: string, externalParty: record, id: string, messageReference: string, methodOfCreation: record, payrollTaxesNumber: string, period: record, removeTime: string, removedBy: record, requestTime: string, requestedBy: record, responseMessages: list, sendingPartyNumber: string, sentTime: string, upaPensionDeclarationStatus: record, withholdingAgentName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15657,7 +15657,7 @@ export def "providers-employers-payrolladministrations-upapensiondeclarations-in
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15690,7 +15690,7 @@ export def "providers-employers-payrolladministrations-yearendstatements get-yea
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15722,7 +15722,7 @@ export def "providers-employers-payrolladministrations-yearendstatements get-end
   --include-employee-self-service: oneof<nothing, bool> # If true; then the year-end statements for employments of which the employee has access to the employee self service module will be included in the response. If false; this specific group will be excluded. (e.g. true)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payroll_administration_id | is-empty) { error make --unspanned { msg: "path parameter 'payrollAdministrationId' must be non-empty" } }
@@ -15756,7 +15756,7 @@ export def "providers-employers-users-downloadrequests get-download-requests-by-
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<downloadRequestStatus: record, expirationTime: string, filename: string, id: string, latestDownloadTime: string, processingFinishedTime: string, requestTime: string, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -15785,7 +15785,7 @@ export def "providers-employers-users-downloadrequests create-download-request-b
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --year: int # The year of the download request relates to (format: int32, e.g. 2017)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<downloadRequestStatus: record<key: int, value: string>, expirationTime: string, filename: string, id: string, latestDownloadTime: string, processingFinishedTime: string, requestTime: string, year: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15846,7 +15846,7 @@ export def "providers-employers-users-downloadrequests get-download-request-by" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<downloadRequestStatus: record<key: int, value: string>, expirationTime: string, filename: string, id: string, latestDownloadTime: string, processingFinishedTime: string, requestTime: string, year: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($download_request_id | is-empty) { error make --unspanned { msg: "path parameter 'downloadRequestId' must be non-empty" } }
@@ -15875,7 +15875,7 @@ export def "providers-employers-users-downloadrequests-file get-by-download-requ
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($download_request_id | is-empty) { error make --unspanned { msg: "path parameter 'downloadRequestId' must be non-empty" } }
@@ -15908,7 +15908,7 @@ export def "providers-employers-users-configuredexternaltenant get-configured-ex
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<externalTenant: record<id: string, name: string>, externalUser: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_user_id | is-empty) { error make --unspanned { msg: "path parameter 'employerUserId' must be non-empty" } }
@@ -15942,7 +15942,7 @@ export def "providers-employers-users-configuredexternaltenant update-configured
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --external-tenant: record # nullable — shape: {id?: string}
   --external-user: record # nullable — shape: {id?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<externalTenant: record<id: string, name: string>, externalUser: record<id: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16004,7 +16004,7 @@ export def "providers-employers-users get-by-user-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessStatus: record<key: int, value: string>, azureActiveDirectory: record<tenant: record, userId: string>, contactInformation: record<emailAddress: string, phoneNumber: string, placeOfEmployment: string>, dateTimeCreation: string, dateTimeLastLogin: string, hasAccessToPayrollingTestData: bool, hasIntegrations: bool, hasMultiFactorAuthentication: bool, id: string, isDepartmentManager: bool, isLinkedToMultipleEmployers: bool, loginMethod: record<key: int, value: string>, personalDetails: record<firstName: string, initials: string, lastName: string, prefix: string>, twoFactorAuthenticationRequired: bool, userCustomSpecifiedRole: string, userName: string, userSpecifiedRole: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -16035,7 +16035,7 @@ export def "providers-employers-users update-invite" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --action: string@action-completer-3 # indicates the action to perform.
   --destination-for-secret: string # The destination phonenumber to sent the secret to during registration. (nullable, e.g. 0612345678)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessStatus: record<key: int, value: string>, azureActiveDirectory: record<tenant: record, userId: string>, contactInformation: record<emailAddress: string, phoneNumber: string, placeOfEmployment: string>, dateTimeCreation: string, dateTimeLastLogin: string, hasAccessToPayrollingTestData: bool, hasIntegrations: bool, hasMultiFactorAuthentication: bool, id: string, isDepartmentManager: bool, isLinkedToMultipleEmployers: bool, loginMethod: record<key: int, value: string>, personalDetails: record<firstName: string, initials: string, lastName: string, prefix: string>, twoFactorAuthenticationRequired: bool, userCustomSpecifiedRole: string, userName: string, userSpecifiedRole: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16118,7 +16118,7 @@ export def "providers-employers-users-employers get-linked" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<address: record, branch: record, companyName: string, contact: record, contactInformation: record, employerLogo: string, id: string, providerLogo: string, providerSettings: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -16148,7 +16148,7 @@ export def "providers-employers-users-integrations get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: record<application: record<id: string, isBlocked: bool, logo: string, name: string>, createdOn: string, isBlocked: bool, lastLogin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -16211,7 +16211,7 @@ export def "providers-employers-users-integrations update" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --is-blocked: oneof<nothing, bool> # Indicates whether the application user combination is blocked (for this single user) (e.g. true)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<application: record<id: string, isBlocked: bool, logo: string, name: string>, createdOn: string, isBlocked: bool, lastLogin: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16246,7 +16246,7 @@ export def "providers-employers-users-integrations-logo get-by-and-application" 
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -16280,7 +16280,7 @@ export def "providers-employers-users-notificationsettings get-notification-sett
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -16314,7 +16314,7 @@ export def "providers-employers-users-notificationsettings update-notification-s
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --notification-set: record # format: metadata — shape: {id?: string}
   --notifications: list # item shape: {createNumberOfDaysBeforeEvent?: int, isEnabled?: bool, notificationType?: record, receiveDepartmentSignalsOnly?: bool, sendMailWhenNotificationIsCreated?: bool}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16346,7 +16346,7 @@ export def "providers-employers-workflows get-by-workflow-id" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<allowedTransitions: list<record>, assignee: record<role: record, user: record>, data: string, id: string, initiatedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, initiatedOn: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, status: record<key: int, value: string>, trigger: record<description: string, id: string>, workflowTemplate: record<description: string, id: string, version: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowId' must be non-empty" } }
@@ -16381,7 +16381,7 @@ export def "providers-employers-workflows update" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --assignee: record # A workflow is either assigned to a user or a role. A role can be filled by multiple users. (nullable) — shape: {role?: record, user?: record}
   --status: record # Indicates the status of the workflow as a whole. (format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<allowedTransitions: list<record>, assignee: record<role: record, user: record>, data: string, id: string, initiatedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, initiatedOn: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, status: record<key: int, value: string>, trigger: record<description: string, id: string>, workflowTemplate: record<description: string, id: string, version: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16476,7 +16476,7 @@ export def "providers-employers-workflowtriggermappings get-workflow-trigger-map
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, trigger: record<description: string, id: string>, workflowTemplate: record<description: string, id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_trigger_mapping_id | is-empty) { error make --unspanned { msg: "path parameter 'workflowTriggerMappingId' must be non-empty" } }
@@ -16510,7 +16510,7 @@ export def "providers-employers-workflowtriggermappings update-workflow-trigger-
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --trigger: record # Indicates the workflow trigger to be configured. `trigger` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {id?: string}
   --workflow-template: record # Indicates what workflow template will be used to initiate a workflow when the trigger takes place. `workflowTemplate` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {id?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, trigger: record<description: string, id: string>, workflowTemplate: record<description: string, id: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16542,7 +16542,7 @@ export def "providers-employers get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, province: record, street: string>, branch: record<key: int, value: string>, chamberOfCommerceNumber: string, companyName: string, contact: record<function: string, name: string, phoneNumber: string>, contactInformation: record<emailAddress: string, faxNumber: string, phoneNumber: string, website: string>, deviatingPostalAddress: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, poBox: int, postalCode: string, street: string>, employerLogo: string, employerNumber: int, id: string, legalForm: record<key: int, value: string>, providerLogo: string, providerSettings: record<administrationNumber: string, groupCode: int, parentEmployerForConsolidatedOverviews: int, sendEmailWhenSalarySlipIsAvailable: bool>, sbi: record<key: int, sbiCode: string, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16590,7 +16590,7 @@ export def "providers-employers update" [
   --legal-form: record # nullable, format: metadata — shape: {key?: int}
   --provider-settings: record # shape: {administrationNumber?: string, groupCode?: int, parentEmployerForConsolidatedOverviews?: int, sendEmailWhenSalarySlipIsAvailable?: bool}
   --sbi: record # The 'Standard Industrial Classifications (Dutch SBI 2008, NACE and ISIC)' as defined bij the Dutch chamber of commerce (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, province: record, street: string>, branch: record<key: int, value: string>, chamberOfCommerceNumber: string, companyName: string, contact: record<function: string, name: string, phoneNumber: string>, contactInformation: record<emailAddress: string, faxNumber: string, phoneNumber: string, website: string>, deviatingPostalAddress: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, poBox: int, postalCode: string, street: string>, employerLogo: string, employerNumber: int, id: string, legalForm: record<key: int, value: string>, providerLogo: string, providerSettings: record<administrationNumber: string, groupCode: int, parentEmployerForConsolidatedOverviews: int, sendEmailWhenSalarySlipIsAvailable: bool>, sbi: record<key: int, sbiCode: string, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -16627,7 +16627,7 @@ export def "providers-employers-actualorganizationalentities get-actual-organiza
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employmentId: string, organizationalEntity: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16662,7 +16662,7 @@ export def "providers-employers-actualwages get-actual-wages" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employmentId: string, wage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16697,7 +16697,7 @@ export def "providers-employers-actualworkinghours get-actual-working-hours" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employmentId: string, workingHours: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16731,7 +16731,7 @@ export def "providers-employers-administrations get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<clientNumber: int, description: string, endDate: string, id: string, isPayrollAdministration: bool, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16765,7 +16765,7 @@ export def "providers-employers-announcements get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<creationDate: string, description: string, effectiveDate: string, expirationDate: string, id: string, isExpired: bool, isRead: bool, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16795,7 +16795,7 @@ export def "providers-employers-applications get-available" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<activationUrl: string, applicationTypes: list, dateAddedToStore: string, id: string, isActivatedForEmployer: bool, isHighlighted: bool, logo: string, marketplaceDescription: string, marketplaceSummary: string, name: string, targetIndustries: list, website: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16825,7 +16825,7 @@ export def "providers-employers-applications-users get-linked-by-and" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<createdOn: string, isblocked: bool, lastLogin: string, user: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16859,7 +16859,7 @@ export def "providers-employers-assessments get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<invitedDate: string, participant: record, requestedBy: record, resultUrl: string, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16893,7 +16893,7 @@ export def "providers-employers-assignedworkflows get-assigned-workflows" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<allowedTransitions: list, assignee: record, data: string, id: string, initiatedBy: record, initiatedOn: string, lastModifiedBy: record, lastModifiedOn: string, status: record, trigger: record, workflowTemplate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16929,7 +16929,7 @@ export def "providers-employers-audit-trail-employee-data get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, employer: record, employment: record, entity: record, field: record, identification: record, mutationOrigin: record, mutationType: record, newValue: string, oldValue: string, performedBy: record, timeStamp: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16960,7 +16960,7 @@ export def "providers-employers-authorizations get" [
   --accept: string@accept-completer-8 # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -16993,7 +16993,7 @@ export def "providers-employers-benefitinkindtypes get-benefit-in-kind-types" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17024,7 +17024,7 @@ export def "providers-employers-benefitinkindtypes create-benefit-in-kind-type" 
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --description: string # The description of the benifit in kind type (e.g. Laptop)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17060,7 +17060,7 @@ export def "providers-employers-billableitems get-billable-items" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employer: record, id: string, issuedTo: record, providerId: string, requestedBy: record, requestedDate: string, requestedItem: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17094,7 +17094,7 @@ export def "providers-employers-conceptemployees get-concept-employees" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<creationDate: string, employeeData: record, employmentData: record, fiscalData: record, id: string, organizationalEntityData: record, otherPayrollVariablesData: record, selfService: record, socialSecurityData: record, uniqueName: string, wageData: record, workingHoursData: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17141,7 +17141,7 @@ export def "providers-employers-conceptemployees create-concept-employee" [
   --unique-name: string # The unique name for this concept employment. It is commonly used as a displayname in the user interface to select this entry in a dropdown box. (e.g. Sollicitant 013)
   --wage-data: record # nullable — shape: {applyPayGrade?: bool, grossWage?: float, grossWageType?: record, netWage?: float, netWageType?: record, payGrade?: record, payScale?: record}
   --working-hours-data: record # nullable — shape: {averageParttimeFactor?: float, calculateUsingWorkPattern?: record, contractCode?: record, deviatingHoursPerWeek?: float, deviatingSvDaysPerPeriod?: float, flexibleHoursContract?: record, regularWorkPattern?: bool, shift?: record, workPattern?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<creationDate: string, employeeData: record<address: record, contactInformation: record, deviatingPostalAddress: record, employeeNumber: int, iban: string, identityDocument: record, personalDetails: record>, employmentData: record<calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record, commissionUntilDate: string, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record, employmentContractType: record, employmentDurationType: record, essMutationSet: record, exemptionInsuranceObligation: record, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, namePayslip: string, nonPayrollAdministration: record, participation55plusRegulationUWV: bool, payrollAdministration: record, periodPayGradeAdjustment: int, professionCode: int, sendMdvNotification: bool, signalPayGradeAdjustment: bool, specialIncomeRatio: record, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, typeOfEmployee: record, typeOfParticipation: record, vacationCoupons: record, valueOfParticipation: record, writtenEmploymentContract: bool>, fiscalData: record<annualSalary: float, applyDayTables: bool, applyDeviatingPayrollTaxPercentageOn: record, applyPayrollTaxDeduction: bool, applyStudentDeduction: bool, deviatingCalculationRulePayrollTax: record, deviatingPayrollTaxPercentage: float, deviatingPayrollTaxTableColour: record, residentOf: record>, id: string, organizationalEntityData: record<department: record, deviatingFunctionDescription: string, deviatingFunctionGroup: string, distributionUnit: record, function: record, internalTelephoneExtensionNumber: string, placeOfEmployment: string, standardFunction: record>, otherPayrollVariablesData: record<deviatingPremiumGroup: record>, selfService: record<status: string>, socialSecurityData: record<healthCareInsuranceActType: record, isInsuredForOccupationalDisabilityInsuranceAct: bool, isInsuredForSicknessBenefitsAct: bool, isInsuredForUnemploymentInsuranceAct: bool>, uniqueName: string, wageData: record<applyPayGrade: bool, grossWage: float, grossWageType: record, netWage: float, netWageType: record, payGrade: record, payScale: record>, workingHoursData: record<averageParttimeFactor: float, calculateUsingWorkPattern: record, contractCode: record, deviatingHoursPerWeek: float, deviatingSvDaysPerPeriod: float, flexibleHoursContract: record, regularWorkPattern: bool, shift: record, workPattern: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17177,7 +17177,7 @@ export def "providers-employers-conceptemployees-selfservice get-concept-employe
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<conceptEmployee: record, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17211,7 +17211,7 @@ export def "providers-employers-contractcodes get-contract-codes" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: int, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17243,7 +17243,7 @@ export def "providers-employers-contractcodes create-contract-code" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --code: int # An unique code for the contract code within the scope of the employer (format: int32, e.g. 1022)
   --description: string # The description of the contract code (e.g. Special contract)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: int, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17279,7 +17279,7 @@ export def "providers-employers-customfields get-custom-fields" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17310,7 +17310,7 @@ export def "providers-employers-customfields create-custom-field" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --description: string # The description for the custom field which can be used at the employee and employment level (e.g. Shoe size)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17346,7 +17346,7 @@ export def "providers-employers-customholidays get-custom-holidays" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<date: string, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17378,7 +17378,7 @@ export def "providers-employers-customholidays create-custom-holiday" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --date: string # The date for the custom holiday. (format: date, e.g. 2021-01-01)
   --description: string # The description for the custom holiday. (e.g. Company 100th year anniversary)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<date: string, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17410,7 +17410,7 @@ export def "providers-employers-dashboard get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dashboardLocation: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17443,7 +17443,7 @@ export def "providers-employers-dashboard-licenses get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<license: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17475,7 +17475,7 @@ export def "providers-employers-dashboard-licenses update" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --body: list
-]: any -> any {
+]: any -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<license: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17507,7 +17507,7 @@ export def "providers-employers-datanewbusinesstoken get-data-new-business-token
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dataNewBusinessToken: string, expiresIn: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17540,7 +17540,7 @@ export def "providers-employers-departments get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: int, description: string, emailLeaveRequest: string, id: string, subDepartmentOf: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17575,7 +17575,7 @@ export def "providers-employers-departments create" [
   --description: string # The visible description (i.e. name) of the department. (e.g. Verkoop Binnendienst)
   --email-leave-request: string # Recipient e-mail adress for notification in case of leave requests. Typically this is the mailadress of a manager that would get a notification mail when a new leave requet is to be processed. (nullable, e.g. api@loket.nl)
   --sub-department-of: record # If the department is a sub department (i.e. underlying) of another department, then the key-field of that other department may be entered here. (nullable, format: metadata) — shape: {key?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: int, description: string, emailLeaveRequest: string, id: string, subDepartmentOf: record<code: int, description: string, key: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17611,7 +17611,7 @@ export def "providers-employers-documents get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<attribute: string, category: string, dateOfAlert: string, dateOfSubmission: string, description: string, isReadBy: record, qwoaterDocumentId: string, submittedBy: string, year: int, filename: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17679,7 +17679,7 @@ export def "providers-employers-documents-authorizations get-dossier" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<canWrite: record, category: string, isAuthorizaionEditRestricted: bool, isTemplate: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17710,7 +17710,7 @@ export def "providers-employers-documents-authorizations update-dossier" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -17771,7 +17771,7 @@ export def "providers-employers-documents-completedossier-initiate create-comple
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17905,7 +17905,7 @@ export def "providers-employers-documents-audittrail get-audit-trail-by-and" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<attribute: string, category: string, dateOfAlert: string, description: string, endUser: string, event: string, eventDate: string, role: string, year: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -17940,7 +17940,7 @@ export def "providers-employers-documenttemplates get-document-templates" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<attribute: string, dateOfAlert: string, description: string, qwoaterDocumentId: string, year: int, dateOfSubmission: string, filename: string, targetCategory: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18034,7 +18034,7 @@ export def "providers-employers-documenttemplates get-document-template-by-and-d
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18149,7 +18149,7 @@ export def "providers-employers-educationfurtherindications get-education-furthe
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: string, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18181,7 +18181,7 @@ export def "providers-employers-educationfurtherindications create-education-fur
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --code: string # An unique code for the eduction further indication within the scope of the employer (e.g. lts)
   --description: string # The description of the education furhter indication (e.g. Lagere technische school)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: string, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18217,7 +18217,7 @@ export def "providers-employers-educationtypes get-education-types" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: string, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18249,7 +18249,7 @@ export def "providers-employers-educationtypes create-education-type" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --code: string # An unique code for the eduction type within the scope of the employer (e.g. WO)
   --description: string # The description of the education type (e.g. Wetenschappelijk onderwijs)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<code: string, description: string, id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18285,7 +18285,7 @@ export def "providers-employers-emailidentities get-email-identities" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dkimTokens: list, emailIdentity: string, emailIdentityType: string, id: string, isDkimVerified: bool, isSpfVerified: bool, lastDkimVerifiedOn: string, lastSpfVerifiedOn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18316,7 +18316,7 @@ export def "providers-employers-emailidentities create-email-identity" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --email-identity: string # The emailIdentity that can be used when sending email. (e.g. provider.com)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dkimTokens: list<string>, emailIdentity: string, emailIdentityType: string, id: string, isDkimVerified: bool, isSpfVerified: bool, lastDkimVerifiedOn: string, lastSpfVerifiedOn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18349,7 +18349,7 @@ export def "providers-employers-emailidentities-verify create-email-identity" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --email-identity: string # The emailIdentity that can be used when sending email. (e.g. provider.com)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dkimTokens: list<string>, emailIdentity: string, emailIdentityType: string, id: string, isDkimVerified: bool, isSpfVerified: bool, lastDkimVerifiedOn: string, lastSpfVerifiedOn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18385,7 +18385,7 @@ export def "providers-employers-emailtemplates get-email-templates" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<category: record, definedAtLevel: string, dependsOnModule: record, email: record, isEmailTemplateEditable: bool, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18455,7 +18455,7 @@ export def "providers-employers-emailtemplates get-email-template-by-and-email-t
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<category: record, definedAtLevel: string, dependsOnModule: record, email: record, isEmailTemplateEditable: bool, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18494,7 +18494,7 @@ export def "providers-employers-emailtemplates update-email-template-by-and-emai
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --email: record # The configurable parts of the email template — shape: {body?: string, senderEmail?: string, subject?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<category: record<key: int, value: string>, definedAtLevel: string, dependsOnModule: record<description: string, id: string>, email: record<body: string, senderEmail: string, subject: string>, isEmailTemplateEditable: bool, type: record<description: string, id: string, sortOrder: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -18534,7 +18534,7 @@ export def "providers-employers-employees get-by-employer-id" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output The default option is `application/json;version=yyyy-MM-dd`. For the export functionality two other options are supporten: * text/csv;version=yyyy-MM-dd * application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;version=yyyy-MM-dd (e.g. application/json;version=2018-01-01)
   --x-report-input: string # Allows the user set what values are returnd in the "export" (csv or excel).
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<address: record, contactInformation: record, deviatingPostalAddress: record, employeeNumber: int, exclusionFromAbsenceStatus: bool, id: string, identityDocument: record, personalDetails: record, revokeEmployeeSelfServiceAccessOn: string, statusEmployeeSelfService: record, travel: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18569,7 +18569,7 @@ export def "providers-employers-employees-actualpartners get-actual-partners" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employmentId: string, partner: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18604,7 +18604,7 @@ export def "providers-employers-employees-children get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<children: record, employmentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18639,7 +18639,7 @@ export def "providers-employers-employees-contacts get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<contacts: record, employmentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18673,7 +18673,7 @@ export def "providers-employers-employees-employments get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record, commissionUntilDate: string, commissionUntilDate1: string, commissionUntilDate2: string, commissionUntilDate3: string, commissionUntilDate4: string, commissionUntilDate5: string, commissionUntilDate6: string, deviatingCLAExternalParty: int, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record, employmentCategoryType: record, employmentContractType: record, employmentDurationType: record, endDate: string, endOfEmploymentDueToIllness: bool, endOfEmploymentReason: record, endOfEmploymentReasonTaxAuthorities: record, essMutationSet: record, exemptionInsuranceObligation: record, exemptionPremiumWaiverMarginalLabour: bool, exemptionWorkRelatedExpenseScheme: bool, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, id: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, linkedEmployment: string, namePayslip: string, nonPayrollAdministration: record, participation55plusRegulationUWV: bool, payrollAdministration: record, payrollId: int, periodPayGradeAdjustment: int, professionCode: int, sendToExternalParty: record, signalPayGradeAdjustment: bool, specialIncomeRatio: record, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, temporaryTaxExemption: record, typeOfEmployee: record, typeOfParticipation: record, vacationCoupons: record, valueOfParticipation: record, wachtgeldOldRegulation: bool, writtenEmploymentContract: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18707,7 +18707,7 @@ export def "providers-employers-employees-employments-wage-proposals get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<currentGrossWage: float, currentPayGrade: record, employmentInformation: record, grossWageType: record, id: string, payScale: record, proposalReason: record, proposedGrossWage: float, proposedPayGrade: record, startDateProposal: string, status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18742,7 +18742,7 @@ export def "providers-employers-employees-employments-actualbenefitsanddeduction
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<benefitsAndDeductions: record, employmentId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18815,7 +18815,7 @@ export def "providers-employers-employees-employments-calendar-absences get" [
   --end-date: string # A valid date (yyyy-MM-dd). Last day of the timebox for which calendar data will be collected. (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<calendar: list, department: record, employee: record, employment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18851,7 +18851,7 @@ export def "providers-employers-employees-employments-calendar-availablehours ge
   --end-date: string # A valid date (yyyy-MM-dd). Last day of the timebox for which calendar data will be collected. (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<calendar: list, department: record, employee: record, employment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18887,7 +18887,7 @@ export def "providers-employers-employees-employments-calendar-leave get" [
   --end-date: string # A valid date (yyyy-MM-dd). Last day of the timebox for which calendar data will be collected. (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<calendar: list, department: record, employee: record, employment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18923,7 +18923,7 @@ export def "providers-employers-employees-employments-calendar-leaverequests get
   --end-date: string # A valid date (yyyy-MM-dd). Last day of the timebox for which calendar data will be collected. (format: date)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<calendar: list, department: record, employee: record, employment: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18958,7 +18958,7 @@ export def "providers-employers-employees-employments-comprehensive get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, calculateWorkingHours: bool, cancellationNoticeDate: string, cancellationPeriodEmployee: int, cancellationPeriodEmployer: int, cancellationPeriodTimeUnit: record, commissionUntilDate: string, commissionUntilDate1: string, commissionUntilDate2: string, commissionUntilDate3: string, commissionUntilDate4: string, commissionUntilDate5: string, commissionUntilDate6: string, deviatingCLAExternalParty: int, deviatingCLATaxReturn: int, emailLeaveRequest: string, employeeProfileId: record, employmentCategoryType: record, employmentContractType: record, employmentDurationType: record, endDate: string, endOfEmploymentDueToIllness: bool, endOfEmploymentReason: record, endOfEmploymentReasonTaxAuthorities: record, essMutationSet: record, exemptionInsuranceObligation: record, exemptionPremiumWaiverMarginalLabour: bool, exemptionWorkRelatedExpenseScheme: bool, firstDayNotification: bool, hasOnCallAppearanceObligation: bool, historicalStartDate: string, id: string, incomeRelationshipNumber: int, isAnonymousEmployee: bool, isDirectorAndMajorShareholder: bool, isFamilyOfOwner: bool, isGemoedsbezwaardEmployeeInsurance: bool, isGemoedsbezwaardNationalInsurance: bool, isOnCallEmployment: bool, isPreviousOwner: bool, linkedEmployment: string, namePayslip: string, nonPayrollAdministration: record, participation55plusRegulationUWV: bool, payrollAdministration: record, payrollId: int, periodPayGradeAdjustment: int, professionCode: int, sendToExternalParty: record, signalPayGradeAdjustment: bool, specialIncomeRatio: record, startCancellationNoticePeriod: string, startDate: string, startDateContractOfIndefiniteDuration: string, temporaryTaxExemption: record, typeOfEmployee: record, typeOfParticipation: record, vacationCoupons: record, valueOfParticipation: record, wachtgeldOldRegulation: bool, writtenEmploymentContract: bool, workinghours: record, organizationalEntity: record, wage: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -18992,7 +18992,7 @@ export def "providers-employers-employees-employments-declarations get-by-employ
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dateOfLastChangeByEmployee: string, dateOfSubmissionByEmployee: string, declarationComment: string, declarationDate: string, declarationStatus: record, employmentInformation: record, id: string, numberOfUnits: float, payrollComponent: record, processedInPayrollPeriod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19026,7 +19026,7 @@ export def "providers-employers-employees-employments-declarations-withattachmen
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<declarationId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19060,7 +19060,7 @@ export def "providers-employers-employees-employments-lastmodifiedversionnumbers
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, lastModifiedVersionNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19094,7 +19094,7 @@ export def "providers-employers-employees-employments-leaverequests get-leave-re
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<commentEmployee: string, commentHandler: string, currentlyAvailableUnits: float, endDate: string, handledBy: record, handledTime: string, id: string, isAccrual: bool, leaveRequestStatus: record, leaveType: record, numberOfUnits: float, startDate: string, submittedBy: record, submittedOn: string, unitType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19128,7 +19128,7 @@ export def "providers-employers-employees-employments-minimized get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, commissionUntilDate: string, employmentDurationType: record, endDate: string, id: string, incomeRelationshipNumber: int, nonPayrollAdministration: record, payrollAdministration: record, payrollId: int, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19197,7 +19197,7 @@ export def "providers-employers-employees-selfservice get-self-service-by-employ
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, hasTwoFactorAuthentication: bool, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19260,7 +19260,7 @@ export def "providers-employers-employmenttemplates get-employment-templates" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: list<record<employmentData: record, fiscalData: record, id: string, organizationalEntityData: record, otherPayrollVariablesData: record, socialSecurityData: record, templateName: string, wageData: record, workingHoursData: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19289,7 +19289,7 @@ export def "providers-employers-externaltenants get-external-tenants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<externalId: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19322,7 +19322,7 @@ export def "providers-employers-functions get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, group: string, key: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19354,7 +19354,7 @@ export def "providers-employers-functions create" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --description: string # e.g. Directeur
   --group: string # nullable, e.g. Var
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, group: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19425,7 +19425,7 @@ export def "providers-employers-leave-proposedleavehours get-proposed-hours" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<additionalInformation: string, employmentId: string, methodOfCalculation: string, proposedLeaveHours: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19459,7 +19459,7 @@ export def "providers-employers-leave-policies get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accrualType: record, additionalLeave: record, dayOfTheMonthToPerformAutomaticLeaveCalculationOn: int, id: string, leaveEntitlement: record, leaveRequest: record, leaveUnitType: record, name: string, payoutLeaveImmediately: bool, roundTo: record, roundingMethod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19491,7 +19491,7 @@ export def "providers-employers-leave-policies update-copy-policy" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --name: string # The name of the leave policy (nullable, e.g. Verlofregeling Metaal CAO)
   --source-leave-policy-id: string # The unique identifier of the Leave policy at providerlevel which should be copied. (format: uuid, e.g. b14acd0d-75d7-4fc8-8b22-4a3924585cab)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<id: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19540,7 +19540,7 @@ export def "providers-employers-leave-policies create-policy" [
   --payout-leave-immediately: oneof<nothing, bool> # If leave `accrualType` is set to based on hours worked (uren) then this field allows for the leave hours to be paid out directly instead of being accrued. (e.g. false)
   --round-to: record # Indicates to how many digits after the decimal point to round the numbers (format: metadata) — shape: {key?: int}
   --rounding-method: record # Indicates how to round the numbers (format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accrualType: record<key: int, value: string>, additionalLeave: record<allocationType: record, referenceDate1: record, referenceDate2: record>, dayOfTheMonthToPerformAutomaticLeaveCalculationOn: int, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, statutory: float, wtr: float>, leaveRequest: record<applyLeaveSchedule: bool, leavePattern: record, useHolidaysInCalculation: bool>, leaveUnitType: record<key: int, value: string>, name: string, payoutLeaveImmediately: bool, roundTo: record<key: int, value: string>, roundingMethod: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19578,7 +19578,7 @@ export def "providers-employers-leavebalances get-leave-balances" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employee: record, endDate: string, historicalStartDate: string, id: string, incomeRelationshipNumber: int, leaveBalance: list, nonPayrollAdministration: record, organizationalEntity: record, payrollAdministration: record, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19614,7 +19614,7 @@ export def "providers-employers-leavebalances-grouped get-leave-balances" [
   --group-by: string@group-by-completer # Select the groupBy
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<groups: list<record>, totals: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19648,7 +19648,7 @@ export def "providers-employers-leavetypes get-leave-types" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<deviations: record, id: string, leaveType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19679,7 +19679,7 @@ export def "providers-employers-leavetypes get-leave-type-by-and-leave-type" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<balanceExceedsYear: bool, employeeCanRequestIncrease: bool, enabled: bool, value: string>, id: string, leaveType: record<balanceExceedsYear: bool, employeeCanRequestIncrease: bool, enabled: bool, key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19713,7 +19713,7 @@ export def "providers-employers-leavetypes update-leave-type-by-and-leave-type" 
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --deviations: record # Optional deviations to the leave type. If set these deviations will overwrite the default values. Note: Two leaveTypes are excluded from deviations "verlof" and "Verlof bovenwettelijk" (nullable) — shape: {balanceExceedsYear?: bool, employeeCanRequestIncrease?: bool, enabled?: bool, value?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<balanceExceedsYear: bool, employeeCanRequestIncrease: bool, enabled: bool, value: string>, id: string, leaveType: record<balanceExceedsYear: bool, employeeCanRequestIncrease: bool, enabled: bool, key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19776,7 +19776,7 @@ export def "providers-employers-logo get" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19807,7 +19807,7 @@ export def "providers-employers-logo create" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --data: string # base64 encoded document file. (e.g. YQ==)
   --mime-type: string # The mimetype of the data. (e.g. image/jpeg)
-]: any -> any {
+]: any -> record<messages: table<code: int, description: string, id: string, properties: list, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -19841,7 +19841,7 @@ export def "providers-employers-logo get-by-and" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19871,7 +19871,7 @@ export def "providers-employers-modules get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19904,7 +19904,7 @@ export def "providers-employers-nationalholidays get-national-holidays" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<deviations: record, id: string, nationalHoliday: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19935,7 +19935,7 @@ export def "providers-employers-nationalholidays get-national-holidays-by-and-na
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<enabled: bool, value: string>, id: string, nationalHoliday: record<dateInCurrentYear: string, enabled: bool, key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -19969,7 +19969,7 @@ export def "providers-employers-nationalholidays update-national-holiday-by-and-
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --deviations: record # Optional deviations to the national holiday. If set these deviations will overwrite the default values. (nullable) — shape: {enabled?: bool, value?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<deviations: record<enabled: bool, value: string>, id: string, nationalHoliday: record<dateInCurrentYear: string, enabled: bool, key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20006,7 +20006,7 @@ export def "providers-employers-notes get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessibleBy: record, createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, note: string, subject: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20040,7 +20040,7 @@ export def "providers-employers-notes create" [
   --accessible-by: record # Indicates who can view this node. — shape: {key?: int}
   --note: string # The note it self. __Note:__ This is a free text field so users can add htlm/script etc. (nullable, e.g. Remember to do xyz)
   --subject: string # subject of the note (e.g. Remember to do xyz)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessibleBy: record<key: int, value: string>, createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, note: string, subject: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20076,7 +20076,7 @@ export def "providers-employers-notifications get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<appliesToEmployee: record, id: string, isRead: bool, markedAsReadBy: record, markedAsReadOn: string, notificationDate: string, notificationType: record, notificationTypeClarification: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20110,7 +20110,7 @@ export def "providers-employers-payrolladministrations get-payroll-administratio
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<address: record, administrationNumber: string, cao: record, claTaxReturnCBSCode: int, clientNumber: int, contact: record, description: string, deviatingPostalAddress: record, endDate: string, groupClassification: record, groupCode: int, id: string, loonmodel: record, name: string, payrollPeriodType: record, payrollTaxesNumber: string, shortName: string, startDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20140,7 +20140,7 @@ export def "providers-employers-proforma get-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<activeFor: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20204,7 +20204,7 @@ export def "providers-employers-providerlogo get-logo" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20235,7 +20235,7 @@ export def "providers-employers-providerlogo get-logo-by-and" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20269,7 +20269,7 @@ export def "providers-employers-useraccessibledepartments get-user-accessible-de
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<code: int, description: string, emailLeaveRequest: string, id: string, subDepartmentOf: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20303,7 +20303,7 @@ export def "providers-employers-users get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accessStatus: record, azureActiveDirectory: record, contactInformation: record, dateTimeCreation: string, dateTimeLastLogin: string, hasAccessToPayrollingTestData: bool, hasIntegrations: bool, hasMultiFactorAuthentication: bool, id: string, isDepartmentManager: bool, isLinkedToMultipleEmployers: bool, loginMethod: record, personalDetails: record, twoFactorAuthenticationRequired: bool, userCustomSpecifiedRole: string, userName: string, userSpecifiedRole: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20344,7 +20344,7 @@ export def "providers-employers-users create" [
   --login-method: record # The allowedlogin method for the user (format: metadata) — shape: {key?: int}
   --personal-details: record # shape: {initials?: string, lastName?: string, prefix?: string}
   --sso-account: record # nullable — shape: {password?: string, userName?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessStatus: record<key: int, value: string>, azureActiveDirectory: record<tenant: record, userId: string>, contactInformation: record<emailAddress: string, phoneNumber: string, placeOfEmployment: string>, dateTimeCreation: string, dateTimeLastLogin: string, hasAccessToPayrollingTestData: bool, hasIntegrations: bool, hasMultiFactorAuthentication: bool, id: string, isDepartmentManager: bool, isLinkedToMultipleEmployers: bool, loginMethod: record<key: int, value: string>, personalDetails: record<firstName: string, initials: string, lastName: string, prefix: string>, twoFactorAuthenticationRequired: bool, userCustomSpecifiedRole: string, userName: string, userSpecifiedRole: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20379,7 +20379,7 @@ export def "providers-employers-users-departments get-linked" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<departments: list, personalDetails: record, userId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20416,7 +20416,7 @@ export def "providers-employers-users-invite create" [
   --has-access-to-payrolling-test-data: oneof<nothing, bool> # Indicates if the user has access to data for payrolling test years (e.g. false)
   --personal-details: record # shape: {initials?: string, lastName?: string, prefix?: string}
   --two-factor-authentication-required: oneof<nothing, bool> # Indicates whether two factor authentication is required for the user. This setting is only available for login method: Via website en SSO (e.g. false)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accessStatus: record<key: int, value: string>, azureActiveDirectory: record<tenant: record, userId: string>, contactInformation: record<emailAddress: string, phoneNumber: string, placeOfEmployment: string>, dateTimeCreation: string, dateTimeLastLogin: string, hasAccessToPayrollingTestData: bool, hasIntegrations: bool, hasMultiFactorAuthentication: bool, id: string, isDepartmentManager: bool, isLinkedToMultipleEmployers: bool, loginMethod: record<key: int, value: string>, personalDetails: record<firstName: string, initials: string, lastName: string, prefix: string>, twoFactorAuthenticationRequired: bool, userCustomSpecifiedRole: string, userName: string, userSpecifiedRole: record<key: int, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20486,7 +20486,7 @@ export def "providers-employers-users-authorizations get-by-and" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: list<list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20522,7 +20522,7 @@ export def "providers-employers-users-authorizations update" [
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --authorization-set: record # format: metadata — shape: {id?: string}
   --authorizations: list # item shape: {id?: string, isEnabled?: bool}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20557,7 +20557,7 @@ export def "providers-employers-users-departments update-linked-by-and" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --body: list
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20594,7 +20594,7 @@ export def "providers-employers-workflows get-by-employer-id" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<allowedTransitions: list, assignee: record, data: string, id: string, initiatedBy: record, initiatedOn: string, lastModifiedBy: record, lastModifiedOn: string, status: record, trigger: record, workflowTemplate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20628,7 +20628,7 @@ export def "providers-employers-workflowtriggermappings get-workflow-trigger-map
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<createdBy: record, createdOn: string, id: string, lastModifiedBy: record, lastModifiedOn: string, trigger: record, workflowTemplate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -20662,7 +20662,7 @@ export def "providers-employers-workflowtriggermappings create-workflow-trigger-
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --trigger: record # Indicates the workflow trigger to be configured. `trigger` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {id?: string}
   --workflow-template: record # Indicates what workflow template will be used to initiate a workflow when the trigger takes place. `workflowTemplate` is a metadata field within the employer context. Possible values can be managed by the user. (format: metadata) — shape: {id?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<createdBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, createdOn: string, id: string, lastModifiedBy: record<formattedName: string, id: string, initials: string, lastName: string, prefix: string>, lastModifiedOn: string, trigger: record<description: string, id: string>, workflowTemplate: record<description: string, id: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20698,7 +20698,7 @@ export def "providers-leave-policies get-policy-by-policy" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<accrualType: record<key: int, value: string>, additionalLeave: record<allocationType: record, referenceDate1: record, referenceDate2: record>, dayOfTheMonthToPerformAutomaticLeaveCalculationOn: int, id: string, leaveEntitlement: record<excessLeaveToStatutory: float, statutory: float, wtr: float>, leaveRequest: record<applyLeaveSchedule: bool, leavePattern: record, useHolidaysInCalculation: bool>, leaveUnitType: record<key: int, value: string>, name: string, payoutLeaveImmediately: bool, roundTo: record<key: int, value: string>, roundingMethod: record<key: int, value: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -20732,7 +20732,7 @@ export def "providers-leave-policies-agebasedleave get-age-based-by-policy" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<from: record, id: string, leaveEntitlement: record, upToAndIncluding: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -20766,7 +20766,7 @@ export def "providers-leave-policies-wagebasedleave get-wage-based-by-policy" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<fromWage: float, id: string, leaveEntitlement: record, upToAndIncludingWage: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -20800,7 +20800,7 @@ export def "providers-leave-policies-yearsofservicebasedleave get-years-of-servi
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<from: record, id: string, leaveEntitlement: record, upToAndIncluding: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($leave_policy_id | is-empty) { error make --unspanned { msg: "path parameter 'leavePolicyId' must be non-empty" } }
@@ -20830,7 +20830,7 @@ export def "providers-notificationsets get-notification-update-by-notification" 
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<description: string, id: string, notifications: list<record>, numberOfLinkedEmployerUsers: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($notification_set_id | is-empty) { error make --unspanned { msg: "path parameter 'notificationSetId' must be non-empty" } }
@@ -20861,7 +20861,7 @@ export def "providers-users-configuredexternaltenant get-configured-external-ten
   --order-by: string # Order the collection on one or more fields (e.g. -companyName,address.houseNumber)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<externalTenant: record<id: string, name: string>, externalUser: record<id: string>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_user_id | is-empty) { error make --unspanned { msg: "path parameter 'providerUserId' must be non-empty" } }
@@ -20895,7 +20895,7 @@ export def "providers-users-configuredexternaltenant update-configured-external-
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --external-tenant: record # nullable — shape: {id?: string}
   --external-user: record # nullable — shape: {id?: string}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<externalTenant: record<id: string, name: string>, externalUser: record<id: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20931,7 +20931,7 @@ export def "providers-applicationsets get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<applicationSetType: string, data: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -20964,7 +20964,7 @@ export def "providers-applicationsets create-application-update" [
   --application-set-type: string@application-set-type-completer # The type of the set
   --data: string # Contains an array of objects in json structure. (e.g. json object)
   --name: string # Name of the exportset (e.g. Exportset Dienstverband)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applicationSetType: string, data: string, id: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -20996,7 +20996,7 @@ export def "providers-authorizations get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21029,7 +21029,7 @@ export def "providers-authorizationsets get-authorization-sets" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<authorizations: list, description: string, id: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21063,7 +21063,7 @@ export def "providers-billableitems get-billable-items" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<employer: record, id: string, providerId: string, requestedDate: string, requestedItem: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21097,7 +21097,7 @@ export def "providers-emailidentities get-email-identities" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<dkimTokens: list, emailIdentity: string, emailIdentityType: string, id: string, isDkimVerified: bool, isSpfVerified: bool, lastDkimVerifiedOn: string, lastSpfVerifiedOn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21128,7 +21128,7 @@ export def "providers-emailidentities create-email-identity" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --email-identity: string # The emailIdentity that can be used when sending email. (e.g. provider.com)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dkimTokens: list<string>, emailIdentity: string, emailIdentityType: string, id: string, isDkimVerified: bool, isSpfVerified: bool, lastDkimVerifiedOn: string, lastSpfVerifiedOn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21161,7 +21161,7 @@ export def "providers-emailidentities-verify create-email-identity" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --email-identity: string # The emailIdentity that can be used when sending email. (e.g. provider.com)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<dkimTokens: list<string>, emailIdentity: string, emailIdentityType: string, id: string, isDkimVerified: bool, isSpfVerified: bool, lastDkimVerifiedOn: string, lastSpfVerifiedOn: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21197,7 +21197,7 @@ export def "providers-emailtemplates get-email-templates" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<category: record, definedAtLevel: string, dependsOnModule: record, email: record, isEmailTemplateEditable: bool, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21233,7 +21233,7 @@ export def "providers-emailtemplates get-email-template-by-and-email-template" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<category: record, definedAtLevel: string, dependsOnModule: record, email: record, isEmailTemplateEditable: bool, type: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21282,7 +21282,7 @@ export def "providers-employers create" [
   --legal-form: record # nullable, format: metadata — shape: {key?: int}
   --provider-settings: record # shape: {administrationNumber?: string, groupCode?: int, parentEmployerForConsolidatedOverviews?: int, sendEmailWhenSalarySlipIsAvailable?: bool}
   --sbi: record # The 'Standard Industrial Classifications (Dutch SBI 2008, NACE and ISIC)' as defined bij the Dutch chamber of commerce (nullable, format: metadata) — shape: {key?: int}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<address: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, postalCode: string, province: record, street: string>, branch: record<key: int, value: string>, chamberOfCommerceNumber: string, companyName: string, contact: record<function: string, name: string, phoneNumber: string>, contactInformation: record<emailAddress: string, faxNumber: string, phoneNumber: string, website: string>, deviatingPostalAddress: record<city: string, country: record, furtherIndication: record, houseNumber: int, houseNumberAddition: string, location: string, poBox: int, postalCode: string, street: string>, employerLogo: string, employerNumber: int, id: string, legalForm: record<key: int, value: string>, providerLogo: string, providerSettings: record<administrationNumber: string, groupCode: int, parentEmployerForConsolidatedOverviews: int, sendEmailWhenSalarySlipIsAvailable: bool>, sbi: record<key: int, sbiCode: string, value: string>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21314,7 +21314,7 @@ export def "providers-externaltenants get-external-tenants" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<externalId: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21347,7 +21347,7 @@ export def "providers-leave-policies get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<accrualType: record, additionalLeave: record, dayOfTheMonthToPerformAutomaticLeaveCalculationOn: int, id: string, leaveEntitlement: record, leaveRequest: record, leaveUnitType: record, name: string, payoutLeaveImmediately: bool, roundTo: record, roundingMethod: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21378,7 +21378,7 @@ export def "providers-logo list" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21409,7 +21409,7 @@ export def "providers-logo get" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21443,7 +21443,7 @@ export def "providers-notificationsets get-notification-sets" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<description: string, id: string, notifications: list, numberOfLinkedEmployerUsers: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21478,7 +21478,7 @@ export def "providers-payrollprocessstatus get-payroll-process-status" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<administrationNumber: string, cao: record, clientNumber: int, employerId: string, employerLogo: string, groupClassification: record, groupCode: int, hasAutomaticPayroll: bool, id: string, loonmodel: record, name: string, payrollPeriod: record, payrollPeriodType: record, shortName: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($provider_id | is-empty) { error make --unspanned { msg: "path parameter 'providerId' must be non-empty" } }
@@ -21511,7 +21511,7 @@ export def "qwoater-employers get-by-user" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, lastModifiedVersionNumber: int, providerId: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -21540,7 +21540,7 @@ export def "rdwservices-additionaltaxliability get-additional-taxliability-by-li
   --license-plate-number: string # A valid vehicle registration (license plate) number. (e.g. 52LRX4)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<additionalTaxLiabilityGroup: record<key: int, value: string>, dateOfFirstAdmission: string, licensePlateNumber: string, valueForTaxPurposes: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "licensePlateNumber" $license_plate_number "scalar")] | flatten | str join "&"
@@ -21568,7 +21568,7 @@ export def "user get-by-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<contactInformation: record<emailAddress: string, phoneNumber: string, placeOfEmployment: string>, personalDetails: record<firstName: string, initials: string, lastName: string, prefix: string>, photo: string, user: record<userCustomSpecifiedRole: string, userSpecifiedRole: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user")
@@ -21601,7 +21601,7 @@ export def "user update-by-token" [
   --contact-information: record # nullable — shape: {phoneNumber?: string, placeOfEmployment?: string}
   --personal-details: record # nullable — shape: {firstName?: string, initials?: string, lastName?: string, prefix?: string}
   --user: record # nullable — shape: {userCustomSpecifiedRole?: string, userSpecifiedRole?: record}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<contactInformation: record<emailAddress: string, phoneNumber: string, placeOfEmployment: string>, personalDetails: record<firstName: string, initials: string, lastName: string, prefix: string>, photo: string, user: record<userCustomSpecifiedRole: string, userSpecifiedRole: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21632,7 +21632,7 @@ export def "user-filtersettings get-filter-settings-by-employer" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentFilter: record<filterOnAdministrations: list, filterOnDepartments: list, filterOnEmployedStatus: string, filterOnOnCallEmployment: bool>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://k8s.loket.nl/globalfilter-microservice")
   if ($employer_id | is-empty) { error make --unspanned { msg: "path parameter 'employerId' must be non-empty" } }
@@ -21663,7 +21663,7 @@ export def "user-filtersettings update-filter-settings-by-employer" [
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
   --employment-filter: record # shape: {filterOnAdministrations?: list, filterOnDepartments?: list, filterOnEmployedStatus?: "AllEmployments"|"ActiveEmployments"|"ActiveAndFutureEmployments"|"ActiveAndHistoricEmployments", filterOnOnCallEmployment?: bool}
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<employmentFilter: record<filterOnAdministrations: list, filterOnDepartments: list, filterOnEmployedStatus: string, filterOnOnCallEmployment: bool>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://k8s.loket.nl/globalfilter-microservice")
@@ -21722,7 +21722,7 @@ export def "user-photo get-by-token" [
   --accept: string@accept-completer # Response content type
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/photo")
@@ -21815,7 +21815,7 @@ export def "users-applicationsets update-application-by-application" [
   --if-match: string # Input the value acquired in the ETag header for concurrency control. Please note this is optional (and not recommended for most types of integrations).
   --data: string # Contains an array of objects in json structure. (e.g. json object)
   --name: string # Name of the exportset (e.g. Exportset Dienstverband)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applicationSetType: string, data: string, id: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21850,7 +21850,7 @@ export def "users-initiatedworkflows get-initiated-workflows-by-bearer-token" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<allowedTransitions: list, assignee: record, data: string, id: string, initiatedBy: record, initiatedOn: string, lastModifiedBy: record, lastModifiedOn: string, status: record, trigger: record, workflowTemplate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -21878,7 +21878,7 @@ export def "users-integrations get-by-bearer-token" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: record<application: record<id: string, isBlocked: bool, logo: string, name: string>, createdOn: string, isBlocked: bool, lastLogin: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/integrations")
@@ -21910,7 +21910,7 @@ export def "users-applicationsets get" [
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<applicationSetType: string, data: string, id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -21943,7 +21943,7 @@ export def "users-applicationsets create-application-update" [
   --application-set-type: string@application-set-type-completer # The type of the set
   --data: string # Contains an array of objects in json structure. (e.g. json object)
   --name: string # Name of the exportset (e.g. Exportset Dienstverband)
-]: any -> any {
+]: any -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<applicationSetType: string, data: string, id: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -21975,7 +21975,7 @@ export def "users-yourcampusurl get-yourcampus-url" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<url: string, validUntilDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -22008,7 +22008,7 @@ export def "wageprojection-cladata get-cla-data-for-wage-projection-by-collectiv
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, content: record<collectiveLaborAgreement: record<baseForCalculation: list, employments: list, name: string, nextYear: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collective_labor_agreement_id | is-empty) { error make --unspanned { msg: "path parameter 'collectiveLaborAgreementId' must be non-empty" } }
@@ -22041,7 +22041,7 @@ export def "wageprojection-collectivelaboragreements get-collective-labor-agreem
   --page-size: int # Specifies the number of objects per page (format: int32, default: 250, e.g. 20)
   --authorization: string # A valid Bearer token for authorizing the request. (e.g. Bearer <TOKEN>)
   --hdr-accept: string # The accept header is used to influence what type of output is returned and in most cases the version of the output (e.g. application/json;version=2018-01-01)
-]: nothing -> any {
+]: nothing -> record<currentPage: int, pageSize: int, totalPages: int, totalSize: int, version: record<obsoleteDate: string, resourceVersion: string>, messages: table<code: int, description: string, id: string, properties: list, type: string>, _embedded: table<id: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"

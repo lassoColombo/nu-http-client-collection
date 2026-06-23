@@ -193,7 +193,7 @@ export def "group-members list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -304,7 +304,7 @@ export def "group-settings get-view" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<requestAccess: record<enabled: bool>, sessionLength: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -329,7 +329,7 @@ export def "group-settings update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<requestAccess: record<enabled: bool>, sessionLength: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -356,7 +356,7 @@ export def "group-tags list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: float # The number of results to return (the default is 1000). (e.g. 10)
   --page: float # The offset from which to start returning results from. (e.g. 1)
-]: nothing -> any {
+]: nothing -> record<tags: list<any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -385,7 +385,7 @@ export def "group-tags-delete delete" [
   --force: oneof<nothing, bool> # force delete tag that has entities (default is `false`).
   --key: string # Valid tag key.
   --value: string # Valid tag value.
-]: any -> any {
+]: any -> record<force: bool, key: string, value: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -540,7 +540,7 @@ export def "org-dependencies list" [
   --page: float # The page of results to fetch. (default: 1)
   --per-page: float # The number of results to fetch per page (maximum is 1000). (default: 20)
   --filters: record # shape: {depStatus?: string, dependencies?: any, languages?: list, licenses?: any, projects?: any, severity?: list}
-]: any -> any {
+]: any -> record<results: table<copyright: list, dependenciesWithIssues: list, deprecatedVersions: list, firstPublishedDate: string, id: string, isDeprecated: bool, issuesCritical: float, issuesHigh: float, issuesLow: float, issuesMedium: float, latestVersion: string, latestVersionPublishedDate: string, licenses: list, name: string, projects: list, type: string, version: string>, total: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -621,7 +621,7 @@ export def "org-integrations list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -862,7 +862,7 @@ export def "org-integrations-import get-job-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created: string, id: string, logs: list<any>, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -890,7 +890,7 @@ export def "org-integrations-settings get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<autoDepUpgradeEnabled: bool, autoDepUpgradeIgnoredDependencies: list<any>, autoDepUpgradeLimit: float, autoDepUpgradeMinAge: float, autoRemediationPrs: record<backlogPrsEnabled: bool, freshPrsEnabled: bool, usePatchRemediation: bool>, dockerfileSCMEnabled: bool, manualRemediationPrs: record<usePatchRemediation: bool>, pullRequestAssignment: record<assignees: list<any>, enabled: bool, type: string>, pullRequestFailOnAnyVulns: bool, pullRequestFailOnlyForHighSeverity: bool, pullRequestTestEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -931,7 +931,7 @@ export def "org-integrations-settings update" [
   --pull-request-fail-on-any-vulns: oneof<nothing, bool> # If an opened PR should fail to be validated if any vulnerable dependencies have been detected
   --pull-request-fail-only-for-high-severity: oneof<nothing, bool> # If an opened PR only should fail its validation if any dependencies are marked as being of high severity
   --pull-request-test-enabled: oneof<nothing, bool> # If opened PRs should be tested
-]: any -> any {
+]: any -> record<autoDepUpgradeEnabled: bool, autoDepUpgradeIgnoredDependencies: list<any>, autoDepUpgradeLimit: float, autoDepUpgradeMinAge: float, autoRemediationPrs: record<backlogPrsEnabled: bool, freshPrsEnabled: bool, usePatchRemediation: bool>, dockerfileSCMEnabled: bool, manualRemediationPrs: record<usePatchRemediation: bool>, pullRequestAssignment: record<assignees: list<any>, enabled: bool, type: string>, pullRequestFailOnAnyVulns: bool, pullRequestFailOnlyForHighSeverity: bool, pullRequestTestEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -961,7 +961,7 @@ export def "org-integrations get-existing" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1021,7 +1021,7 @@ export def "org-licenses list" [
   --sort-by: string@sort-by-completer-1 # The field to sort results by. (default: license, e.g. license)
   --order: string@order-completer # The direction to sort results by. (default: asc)
   --filters: record # shape: {dependencies?: any, languages?: list, licenses?: any, projects?: any, severity?: list}
-]: any -> any {
+]: any -> record<results: table<dependencies: list, id: string, instructions: string, projects: list, severity: string>, total: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1051,7 +1051,7 @@ export def "org-members list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-group-admins: oneof<nothing, bool> # Include group administrators who also have access to this organization. (default: false, e.g. true)
-]: nothing -> any {
+]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1165,7 +1165,7 @@ export def "org-notification-settings get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<new_issues_remediations: record<enabled: bool, inherited: bool, issueSeverity: string, issueType: string>, project_imported: record<enabled: bool, inherited: bool>, test_limit: record<enabled: bool, inherited: bool>, weekly_report: record<enabled: bool, inherited: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1198,7 +1198,7 @@ export def "org-notification-settings update" [
   --project-imported: record # shape: {enabled: bool}
   --test-limit: record # shape: {enabled: bool}
   --weekly-report: record # shape: {enabled: bool}
-]: any -> any {
+]: any -> record<new_issues_remediations: record<enabled: bool, inherited: bool, issueSeverity: string, issueType: string>, project_imported: record<enabled: bool, inherited: bool>, test_limit: record<enabled: bool, inherited: bool>, weekly_report: record<enabled: bool, inherited: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1254,7 +1254,7 @@ export def "org-project get-single" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<attributes: record<criticality: list<any>, environment: list<any>, lifecycle: list<any>>, branch: string, browseUrl: string, created: string, hostname: string, id: string, imageBaseImage: string, imageCluster: string, imageId: string, imagePlatform: string, imageTag: string, importingUser: record<email: string, id: string, name: string, username: string>, isMonitored: bool, issueCountsBySeverity: record<critical: float, high: float, low: float, medium: float>, lastTestedDate: string, name: string, origin: string, owner: record, readOnly: bool, remediation: record<patch: record, pin: record, upgrade: record>, remoteRepoUrl: string, tags: list<any>, targetReference: string, testFrequency: string, totalDependencies: float, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1284,7 +1284,7 @@ export def "org-project update" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --branch: string # The branch that this project should be monitoring
   --owner: record # Set to `null` to remove all ownership. User must be a member of the same organization as the project. — shape: {id?: string}
-]: any -> any {
+]: any -> record<attributes: record<criticality: list<any>, environment: list<any>, lifecycle: list<any>>, branch: string, browseUrl: string, created: string, hostname: string, id: string, imageBaseImage: string, imageCluster: string, imageId: string, imagePlatform: string, imageTag: string, importingUser: record<email: string, id: string, name: string, username: string>, isMonitored: bool, issueCountsBySeverity: record<critical: float, high: float, low: float, medium: float>, lastTestedDate: string, name: string, origin: string, owner: record, readOnly: bool, remediation: record<patch: record, pin: record, upgrade: record>, remoteRepoUrl: string, tags: list<any>, targetReference: string, testFrequency: string, totalDependencies: float, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1345,7 +1345,7 @@ export def "org-project-aggregated-issues list" [
   --filters: record # shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
   --include-description: oneof<nothing, bool> # If set to `true`, Include issue's description, if set to `false` (by default), it won't (Non-IaC projects only)
   --include-introduced-through: oneof<nothing, bool> # If set to `true`, Include issue's introducedThrough, if set to `false` (by default), it won't. It's for container only projects (Non-IaC projects only)
-]: any -> any {
+]: any -> record<issues: table<fixInfo: record, id: string, ignoreReasons: list, introducedThrough: list, isIgnored: bool, isPatched: bool, issueData: record, issueType: string, links: record, pkgName: string, pkgVersions: list, priority: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1378,7 +1378,7 @@ export def "org-project-attributes create-applying" [
   --criticality: list
   --environment: list
   --lifecycle: list
-]: any -> any {
+]: any -> record<attributes: record<criticality: list<any>, environment: list<any>, lifecycle: list<any>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1435,7 +1435,7 @@ export def "org-project-dep-graph get-dependency" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<depGraph: record<graph: record<nodes: list, rootNodeId: string>, pkgManager: record<name: string, repositories: list, version: string>, pkgs: list<record>, schemaVersion: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1466,7 +1466,7 @@ export def "org-project-history list-snapshots" [
   --per-page: float # The number of results to return (the default is 10, the maximum is 100). (e.g. 10)
   --page: float # The offset from which to start returning results from. (e.g. 1)
   --filters: record # shape: {imageId?: string}
-]: any -> any {
+]: any -> record<snapshots: table<created: string, id: string, imageBaseImage: string, imageId: string, imagePlatform: string, imageTag: string, issueCounts: record, method: string, totalDependencies: float>, total: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1502,7 +1502,7 @@ export def "org-project-history-aggregated-issues list-snapshot" [
   --filters: record # shape: {exploitMaturity?: list, ignored?: bool, patched?: bool, priority?: record, severities?: list, types?: list}
   --include-description: oneof<nothing, bool> # If set to `true`, Include issue's description, if set to `false` (by default), it won't (Non-IaC projects only)
   --include-introduced-through: oneof<nothing, bool> # If set to `true`, Include issue's introducedThrough, if set to `false` (by default), it won't. It's for container only projects (Non-IaC projects only)
-]: any -> any {
+]: any -> record<issues: table<fixInfo: record, id: string, ignoreReasons: list, introducedThrough: list, isIgnored: bool, isPatched: bool, issueData: record, issueType: string, links: record, pkgName: string, pkgVersions: list, priority: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1537,7 +1537,7 @@ export def "org-project-history-issue-paths list-snapshot" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --per-page: float # The number of results to return per page (1 - 1000, inclusive). (default: 100, e.g. 3)
   --page: float # The page of results to return. (default: 1, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<links: record<last: string, next: string, prev: string>, paths: list<list<record>>, snapshotId: string, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1663,7 +1663,7 @@ export def "org-project-ignore update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1721,7 +1721,7 @@ export def "org-project-issue-jira-issue create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --fields: record # shape: {issuetype?: record, project?: record, summary?: string}
-]: any -> any {
+]: any -> record<jiraIssue: record<id: string, key: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1756,7 +1756,7 @@ export def "org-project-issue-paths list" [
   --snapshot-id: string # The project snapshot ID for which to return issue paths. If set to `latest`, the most recent snapshot will be used. Use the "List all project snapshots" endpoint to find suitable values for this. (default: latest, e.g. 6d5813be-7e6d-4ab8-80c2-1e3e2a454553)
   --per-page: float # The number of results to return per page (1 - 1000, inclusive). (default: 100, e.g. 3)
   --page: float # The page of results to return. (default: 1, e.g. 2)
-]: nothing -> any {
+]: nothing -> record<links: record<last: string, next: string, prev: string>, paths: list<list<record>>, snapshotId: string, total: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1870,7 +1870,7 @@ export def "org-project-settings list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<autoDepUpgradeEnabled: bool, autoDepUpgradeIgnoredDependencies: list<any>, autoDepUpgradeLimit: float, autoDepUpgradeMinAge: float, autoRemediationPrs: record<backlogPrsEnabled: bool, freshPrsEnabled: bool, usePatchRemediation: bool>, pullRequestAssignment: record<assignees: list<any>, enabled: bool, type: string>, pullRequestFailOnAnyVulns: bool, pullRequestFailOnlyForHighSeverity: bool, pullRequestTestEnabled: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -1908,7 +1908,7 @@ export def "org-project-settings update" [
   --pull-request-fail-on-any-vulns: oneof<nothing, bool> # If set to `true`, fail Snyk Test if the repo has any vulnerabilities. Otherwise, fail only when the PR is adding a vulnerable dependency.
   --pull-request-fail-only-for-high-severity: oneof<nothing, bool> # If set to `true`, fail Snyk Test only for high and critical severity vulnerabilities
   --pull-request-test-enabled: oneof<nothing, bool> # If set to `true`, Snyk Test checks PRs for vulnerabilities.:cq
-]: any -> any {
+]: any -> record<autoDepUpgradeEnabled: bool, autoDepUpgradeIgnoredDependencies: list<any>, autoDepUpgradeLimit: float, autoDepUpgradeMinAge: float, autoRemediationPrs: record<backlogPrsEnabled: bool, freshPrsEnabled: bool, usePatchRemediation: bool>, pullRequestAssignment: record<assignees: list<any>, enabled: bool, type: string>, pullRequestFailOnAnyVulns: bool, pullRequestFailOnlyForHighSeverity: bool, pullRequestTestEnabled: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1940,7 +1940,7 @@ export def "org-project-tags create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Alphanumeric including - and _ with a limit of 30 characters
   --value: string # Alphanumeric including - and _ with a limit of 50 characters
-]: any -> any {
+]: any -> record<tags: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1972,7 +1972,7 @@ export def "org-project-tags-remove delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --key: string # Alphanumeric including - and _ with a limit of 30 characters
   --value: string # Alphanumeric including - and _ with a limit of 50 characters
-]: any -> any {
+]: any -> record<tags: list<any>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2003,7 +2003,7 @@ export def "org-projects list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record # shape: {attributes?: record, isMonitored?: bool, name?: string, origin?: string, tags?: record, type?: string}
-]: any -> any {
+]: any -> record<org: record<id: string, name: string>, projects: table<attributes: record, branch: string, browseUrl: string, created: string, id: string, imageBaseImage: string, imageCluster: string, imageId: string, imagePlatform: string, imageTag: string, importingUser: record, isMonitored: bool, issueCountsBySeverity: record, lastTestedDate: string, name: string, origin: string, owner: record, readOnly: bool, remoteRepoUrl: string, tags: list, targetReference: string, testFrequency: string, totalDependencies: float, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2031,7 +2031,7 @@ export def "org-provision delete-pending-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<ok: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -2056,7 +2056,7 @@ export def "org-provision list-pending-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -2084,7 +2084,7 @@ export def "org-provision create-user-to-organization" [
   email: string # The email of the user.
   --role: string # Deprecated. Name of the role to grant this user. Must be one of `ADMIN`, `COLLABORATOR`, or `RESTRICTED_COLLABORATOR`. This field is invalid if `rolePublicId` is supplied with the request.
   --role-public-id: string # ID of the role to grant this user.
-]: any -> any {
+]: any -> record<created: string, email: string, role: string, rolePublicId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2112,7 +2112,7 @@ export def "org-settings get-view-organization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<requestAccess: record<enabled: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -2139,7 +2139,7 @@ export def "org-settings update-organization" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --request-access: record # Can only be updated if `API_KEY` has edit access to request access settings. — shape: {enabled: bool}
-]: any -> any {
+]: any -> record<requestAccess: record<enabled: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2330,7 +2330,7 @@ export def "reporting-counts-issues get" [
   --qp-to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (e.g. 2017-07-03)
   --group-by: string@group-by-completer # The field to group results by (e.g. severity)
   --filters: record # shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-]: any -> any {
+]: any -> record<results: table<count: float, day: string, fixable: record, severity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2360,7 +2360,7 @@ export def "reporting-counts-issues-latest get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-by: string@group-by-completer # The field to group results by (e.g. severity)
   --filters: record # shape: {fixable?: bool, ignored?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-]: any -> any {
+]: any -> record<results: table<count: float, day: string, fixable: record, severity: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2391,7 +2391,7 @@ export def "reporting-counts-projects get" [
   --qp-from: string # The date you wish to fetch results from, in the format `YYYY-MM-DD` (e.g. 2017-07-01)
   --qp-to: string # The date you wish to fetch results until, in the format `YYYY-MM-DD` (e.g. 2017-07-03)
   --filters: record # shape: {languages?: list, orgs: any, projects?: any}
-]: any -> any {
+]: any -> record<results: table<count: float, day: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2420,7 +2420,7 @@ export def "reporting-counts-projects-latest get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filters: record # shape: {languages?: list, orgs: any, projects?: any}
-]: any -> any {
+]: any -> record<results: table<count: float, day: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2451,7 +2451,7 @@ export def "reporting-counts-tests get" [
   --qp-to: string # The date you wish to count tests until, in the format `YYYY-MM-DD` (e.g. 2017-07-03)
   --group-by: string@group-by-completer-1 # The field to group results by (e.g. isPrivate)
   --filters: record # shape: {isPrivate?: bool, issuesPrevented?: bool, orgs: any, projects?: any}
-]: any -> any {
+]: any -> record<results: table<count: float, isPrivate: record, issuesPrevented: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2487,7 +2487,7 @@ export def "reporting-issues get-list" [
   --order: string # The direction to sort results. (e.g. asc)
   --group-by: string@group-by-completer-2 # Set to issue to group the same issue in multiple projects (e.g. issue)
   --filters: record # shape: {exploitMaturity?: list, fixable?: bool, identifier?: string, ignored?: bool, isFixed?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, issues?: any, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-]: any -> any {
+]: any -> record<results: table<fixedDate: string, introducedDate: string, isFixed: bool, issue: record, patchedDate: string>, total: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2521,7 +2521,7 @@ export def "reporting-issues-latest get-list" [
   --order: string # The direction to sort results. (e.g. asc)
   --group-by: string@group-by-completer-2 # Set to issue to group the same issue in multiple projects (e.g. issue)
   --filters: record # shape: {exploitMaturity?: list, fixable?: bool, identifier?: string, ignored?: bool, isFixed?: bool, isPatchable?: bool, isPinnable?: bool, isUpgradable?: bool, issues?: any, languages?: list, orgs: any, patched?: bool, priorityScore?: record, projects?: any, severity?: list, types?: list}
-]: any -> any {
+]: any -> record<results: table<fixedDate: string, introducedDate: string, isFixed: bool, issue: record, patchedDate: string>, total: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3054,7 +3054,7 @@ export def "user-me get-my-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<email: string, id: string, orgs: any, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/me")
@@ -3078,7 +3078,7 @@ export def "user-me-notification-settings-org get-organization" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<new_issues_remediations: record<enabled: bool, inherited: bool, issueSeverity: string, issueType: string>, project_imported: record<enabled: bool, inherited: bool>, test_limit: record<enabled: bool, inherited: bool>, weekly_report: record<enabled: bool, inherited: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -3111,7 +3111,7 @@ export def "user-me-notification-settings-org update-modify-organization" [
   --project-imported: record # shape: {enabled: bool}
   --test-limit: record # shape: {enabled: bool}
   --weekly-report: record # shape: {enabled: bool}
-]: any -> any {
+]: any -> record<new_issues_remediations: record<enabled: bool, inherited: bool, issueSeverity: string, issueType: string>, project_imported: record<enabled: bool, inherited: bool>, test_limit: record<enabled: bool, inherited: bool>, weekly_report: record<enabled: bool, inherited: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3140,7 +3140,7 @@ export def "user-me-notification-settings-org-project get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<new_issues_remediations: record<enabled: bool, inherited: bool, issueSeverity: string, issueType: string>, project_imported: record<enabled: bool, inherited: bool>, test_limit: record<enabled: bool, inherited: bool>, weekly_report: record<enabled: bool, inherited: bool>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($org_id | is-empty) { error make --unspanned { msg: "path parameter 'orgId' must be non-empty" } }
@@ -3198,7 +3198,7 @@ export def "user get-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<email: string, id: string, name: string, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }

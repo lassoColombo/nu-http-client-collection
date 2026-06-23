@@ -516,7 +516,7 @@ export def "bin-querybuilder-json get-list" [
   --p-limit: float
   --1-property: string
   --1-property-value: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
@@ -543,7 +543,7 @@ export def "bin-querybuilder-json create-list" [
   --p-limit: float
   --1-property: string
   --1-property-value: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar") (serialize-qp "p.limit" $p_limit "scalar") (serialize-qp "1_property" $1_property "scalar") (serialize-qp "1_property.value" $1_property_value "scalar")] | flatten | str join "&"
@@ -569,7 +569,7 @@ export def "crx-explorer-ui-setpassword-jsp create-update-password" [
   --old: string
   --plain: string
   --verify: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "old" $old "scalar") (serialize-qp "plain" $plain "scalar") (serialize-qp "verify" $verify "scalar")] | flatten | str join "&"
@@ -615,7 +615,7 @@ export def "crx-packmgr-service-jsp create-package" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --cmd: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "cmd" $cmd "scalar")] | flatten | str join "&"
@@ -647,7 +647,7 @@ export def "crx-packmgr-service-json create-package" [
   --force: oneof<nothing, bool>
   --recursive: oneof<nothing, bool>
   --package: string # format: binary
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -704,7 +704,7 @@ export def "crx-packmgr-update-jsp create-package" [
   --path: string
   --filter: string
   --charset: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "groupName" $group_name "scalar") (serialize-qp "packageName" $package_name "scalar") (serialize-qp "version" $version "scalar") (serialize-qp "path" $path "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "_charset_" $charset "scalar")] | flatten | str join "&"
@@ -727,7 +727,7 @@ export def "crx-server-crx-default-jcr-root-1-json get-crxde-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/crx/server/crx.default/jcr:root/.1.json")
@@ -752,7 +752,7 @@ export def "etc-packages get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
@@ -780,7 +780,7 @@ export def "etc-packages-jcr-content-vlt-definition-filter-tidy-2-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($group | is-empty) { error make --unspanned { msg: "path parameter 'group' must be non-empty" } }
@@ -806,7 +806,7 @@ export def "etc-replication-agents-runmode-1-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($runmode | is-empty) { error make --unspanned { msg: "path parameter 'runmode' must be non-empty" } }
@@ -959,7 +959,7 @@ export def "etc-truststore create-pkcs12" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --truststore-p12: string # format: binary
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -986,7 +986,7 @@ export def "etc-truststore-truststore-p12 get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/etc/truststore/truststore.p12")
@@ -1008,7 +1008,7 @@ export def "libs-granite-core-content-login-html get-page" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/libs/granite/core/content/login.html")
@@ -1036,7 +1036,7 @@ export def "libs-granite-security-post-authorizables create" [
   --create-group: string
   --rep-password: string
   --profile-given-name: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "authorizableId" $authorizable_id "scalar") (serialize-qp "intermediatePath" $intermediate_path "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "createGroup" $create_group "scalar") (serialize-qp "rep:password" $rep_password "scalar") (serialize-qp "profile/givenName" $profile_given_name "scalar")] | flatten | str join "&"
@@ -1067,7 +1067,7 @@ export def "libs-granite-security-post-ssl-setup-html create" [
   --https-port: string
   --certificate-file: string # format: binary
   --privatekey-file: string # format: binary
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1101,7 +1101,7 @@ export def "libs-granite-security-post-truststore create" [
   --key-store-type: string
   --remove-alias: string
   --certificate: string # format: binary
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1228,7 +1228,7 @@ export def "system-console-config-mgr get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/system/console/configMgr")
@@ -1280,7 +1280,7 @@ export def "system-console-config-mgr-com-adobe-granite-auth-saml-saml-authentic
   --signature-method: string
   --user-intermediate-path: string
   --propertylist: list<string>
-]: nothing -> any {
+]: nothing -> record<bundle_location: string, description: string, pid: string, properties: record<addGroupMemberships: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, assertionConsumerServiceURL: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, clockTolerance: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, createUser: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, defaultGroups: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, defaultRedirectUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, digestMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, groupMembershipAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, handleLogout: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpCertAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, idpHttpRedirect: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, idpUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, keyStorePassword: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, logoutUrl: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, nameIdFormat: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, path: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, service_ranking: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: int>, serviceProviderEntityId: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, signatureMethod: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, spPrivateKeyAlias: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, synchronizeAttributes: record<description: string, is_set: bool, name: string, optional: bool, type: int, values: list>, useEncryption: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: bool>, userIDAttribute: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>, userIntermediatePath: record<description: string, is_set: bool, name: string, optional: bool, type: int, value: string>>, service_location: string, title: string> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "post" $post "scalar") (serialize-qp "apply" $apply "scalar") (serialize-qp "delete" $delete "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "$location" $location "scalar") (serialize-qp "path" $path "multi") (serialize-qp "service.ranking" $service_ranking "scalar") (serialize-qp "idpUrl" $idp_url "scalar") (serialize-qp "idpCertAlias" $idp_cert_alias "scalar") (serialize-qp "idpHttpRedirect" $idp_http_redirect "scalar") (serialize-qp "serviceProviderEntityId" $service_provider_entity_id "scalar") (serialize-qp "assertionConsumerServiceURL" $assertion_consumer_service_url "scalar") (serialize-qp "spPrivateKeyAlias" $sp_private_key_alias "scalar") (serialize-qp "keyStorePassword" $key_store_password "scalar") (serialize-qp "defaultRedirectUrl" $default_redirect_url "scalar") (serialize-qp "userIDAttribute" $user_id_attribute "scalar") (serialize-qp "useEncryption" $use_encryption "scalar") (serialize-qp "createUser" $create_user "scalar") (serialize-qp "addGroupMemberships" $add_group_memberships "scalar") (serialize-qp "groupMembershipAttribute" $group_membership_attribute "scalar") (serialize-qp "defaultGroups" $default_groups "multi") (serialize-qp "nameIdFormat" $name_id_format "scalar") (serialize-qp "synchronizeAttributes" $synchronize_attributes "multi") (serialize-qp "handleLogout" $handle_logout "scalar") (serialize-qp "logoutUrl" $logout_url "scalar") (serialize-qp "clockTolerance" $clock_tolerance "scalar") (serialize-qp "digestMethod" $digest_method "scalar") (serialize-qp "signatureMethod" $signature_method "scalar") (serialize-qp "userIntermediatePath" $user_intermediate_path "scalar") (serialize-qp "propertylist" $propertylist "csv")] | flatten | str join "&"
@@ -1351,7 +1351,7 @@ export def "system-health get-aem-check" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --tags: string
   --combine-tags-or: oneof<nothing, bool>
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tags" $tags "scalar") (serialize-qp "combineTagsOr" $combine_tags_or "scalar")] | flatten | str join "&"
@@ -1388,7 +1388,7 @@ export def "sling create-authorizable-keystore" [
   --cert-chain: string # format: binary
   --key-store: string # format: binary
   --pk: string # format: binary
-]: any -> any {
+]: any -> record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1420,7 @@ export def "sling get-authorizable-keystore" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<aliases: table<algorithm: string, alias: string, chain: list, entryType: string, format: string>, exists: bool> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($intermediate_path | is-empty) { error make --unspanned { msg: "path parameter 'intermediatePath' must be non-empty" } }
@@ -1446,7 +1446,7 @@ export def "keystore-store-p12 get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($intermediate_path | is-empty) { error make --unspanned { msg: "path parameter 'intermediatePath' must be non-empty" } }

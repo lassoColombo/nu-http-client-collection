@@ -187,7 +187,7 @@ export def "diary-appointment delete-controller" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --appointment-id: string # The unique appointment id
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }
@@ -251,7 +251,7 @@ export def "diary-appointment create-controller" [
   --extra-comments: string # Additional appointment comments
   --guests: list # A collection of guests linked to the appointment. If none leave empty — item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
   --subject: string # The subject of the appointment
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -291,7 +291,7 @@ export def "diary-appointment update-controller" [
   --extra-comments: string # Additional appointment comments
   --guests: list # A collection of guests linked to the appointment. If none leave empty — item shape: {AllowMarketingCorrespondence?: bool, EmailAddress?: string, Forename?: string, MobilePhone?: string, OID?: string, Surname?: string}
   --subject: string # The subject of the appointment
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -324,7 +324,7 @@ export def "diary-appointment-feedback create-controller" [
   --appointment-id: string # Appointment to submit feedback to:-
   --feedback: string # Feedback to submit:-
   --property-id: string # Property to submit feedback to:-
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -354,7 +354,7 @@ export def "diary-appointment-cancel cancel-controller" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
   if ($short_name | is-empty) { error make --unspanned { msg: "path parameter 'shortName' must be non-empty" } }

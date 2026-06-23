@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -140,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: GetRecurrencebyemail
 export def "subscriptions get-recurrencebyemail" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -153,7 +163,7 @@ export def "subscriptions get-recurrencebyemail" [
   --content-type: string # Type of the content being sent (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "cycleStatus" $cycle_status "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
@@ -171,8 +181,8 @@ export def "subscriptions get-recurrencebyemail" [
 # --items item shape: {frequency: record, quantity: int, seller: string, shippingAddressId: string, sku: string}
 export def "subscriptions update-recurrence" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -188,7 +198,7 @@ export def "subscriptions update-recurrence" [
   payment_account_id: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions")
   let req_body = {"deliveryDay": $delivery_day, "deliveryWeekday": $delivery_weekday, "email": $email, "items": $items, "paymentAccountId": $payment_account_id} | compact
@@ -208,8 +218,8 @@ export def "subscriptions update-recurrence" [
 # operationId: Getselfrecurrence
 export def "subscriptions-me get-selfrecurrence" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -219,7 +229,7 @@ export def "subscriptions-me get-selfrecurrence" [
   --content-type: string # Type of the content being sent (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/me")
   let accept_val = "application/json"
@@ -235,8 +245,8 @@ export def "subscriptions-me get-selfrecurrence" [
 # operationId: Getrecurrencesettings
 export def "subscriptions-settings get-recurrencesettings" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -246,7 +256,7 @@ export def "subscriptions-settings get-recurrencesettings" [
   --content-type: string # Type of the content being sent (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/settings")
   let accept_val = "application/json"
@@ -262,8 +272,8 @@ export def "subscriptions-settings get-recurrencesettings" [
 # operationId: Updaterecurrencesettings
 export def "subscriptions-settings update-recurrencesettings" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -276,7 +286,7 @@ export def "subscriptions-settings update-recurrencesettings" [
   sales_channel: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/subscriptions/settings")
   let req_body = {"defaultSLA": $default_sla, "salesChannel": $sales_channel} | compact
@@ -297,8 +307,8 @@ export def "subscriptions-settings update-recurrencesettings" [
 export def "subscriptions get-recurrencebyrecurrence" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -308,7 +318,7 @@ export def "subscriptions get-recurrencebyrecurrence" [
   --content-type: string # Type of the content being sent (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}"))
@@ -326,8 +336,8 @@ export def "subscriptions get-recurrencebyrecurrence" [
 export def "subscriptions update-partialrecurrence" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -341,7 +351,7 @@ export def "subscriptions update-partialrecurrence" [
   status: string
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}"))
@@ -363,8 +373,8 @@ export def "subscriptions update-partialrecurrence" [
 export def "subscriptions-addresses get-recurrenceaddresses" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -374,7 +384,7 @@ export def "subscriptions-addresses get-recurrenceaddresses" [
   --content-type: string # Type of the content being sent (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}/addresses"))
@@ -392,8 +402,8 @@ export def "subscriptions-addresses get-recurrenceaddresses" [
 export def "subscriptions-items create-addrecurrenceitem" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -405,7 +415,7 @@ export def "subscriptions-items create-addrecurrenceitem" [
   --body: list
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}/items"))
@@ -427,8 +437,8 @@ export def "subscriptions-items create-addrecurrenceitem" [
 export def "subscriptions-reindex update-reindexrecurrence" [
   recurrence_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -440,7 +450,7 @@ export def "subscriptions-reindex update-reindexrecurrence" [
   --body: list
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrence_id | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceId' must be non-empty" } }
   let full_url = (build-url $base ({recurrence_id: (encode-path-segment $recurrence_id)} | format pattern "/subscriptions/{recurrence_id}/reindex"))
@@ -462,8 +472,8 @@ export def "subscriptions-reindex update-reindexrecurrence" [
 export def "subscriptions-accounts get-paymentaccounts" [
   recurrenceid: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -473,7 +483,7 @@ export def "subscriptions-accounts get-paymentaccounts" [
   --content-type: string # Type of the content being sent (e.g. application/json)
   --hdr-accept: string # HTTP Client Negotiation Accept Header. Indicates the types of responses the client can understand (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o SUBSCRIPTION_V1_DEPRECATED_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($recurrenceid | is-empty) { error make --unspanned { msg: "path parameter 'recurrenceid' must be non-empty" } }
   let full_url = (build-url $base ({recurrenceid: (encode-path-segment $recurrenceid)} | format pattern "/subscriptions/{recurrenceid}/accounts"))

@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -144,8 +154,8 @@ export def commands []: nothing -> table {
 export def "advanced-async get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -159,7 +169,7 @@ export def "advanced-async get-number-insight" [
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
   --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers. (DEPRECATED, e.g. 123.0.0.255)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "callback" $callback "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
@@ -177,8 +187,8 @@ export def "advanced-async get-number-insight" [
 export def "advanced get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -192,7 +202,7 @@ export def "advanced get-number-insight" [
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
   --ip: string # This parameter is deprecated as we are no longer able to retrieve reliable IP data globally from carriers. (DEPRECATED, e.g. 123.0.0.255)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "real_time_data" $real_time_data "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
@@ -209,8 +219,8 @@ export def "advanced get-number-insight" [
 export def "basic get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -221,7 +231,7 @@ export def "basic get-number-insight" [
   --number: string # A single phone number that you need insight about in national or international format. (e.g. 447700900000)
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
 ]: nothing -> record<country_code: string, country_code_iso3: string, country_name: string, country_prefix: string, international_format_number: string, national_format_number: string, request_id: string, status: int, status_message: string> {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar")] | flatten | str join "&"
@@ -238,8 +248,8 @@ export def "basic get-number-insight" [
 export def "standard get-number-insight" [
   format: any
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (api_key)
+  --token-apisecret: string # Auth token for apiSecret (api_secret)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -251,7 +261,7 @@ export def "standard get-number-insight" [
   --country: string # If a number does not have a country code or is uncertain, set the two-character country code. This code must be in ISO 3166-1 alpha-2 format and in upper case. For example, GB or US. If you set country and number is already in [E.164](https://en.wikipedia.org/wiki/E.164) format, country must match the country code in number. (e.g. GB)
   --cnam: oneof<nothing, bool> # Indicates if the name of the person who owns the phone number should be looked up and returned in the response. Set to true to receive phone number owner name in the response. This features is available for US numbers only and incurs an additional charge. (default: false, e.g. true)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "query-api_key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NUMBER_INSIGHT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_apisecret | default ($env | get -o NUMBER_INSIGHT_API_APISECRET_TOKEN | default "")) "query-api_secret")])
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter 'format' must be non-empty" } }
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country" $country "scalar") (serialize-qp "cnam" $cnam "scalar")] | flatten | str join "&"

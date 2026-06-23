@@ -347,7 +347,7 @@ export def "oauth2-1-file get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
@@ -651,7 +651,7 @@ export def "oauth2-1-xml get-certificate-data-in-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<CertificateData: list<any>, Signature: record<KeyInfo: record<X509Data: any>, SignatureValue: any, SignedInfo: any>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($uri | is-empty) { error make --unspanned { msg: "path parameter 'uri' must be non-empty" } }
@@ -698,7 +698,7 @@ export def "oauth2-2-xml-eaadhaar get-e-aadhaar-data-in-format" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<KycRes: record<Rar: string, Signature: record<KeyInfo: record, SignatureValue: string, SignedInfo: record, xmlns: string>, UidData: record<LData: record, Pht: string, Poa: record, Poi: record, Prn: record, tkn: string, uid: string>, code: string, ret: string, ts: string, ttl: string, txn: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth2/2/xml/eaadhaar")

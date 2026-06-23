@@ -151,7 +151,7 @@ export def "city get" [
   --lng: float
   --lat: float
   --format: string@format-completer
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "key" $key "scalar") (serialize-qp "lng" $lng "scalar") (serialize-qp "lat" $lat "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"

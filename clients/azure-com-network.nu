@@ -2800,7 +2800,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --accept: string@accept-completer # Response content type
   --api-version: string # Client Api Version.
   --processor-architecture: string@processor-architecture-completer # VPN client Processor Architecture -Amd64/X86
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -152,7 +152,7 @@ export def "ping ping-system" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/_ping")
@@ -920,7 +920,7 @@ export def "containers-logs logs" [
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines. (default: all)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1451,7 +1451,7 @@ export def "images-get list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --names: list<string> # Image names to filter by
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "names" $names "csv")] | flatten | str join "&"
@@ -1612,7 +1612,7 @@ export def "images-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2658,7 +2658,7 @@ export def "services-logs logs" [
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines. (default: all)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2786,7 +2786,7 @@ export def "swarm-init create" [
   --force-new-cluster: oneof<nothing, bool> # Force creation of a new swarm.
   --listen-addr: string # Listen address used for inter-manager communication, as well as determining the networking interface used for the VXLAN Tunnel Endpoint (VTEP). This can either be an address/port combination in the form `192.168.1.1:4567`, or an interface followed by a port number, like `eth0:4567`. If the port number is omitted, the default swarm listening port is used.
   --spec: record # User modifiable swarm configuration. — shape: {CAConfig?: record, Dispatcher?: record, EncryptionConfig?: record, Labels?: record, Name?: string, Orchestration?: record, Raft?: record, TaskDefaults?: record}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3047,7 +3047,7 @@ export def "tasks-logs logs" [
   --since: int # Only return logs since this time, as a UNIX timestamp (default: 0)
   --timestamps: oneof<nothing, bool> # Add timestamps to every log line (default: false)
   --tail: string # Only return this number of log lines from the end of the logs. Specify as an integer or `all` to output all log lines. (default: all)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

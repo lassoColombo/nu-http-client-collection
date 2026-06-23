@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -140,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: BadWordFilter
 export def "bad-word-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -153,7 +163,7 @@ export def "bad-word-filter create" [
   content: string # The content to scan. This can be either a URL to load from, a file upload (multipart/form-data) or an HTML content string
 ]: any -> record<bad_words_list: list<string>, bad_words_total: int, censored_content: string, is_bad: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bad-word-filter")
   let req_body = {"catalog": $catalog, "censor-character": $censor_character, "content": $content} | compact
@@ -170,8 +180,8 @@ export def "bad-word-filter create" [
 # operationId: BINListDownload
 export def "bin-list-download list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -180,8 +190,8 @@ export def "bin-list-download list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --include-iso3: oneof<nothing, bool> # Include ISO 3-letter country codes and ISO 3-letter currency codes in the data. These will be added to columns 10 and 11 respectively (default: false)
   --include-8digit: oneof<nothing, bool> # Include 8-digit and higher BIN codes. This option includes all 6-digit BINs and all 8-digit and higher BINs (including some 9, 10 and 11 digit BINs where available) (default: false)
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+]: nothing -> oneof<string, record, nothing> {
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "include-iso3" $include_iso3 "scalar") (serialize-qp "include-8digit" $include_8digit "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin-list-download" $qp)
@@ -196,8 +206,8 @@ export def "bin-list-download list" [
 # operationId: BINLookup
 export def "bin-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -207,7 +217,7 @@ export def "bin-lookup get" [
   --bin-number: string # The BIN or IIN number. This is the first 6, 8 or 10 digits of a card number, use 8 (or more) digits for the highest level of accuracy
   --customer-ip: string # Pass in the customers IP address and we will return some extra information about them
 ]: nothing -> record<bin_number: string, card_brand: string, card_category: string, card_type: string, country: string, country_code: string, country_code3: string, currency_code: string, ip_blocklisted: bool, ip_blocklists: list<string>, ip_city: string, ip_country: string, ip_country_code: string, ip_country_code3: string, ip_matches_bin: bool, ip_region: string, is_commercial: bool, is_prepaid: bool, issuer: string, issuer_phone: string, issuer_website: string, valid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "bin-number" $bin_number "scalar") (serialize-qp "customer-ip" $customer_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/bin-lookup" $qp)
@@ -222,8 +232,8 @@ export def "bin-lookup get" [
 # operationId: BrowserBot
 export def "browser-bot create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -239,7 +249,7 @@ export def "browser-bot create" [
   --user-agent: string # Override the browsers default user-agent string with this one
 ]: any -> record<content: string, elements: list<string>, error_message: string, exec_results: list<string>, http_redirect_url: string, http_status_code: int, http_status_message: string, is_error: bool, is_http_ok: bool, is_http_redirect: bool, is_secure: bool, is_timeout: bool, language_code: string, load_time: float, mime_type: string, response_headers: record, security_details: record, server_ip: string, title: string, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/browser-bot")
   let req_body = {"delay": $delay, "exec": $exec, "ignore-certificate-errors": $ignore_certificate_errors, "selector": $selector, "timeout": $timeout, "url": $url, "user-agent": $user_agent} | compact
@@ -256,8 +266,8 @@ export def "browser-bot create" [
 # operationId: Convert
 export def "convert get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -268,7 +278,7 @@ export def "convert get" [
   --from-type: string # The type of the value to convert from (e.g. USD)
   --to-type: string # The type to convert to (e.g. EUR)
 ]: nothing -> record<from_type: string, from_value: string, result: string, result_float: float, to_type: string, valid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "from-value" $from_value "scalar") (serialize-qp "from-type" $from_type "scalar") (serialize-qp "to-type" $to_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/convert" $qp)
@@ -283,8 +293,8 @@ export def "convert get" [
 # operationId: EmailValidate
 export def "email-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -294,7 +304,7 @@ export def "email-validate validate" [
   --email: string # An email address
   --fix-typos: oneof<nothing, bool> # Automatically attempt to fix typos in the address (default: false)
 ]: nothing -> record<domain: string, domain_error: bool, email: string, is_disposable: bool, is_freemail: bool, is_personal: bool, provider: string, syntax_error: bool, typos_fixed: bool, valid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "fix-typos" $fix_typos "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email-validate" $qp)
@@ -309,8 +319,8 @@ export def "email-validate validate" [
 # operationId: EmailVerify
 export def "email-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -320,7 +330,7 @@ export def "email-verify verify" [
   --email: string # An email address
   --fix-typos: oneof<nothing, bool> # Automatically attempt to fix typos in the address (default: false)
 ]: nothing -> record<domain: string, domain_error: bool, email: string, is_catch_all: bool, is_deferred: bool, is_disposable: bool, is_freemail: bool, is_personal: bool, provider: string, smtp_response: string, smtp_status: string, syntax_error: bool, typos_fixed: bool, valid: bool, verified: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "email" $email "scalar") (serialize-qp "fix-typos" $fix_typos "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/email-verify" $qp)
@@ -335,8 +345,8 @@ export def "email-verify verify" [
 # operationId: GeocodeAddress
 export def "geocode-address get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -354,7 +364,7 @@ export def "geocode-address get" [
   --language-code: string # The language to display results in, available languages are: de, en, es, fr, it, pt, ru, zh (default: en)
   --fuzzy-search: oneof<nothing, bool> # If no matches are found for the given address, start performing a recursive fuzzy search until a geolocation is found. This option is recommended for processing user input or implementing auto-complete. We use a combination of approximate string matching and data cleansing to find possible location matches (default: false)
 ]: nothing -> record<found: int, locations: table<address: string, address_components: record, city: string, country: string, country_code: string, country_code3: string, currency_code: string, latitude: float, location_tags: list, location_type: string, longitude: float, postal_address: string, postal_code: string, region_code: string, state: string, timezone: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "address" $address "scalar") (serialize-qp "house-number" $house_number "scalar") (serialize-qp "street" $street "scalar") (serialize-qp "city" $city "scalar") (serialize-qp "county" $county "scalar") (serialize-qp "state" $state "scalar") (serialize-qp "postal-code" $postal_code "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "fuzzy-search" $fuzzy_search "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geocode-address" $qp)
@@ -369,8 +379,8 @@ export def "geocode-address get" [
 # operationId: GeocodeReverse
 export def "geocode-reverse get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -382,7 +392,7 @@ export def "geocode-reverse get" [
   --language-code: string # The language to display results in, available languages are: de, en, es, fr, it, pt, ru (default: en)
   --zoom: string # The zoom level to respond with: address - the most precise address available street - the street level city - the city level state - the state level country - the country level (default: address)
 ]: nothing -> record<address: string, address_components: record, city: string, country: string, country_code: string, country_code3: string, currency_code: string, found: bool, latitude: float, location_tags: list<string>, location_type: string, longitude: float, postal_address: string, postal_code: string, region_code: string, state: string, timezone: record> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "latitude" $latitude "scalar") (serialize-qp "longitude" $longitude "scalar") (serialize-qp "language-code" $language_code "scalar") (serialize-qp "zoom" $zoom "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/geocode-reverse" $qp)
@@ -397,8 +407,8 @@ export def "geocode-reverse get" [
 # operationId: HLRLookup
 export def "hlr-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -408,7 +418,7 @@ export def "hlr-lookup get" [
   --number: string # A phone number
   --country-code: string # ISO 2-letter country code, assume numbers are based in this country. If not set numbers are assumed to be in international format (with or without the leading + sign)
 ]: nothing -> record<country: string, country_code: string, country_code3: string, currency_code: string, current_network: string, hlr_status: string, hlr_valid: bool, imsi: string, international_calling_code: string, international_number: string, is_mobile: bool, is_ported: bool, is_roaming: bool, local_number: string, location: string, mcc: string, mnc: string, msc: string, msin: string, number_type: string, number_valid: bool, origin_network: string, ported_network: string, roaming_country_code: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country-code" $country_code "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/hlr-lookup" $qp)
@@ -423,8 +433,8 @@ export def "hlr-lookup get" [
 # operationId: HostReputation
 export def "host-reputation get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -435,7 +445,7 @@ export def "host-reputation get" [
   --list-rating: int # Only check lists with this rating or better (format: int32, default: 3)
   --zones: string # Only check these DNSBL zones/hosts. Multiple zones can be supplied as comma-separated values
 ]: nothing -> record<host: string, is_listed: bool, list_count: int, lists: table<is_listed: bool, list_host: string, list_name: string, list_rating: int, response_time: int, return_code: string, txt_record: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "host" $host "scalar") (serialize-qp "list-rating" $list_rating "scalar") (serialize-qp "zones" $zones "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/host-reputation" $qp)
@@ -450,8 +460,8 @@ export def "host-reputation get" [
 # operationId: HTMLClean
 export def "html-clean create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -460,9 +470,9 @@ export def "html-clean create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   content: string # The HTML content. This can be either a URL to load from, a file upload (multipart/form-data) or an HTML content string
   output_type: string # The level of sanitization, possible values are: plain-text: reduce the content to plain text only (no HTML tags at all) simple-text: allow only very basic text formatting tags like b, em, i, strong, u basic-html: allow advanced text formatting and hyper links basic-html-with-images: same as basic html but also allows image tags advanced-html: same as basic html with images but also allows many more common HTML tags like table, ul, dl, pre
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/html-clean")
   let req_body = {"content": $content, "output-type": $output_type} | compact
@@ -479,8 +489,8 @@ export def "html-clean create" [
 # operationId: HTMLRender
 export def "html-render create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -509,9 +519,9 @@ export def "html-render create" [
   --timeout: int # Timeout in seconds. Give up if still trying to load the HTML content after this number of seconds (format: int32, default: 300)
   --title: string # The document title
   --zoom: float # Set the zoom factor when rendering the page (2.0 for double size, 0.5 for half size) (format: double, default: 1)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/html-render")
   let req_body = {"content": $content, "css": $css, "delay": $delay, "footer": $footer, "format": $format, "grayscale": $grayscale, "header": $header, "ignore-certificate-errors": $ignore_certificate_errors, "image-height": $image_height, "image-width": $image_width, "landscape": $landscape, "margin": $margin, "margin-bottom": $margin_bottom, "margin-left": $margin_left, "margin-right": $margin_right, "margin-top": $margin_top, "page-height": $page_height, "page-size": $page_size, "page-width": $page_width, "timeout": $timeout, "title": $title, "zoom": $zoom} | compact
@@ -528,8 +538,8 @@ export def "html-render create" [
 # operationId: ImageResize
 export def "image-resize resize" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -542,9 +552,9 @@ export def "image-resize resize" [
   image_url: string # The URL or Base64 encoded Data URL for the source image. You can also upload an image file directly using multipart/form-data
   --resize-mode: string # The resize mode to use, we support 3 main resizing modes: scaleResize to within the width and height specified while preserving aspect ratio. In this mode the width or height will be automatically adjusted to fit the aspect ratio padResize to exactly the width and height specified while preserving aspect ratio and pad any space left over. Any padded space will be filled in with the 'bg-color' value cropResize to exactly the width and height specified while preserving aspect ratio and crop any space which fall outside the area. The cropping window is centered on the original image (default: scale)
   width: int # The width to resize to (in px) (format: int32)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image-resize")
   let req_body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "resize-mode": $resize_mode, "width": $width} | compact
@@ -561,8 +571,8 @@ export def "image-resize resize" [
 # operationId: ImageWatermark
 export def "image-watermark create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -578,9 +588,9 @@ export def "image-watermark create" [
   --resize-mode: string # The resize mode to use, we support 3 main resizing modes: scaleResize to within the width and height specified while preserving aspect ratio. In this mode the width or height will be automatically adjusted to fit the aspect ratio padResize to exactly the width and height specified while preserving aspect ratio and pad any space left over. Any padded space will be filled in with the 'bg-color' value cropResize to exactly the width and height specified while preserving aspect ratio and crop any space which fall outside the area. The cropping window is centered on the original image (default: scale)
   watermark_url: string # The URL or Base64 encoded Data URL for the watermark image. You can also upload an image file directly using multipart/form-data
   --width: int # If set resize the resulting image to this width (in px) (format: int32)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/image-watermark")
   let req_body = {"bg-color": $bg_color, "format": $format, "height": $height, "image-url": $image_url, "opacity": $opacity, "position": $position, "resize-mode": $resize_mode, "watermark-url": $watermark_url, "width": $width} | compact
@@ -597,8 +607,8 @@ export def "image-watermark create" [
 # operationId: IPBlocklist
 export def "ip-blocklist get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -608,7 +618,7 @@ export def "ip-blocklist get" [
   --ip: string # An IPv4 or IPv6 address. Accepts standard IP notation (with or without port number), CIDR notation and IPv6 compressed notation. If multiple IPs are passed using comma-separated values the first non-bogon address on the list will be checked
   --vpn-lookup: oneof<nothing, bool> # Include public VPN provider IP addresses. NOTE: For more advanced VPN detection including the ability to identify private and stealth VPNs use the IP Probe API (https://www.neutrinoapi.com/api/ip-probe/) (default: false)
 ]: nothing -> record<blocklists: list<string>, cidr: string, ip: string, is_bot: bool, is_dshield: bool, is_exploit_bot: bool, is_hijacked: bool, is_listed: bool, is_malware: bool, is_proxy: bool, is_spam_bot: bool, is_spider: bool, is_spyware: bool, is_tor: bool, is_vpn: bool, last_seen: int, list_count: int, sensors: table<blocklist: string, description: string, id: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "vpn-lookup" $vpn_lookup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-blocklist" $qp)
@@ -623,8 +633,8 @@ export def "ip-blocklist get" [
 # operationId: IPBlocklistDownload
 export def "ip-blocklist-download download" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -635,8 +645,8 @@ export def "ip-blocklist-download download" [
   --include-vpn: oneof<nothing, bool> # Include public VPN provider addresses, this option is only available for Tier 3 or higher accounts. Adds any IPs which are solely listed as VPN providers, IPs that are listed on multiple sensors will still be included without enabling this option. WARNING: This adds at least an additional 8 million IP addresses to the download if not using CIDR notation (default: false)
   --cidr: oneof<nothing, bool> # Output IPs using CIDR notation. This option should be preferred but is off by default for backwards compatibility (default: false)
   --ip6: oneof<nothing, bool> # Output the IPv6 version of the blocklist, the default is to output IPv4 only. Note that this option enables CIDR notation too as this is the only notation currently supported for IPv6 (default: false)
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+]: nothing -> oneof<string, record, nothing> {
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "include-vpn" $include_vpn "scalar") (serialize-qp "cidr" $cidr "scalar") (serialize-qp "ip6" $ip6 "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-blocklist-download" $qp)
@@ -651,8 +661,8 @@ export def "ip-blocklist-download download" [
 # operationId: IPInfo
 export def "ip-info get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -662,7 +672,7 @@ export def "ip-info get" [
   --ip: string # IPv4 or IPv6 address
   --reverse-lookup: oneof<nothing, bool> # Do a reverse DNS (PTR) lookup. This option can add extra delay to the request so only use it if you need it (default: false)
 ]: nothing -> record<city: string, continent_code: string, country: string, country_code: string, country_code3: string, currency_code: string, host_domain: string, hostname: string, ip: string, is_bogon: bool, is_v4_mapped: bool, is_v6: bool, latitude: float, longitude: float, region: string, region_code: string, timezone: record, valid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ip" $ip "scalar") (serialize-qp "reverse-lookup" $reverse_lookup "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-info" $qp)
@@ -677,8 +687,8 @@ export def "ip-info get" [
 # operationId: IPProbe
 export def "ip-probe get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -687,7 +697,7 @@ export def "ip-probe get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ip: string # IPv4 or IPv6 address
 ]: nothing -> record<as_age: int, as_cidr: string, as_country_code: string, as_country_code3: string, as_description: string, as_domains: list<string>, asn: string, city: string, continent_code: string, country: string, country_code: string, country_code3: string, currency_code: string, host_domain: string, hostname: string, ip: string, is_bogon: bool, is_hosting: bool, is_isp: bool, is_proxy: bool, is_v4_mapped: bool, is_v6: bool, is_vpn: bool, provider_description: string, provider_domain: string, provider_type: string, provider_website: string, region: string, region_code: string, valid: bool, vpn_domain: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ip-probe" $qp)
@@ -702,8 +712,8 @@ export def "ip-probe get" [
 # operationId: PhonePlayback
 export def "phone-playback create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -716,7 +726,7 @@ export def "phone-playback create" [
   number: string # The phone number to call. Must be in valid international format
 ]: any -> record<calling: bool, number_valid: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-playback")
   let req_body = {"audio-url": $audio_url, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number} | compact
@@ -733,8 +743,8 @@ export def "phone-playback create" [
 # operationId: PhoneValidate
 export def "phone-validate validate" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -745,7 +755,7 @@ export def "phone-validate validate" [
   --country-code: string # ISO 2-letter country code, assume numbers are based in this country. If not set numbers are assumed to be in international format (with or without the leading + sign)
   --ip: string # Pass in a users IP address and we will assume numbers are based in the country of the IP address
 ]: nothing -> record<country: string, country_code: string, country_code3: string, currency_code: string, international_calling_code: string, international_number: string, is_mobile: bool, local_number: string, location: string, prefix_network: string, type: string, valid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "number" $number "scalar") (serialize-qp "country-code" $country_code "scalar") (serialize-qp "ip" $ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/phone-validate" $qp)
@@ -760,8 +770,8 @@ export def "phone-validate validate" [
 # operationId: PhoneVerify
 export def "phone-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -778,7 +788,7 @@ export def "phone-verify verify" [
   --security-code: int # Pass in your own security code. This is useful if you have implemented TOTP or similar 2FA methods. If not set then we will generate a secure random code (format: int32)
 ]: any -> record<calling: bool, number_valid: bool, security_code: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/phone-verify")
   let req_body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "playback-delay": $playback_delay, "security-code": $security_code} | compact
@@ -795,8 +805,8 @@ export def "phone-verify verify" [
 # operationId: QRCode
 export def "qr-code create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -808,9 +818,9 @@ export def "qr-code create" [
   --fg-color: string # The QR code foreground color (default: #000000)
   --height: int # The height of the QR code (in px) (format: int32, default: 256)
   --width: int # The width of the QR code (in px) (format: int32, default: 256)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/qr-code")
   let req_body = {"bg-color": $bg_color, "content": $content, "fg-color": $fg_color, "height": $height, "width": $width} | compact
@@ -827,8 +837,8 @@ export def "qr-code create" [
 # operationId: SMSVerify
 export def "sms-verify verify" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -844,7 +854,7 @@ export def "sms-verify verify" [
   --security-code: int # Pass in your own security code. This is useful if you have implemented TOTP or similar 2FA methods. If not set then we will generate a secure random code (format: int32)
 ]: any -> record<number_valid: bool, security_code: string, sent: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sms-verify")
   let req_body = {"code-length": $code_length, "country-code": $country_code, "language-code": $language_code, "limit": $limit, "limit-ttl": $limit_ttl, "number": $number, "security-code": $security_code} | compact
@@ -861,8 +871,8 @@ export def "sms-verify verify" [
 # operationId: UALookup
 export def "ua-lookup get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -877,7 +887,7 @@ export def "ua-lookup get" [
   --device-model: string # For client hints this corresponds to the 'UA-Model' header or 'model' from NavigatorUAData. You can also use this parameter to lookup a device directly by its model name, model code or hardware code, on android you can get the model name from: https://developer.android.com/reference/android/os/Build.html#MODEL
   --device-brand: string # This parameter is only used in combination with 'device-model' when doing direct device lookups without any user-agent data. Set this to the brand or manufacturer name, this is required for accurate device detection with ambiguous model names. On android you can get the device brand from: https://developer.android.com/reference/android/os/Build#MANUFACTURER
 ]: nothing -> record<browser_engine: string, browser_release: string, device_brand: string, device_height_px: float, device_model: string, device_model_code: string, device_pixel_ratio: float, device_ppi: float, device_price: float, device_release: string, device_resolution: string, device_width_px: float, is_mobile: bool, is_webview: bool, name: string, os: string, os_family: string, os_version: string, os_version_major: string, type: string, ua: string, version: string, version_major: string> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ua" $ua "scalar") (serialize-qp "ua-version" $ua_version "scalar") (serialize-qp "ua-platform" $ua_platform "scalar") (serialize-qp "ua-platform-version" $ua_platform_version "scalar") (serialize-qp "ua-mobile" $ua_mobile "scalar") (serialize-qp "device-model" $device_model "scalar") (serialize-qp "device-brand" $device_brand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/ua-lookup" $qp)
@@ -892,8 +902,8 @@ export def "ua-lookup get" [
 # operationId: URLInfo
 export def "url-info get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -906,7 +916,7 @@ export def "url-info get" [
   --timeout: int # Timeout in seconds. Give up if still trying to load the URL after this number of seconds (format: int32, default: 60)
   --retry: int # If the request fails for any reason try again this many times (format: int32, default: 0)
 ]: nothing -> record<content: string, content_encoding: string, content_size: int, content_type: string, http_ok: bool, http_redirect: bool, http_status: int, http_status_message: int, is_error: bool, is_timeout: bool, language_code: string, load_time: float, query: record, real: bool, server_city: string, server_country: string, server_country_code: string, server_hostname: string, server_ip: string, server_name: string, server_region: string, title: string, url: string, url_path: string, url_port: int, url_protocol: string, valid: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "fetch-content" $fetch_content "scalar") (serialize-qp "ignore-certificate-errors" $ignore_certificate_errors "scalar") (serialize-qp "timeout" $timeout "scalar") (serialize-qp "retry" $retry "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/url-info" $qp)
@@ -921,8 +931,8 @@ export def "url-info get" [
 # operationId: VerifySecurityCode
 export def "verify-security-code verify" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for api-key (api-key)
+  --token-userid: string # Auth token for user-id (user-id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -932,7 +942,7 @@ export def "verify-security-code verify" [
   --security-code: string # The security code to verify
   --limit-by: string # If set then enable additional brute-force protection by limiting the number of attempts by the supplied value. This can be set to any unique identifier you would like to limit by, for example a hash of the users email, phone number or IP address. Requests to this API will be ignored after approximately 10 failed verification attempts
 ]: nothing -> record<verified: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "api-key"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o NEUTRINO_API_APIKEY_TOKEN | default "")) "api-key") (build-auth ($token_userid | default ($env | get -o NEUTRINO_API_USERID_TOKEN | default "")) "user-id")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "security-code" $security_code "scalar") (serialize-qp "limit-by" $limit_by "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/verify-security-code" $qp)

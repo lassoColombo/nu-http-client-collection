@@ -222,7 +222,7 @@ export def "swatch get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --color: string # The hex value of the color to retrieve without '#'
   --name: string # The name of the color
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "color" $color "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"

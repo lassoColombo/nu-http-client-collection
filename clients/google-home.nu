@@ -147,7 +147,7 @@ export def "notice-html-gz get-legal" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/NOTICE.html.gz")
@@ -364,7 +364,7 @@ export def "bluetooth-bond create-forgetpaireddevice" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --bond: oneof<nothing, bool>
   mac_address: string
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -393,7 +393,7 @@ export def "bluetooth-connect create-pairwith-speaker" [
   --connect: oneof<nothing, bool>
   mac_address: string
   profile: int # format: int32
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -420,7 +420,7 @@ export def "bluetooth-discovery create-change-discoverability" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --enable-discovery: oneof<nothing, bool>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -472,7 +472,7 @@ export def "bluetooth-scan create-scanfordevices" [
   --clear-results: oneof<nothing, bool>
   --enable: oneof<nothing, bool>
   timeout: int # format: int32
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -627,7 +627,7 @@ export def "forget-wifi create-wi-fi-network" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   wpa_id: int # format: int32
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -727,7 +727,7 @@ export def "reboot reset-rebootand-factory" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   params: string
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -776,7 +776,7 @@ export def "scan-wifi create-scanfor-networks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/scan_wifi")
@@ -804,7 +804,7 @@ export def "set-eureka-info update" [
   name: string
   opt_in: record # e.g. {opencast: true, preview_channel: true, remote_ducking: true, stats: true} — shape: {opencast: bool, preview_channel: bool, remote_ducking: bool, stats: bool}
   settings: record # e.g. {control_notifications: 2} — shape: {control_notifications: int}
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)
@@ -907,7 +907,7 @@ export def "user-eq-set-equalizer update-values" [
   --dry-run(-n) # Return the request that would be sent without executing it
   high_shelf: record # e.g. {gain_db: 0} — shape: {gain_db: int}
   low_shelf: record # e.g. {gain_db: 0} — shape: {gain_db: int}
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "cast-local-authorization-token"))
   let base = ($base_url | default $BASE_URL)

@@ -471,7 +471,7 @@ export def "payment-dispute-fetch-evidence-content get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --evidence-id: string # The identifier of the evidential file set. The identifier of an evidential file set for a payment dispute is returned under the evidence array in the getPaymentDispute response.Below is an example of the syntax to use for this query parameter:evidence_id=12345678
   --file-id: string # The identifier of an evidential file. This file must belong to the evidential file set identified through the evidence_id query parameter. The identifier of each evidential file is returned under the evidence.files array in the getPaymentDispute response. Below is an example of the syntax to use for this query parameter:file_id=12345678
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default "https://apiz.ebay.com/sell/fulfillment/v1")
   if ($payment_dispute_id | is-empty) { error make --unspanned { msg: "path parameter 'payment_dispute_id' must be non-empty" } }

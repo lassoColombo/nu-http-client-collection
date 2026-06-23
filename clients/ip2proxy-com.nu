@@ -151,7 +151,7 @@ export def "api get" [
   --ip: string # IP address (IPv4) for lookup purpose. If not present, the server IP address will be used for the lookup.
   --format: string@format-completer # If not present, json format will be returned as the search result.
   --key: string # API key. Please sign up free trial license key at ip2location.com
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "package" $package "scalar") (serialize-qp "ip" $ip "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"

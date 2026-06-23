@@ -147,7 +147,7 @@ export def "agr-affected-genomic-models get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
@@ -172,7 +172,7 @@ export def "agr-alleles get-for-taxon-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
@@ -197,7 +197,7 @@ export def "agr-expression get-for-taxon-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
@@ -222,7 +222,7 @@ export def "agr-phenotypes get-for-taxon-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
@@ -247,7 +247,7 @@ export def "agr-variants get-for-taxon-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
@@ -272,7 +272,7 @@ export def "agr get-genes-for-latest-assembly-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxon_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonId' must be non-empty" } }
@@ -300,7 +300,7 @@ export def "annotations get-using-create" [
   --ids: list<string>
   --species-type-keys: list<int>
   --term-acc: string
-]: any -> any {
+]: any -> table<annotatedObjectRgdId: int, annotationExtension: string, aspect: string, createdBy: int, createdDate: string, dataSrc: string, evidence: string, geneProductFormId: string, key: int, lastModifiedBy: int, lastModifiedDate: string, notes: string, objectName: string, objectSymbol: string, originalCreatedDate: string, qualifier: string, refRgdId: int, relativeTo: string, rgdObjectKey: int, speciesTypeKey: int, term: string, termAcc: string, withInfo: string, xrefSource: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -327,7 +327,7 @@ export def "annotations-acc-id get-term-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<keyValue: string, stringValue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -353,7 +353,7 @@ export def "annotations-count get-by-acc-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -381,7 +381,7 @@ export def "annotations-count get-by-acc-and-species-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -411,7 +411,7 @@ export def "annotations-count get-by-acc-and-object-type-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -439,7 +439,7 @@ export def "annotations-reference get-annots-by-refrerence-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<annotatedObjectRgdId: int, annotationExtension: string, aspect: string, createdBy: int, createdDate: string, dataSrc: string, evidence: string, geneProductFormId: string, key: int, lastModifiedBy: int, lastModifiedDate: string, notes: string, objectName: string, objectSymbol: string, originalCreatedDate: string, qualifier: string, refRgdId: int, relativeTo: string, rgdObjectKey: int, speciesTypeKey: int, term: string, termAcc: string, withInfo: string, xrefSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ref_rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'refRgdId' must be non-empty" } }
@@ -464,7 +464,7 @@ export def "annotations-rgd-id get-by-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<annotatedObjectRgdId: int, annotationExtension: string, aspect: string, createdBy: int, createdDate: string, dataSrc: string, evidence: string, geneProductFormId: string, key: int, lastModifiedBy: int, lastModifiedDate: string, notes: string, objectName: string, objectSymbol: string, originalCreatedDate: string, qualifier: string, refRgdId: int, relativeTo: string, rgdObjectKey: int, speciesTypeKey: int, term: string, termAcc: string, withInfo: string, xrefSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -490,7 +490,7 @@ export def "annotations-rgd-id get-by-and-ontology-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<annotatedObjectRgdId: int, annotationExtension: string, aspect: string, createdBy: int, createdDate: string, dataSrc: string, evidence: string, geneProductFormId: string, key: int, lastModifiedBy: int, lastModifiedDate: string, notes: string, objectName: string, objectSymbol: string, originalCreatedDate: string, qualifier: string, refRgdId: int, relativeTo: string, rgdObjectKey: int, speciesTypeKey: int, term: string, termAcc: string, withInfo: string, xrefSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -517,7 +517,7 @@ export def "annotations get-by-acc-and-rgd-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<annotatedObjectRgdId: int, annotationExtension: string, aspect: string, createdBy: int, createdDate: string, dataSrc: string, evidence: string, geneProductFormId: string, key: int, lastModifiedBy: int, lastModifiedDate: string, notes: string, objectName: string, objectSymbol: string, originalCreatedDate: string, qualifier: string, refRgdId: int, relativeTo: string, rgdObjectKey: int, speciesTypeKey: int, term: string, termAcc: string, withInfo: string, xrefSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -545,7 +545,7 @@ export def "annotations get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<annotatedObjectRgdId: int, annotationExtension: string, aspect: string, createdBy: int, createdDate: string, dataSrc: string, evidence: string, geneProductFormId: string, key: int, lastModifiedBy: int, lastModifiedDate: string, notes: string, objectName: string, objectSymbol: string, originalCreatedDate: string, qualifier: string, refRgdId: int, relativeTo: string, rgdObjectKey: int, speciesTypeKey: int, term: string, termAcc: string, withInfo: string, xrefSource: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -574,7 +574,7 @@ export def "enrichment-annotated-genes get-data-using-create" [
   --acc-id: string
   --gene-symbols: list<string>
   --species: string
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +603,7 @@ export def "enrichment-data get-using-create" [
   --aspect: string
   --genes: list<string>
   --species: string
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -631,7 +631,7 @@ export def "genes-affy-id get-by-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($affy_id | is-empty) { error make --unspanned { msg: "path parameter 'affyId' must be non-empty" } }
@@ -658,7 +658,7 @@ export def "genes-alias get-by-symbol-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($alias_symbol | is-empty) { error make --unspanned { msg: "path parameter 'aliasSymbol' must be non-empty" } }
@@ -684,7 +684,7 @@ export def "genes-allele get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -711,7 +711,7 @@ export def "genes-annotation get-annotated-using-create" [
   --acc-id: string
   --evidence-codes: list<string>
   --species-type-keys: list<int>
-]: any -> any {
+]: any -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -738,7 +738,7 @@ export def "genes-annotation get-list-annotated-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -764,7 +764,7 @@ export def "genes-annotation get-annotated-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -791,7 +791,7 @@ export def "genes-keyword get-by-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($keyword | is-empty) { error make --unspanned { msg: "path parameter 'keyword' must be non-empty" } }
@@ -817,7 +817,7 @@ export def "genes-map get-by-key-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<chromosome: string, gene: record<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool>, mapKey: int, start: int, stop: int, strand: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
@@ -845,7 +845,7 @@ export def "genes-mapped get-by-position-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<chromosome: string, gene: record<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool>, mapKey: int, start: int, stop: int, strand: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -874,7 +874,7 @@ export def "genes-orthologs get-by-list-using-create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
   --species-type-keys: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -901,7 +901,7 @@ export def "genes-orthologs get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -929,7 +929,7 @@ export def "genes-region get-in-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<chromosome: string, mapKey: int, rgdId: int, start: int, stop: int, strand: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -957,7 +957,7 @@ export def "genes-species get-by-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -985,7 +985,7 @@ export def "genes get-by-position-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -1013,7 +1013,7 @@ export def "genes get-by-rgd-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1039,7 +1039,7 @@ export def "genes get-by-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<agrDescription: string, description: string, ensemblFullName: string, ensemblGeneSymbol: string, ensemblGeneType: string, geneSource: string, key: int, mergedDescription: string, name: string, ncbiAnnotStatus: string, nomenReviewDate: string, nomenSource: string, notes: string, refSeqStatus: string, rgdId: int, soAccId: string, speciesTypeKey: int, symbol: string, type: string, variant: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($symbol | is-empty) { error make --unspanned { msg: "path parameter 'symbol' must be non-empty" } }
@@ -1064,7 +1064,7 @@ export def "lookup-gene-types get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/geneTypes")
@@ -1088,7 +1088,7 @@ export def "lookup-id-map-ensembl-gene get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1115,7 +1115,7 @@ export def "lookup-id-map-ensembl-gene get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1140,7 +1140,7 @@ export def "lookup-id-map-ensembl-protein get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1167,7 +1167,7 @@ export def "lookup-id-map-ensembl-protein get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1192,7 +1192,7 @@ export def "lookup-id-map-ensembl-transcript get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1219,7 +1219,7 @@ export def "lookup-id-map-ensembl-transcript get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1244,7 +1244,7 @@ export def "lookup-id-map-gt-ex get-gtex-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1271,7 +1271,7 @@ export def "lookup-id-map-gt-ex get-gtex-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1296,7 +1296,7 @@ export def "lookup-id-map-gen-bank-nucleotide get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1323,7 +1323,7 @@ export def "lookup-id-map-gen-bank-nucleotide get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1348,7 +1348,7 @@ export def "lookup-id-map-gen-bank-protein get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1375,7 +1375,7 @@ export def "lookup-id-map-gen-bank-protein get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1400,7 +1400,7 @@ export def "lookup-id-map-hgnc get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1427,7 +1427,7 @@ export def "lookup-id-map-hgnc get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1452,7 +1452,7 @@ export def "lookup-id-map-mgi get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1479,7 +1479,7 @@ export def "lookup-id-map-mgi get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1504,7 +1504,7 @@ export def "lookup-id-map-ncbi-gene get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1531,7 +1531,7 @@ export def "lookup-id-map-ncbi-gene get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1556,7 +1556,7 @@ export def "lookup-id-map-uni-prot get-mapping-using-create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rgd-ids: list<int>
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1583,7 +1583,7 @@ export def "lookup-id-map-uni-prot get-mapping-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -1608,7 +1608,7 @@ export def "lookup-maps get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<dbsnpVersion: string, description: string, key: int, methodKey: int, name: string, notes: string, primaryRefAssembly: bool, rank: int, refSeqAssemblyAcc: string, refSeqAssemblyName: string, rgdId: int, source: string, speciesTypeKey: int, ucscAssemblyId: string, unit: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -1632,7 +1632,7 @@ export def "lookup-species-type-keys get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/lookup/speciesTypeKeys")
@@ -1656,7 +1656,7 @@ export def "lookup-standard-unit get-maps-using-by-acc-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -1682,7 +1682,7 @@ export def "maps-chr get-by-assembly-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<chromosome: string, contigCount: int, gapCount: int, gapLength: int, genbankId: string, mapKey: int, ordinalNumber: int, refseqId: string, seqLength: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chromosome | is-empty) { error make --unspanned { msg: "path parameter 'chromosome' must be non-empty" } }
@@ -1708,7 +1708,7 @@ export def "maps-chr get-chromosomes-by-assembly-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> list<string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($map_key | is-empty) { error make --unspanned { msg: "path parameter 'mapKey' must be non-empty" } }
@@ -1733,7 +1733,7 @@ export def "maps get-by-species-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<dbsnpVersion: string, description: string, key: int, methodKey: int, name: string, notes: string, primaryRefAssembly: bool, rank: int, refSeqAssemblyAcc: string, refSeqAssemblyName: string, rgdId: int, source: string, speciesTypeKey: int, ucscAssemblyId: string, unit: string, version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -1758,7 +1758,7 @@ export def "ontology-ont get-dags-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -1784,7 +1784,7 @@ export def "ontology-term get-is-descendant-of-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id1 | is-empty) { error make --unspanned { msg: "path parameter 'accId1' must be non-empty" } }
@@ -1810,7 +1810,7 @@ export def "ontology-term get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<accId: string, comment: string, createdBy: string, creationDate: string, definition: string, modificationDate: string, obsolete: int, ontologyId: string, term: string, xrefs: table<key: int, termAcc: string, xrefDescription: string, xrefValue: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -1835,7 +1835,7 @@ export def "pathways-diagrams-search get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<description: string, hasAlteredPath: string, id: string, name: string, objectList: list<record>, pathwayCategories: list<string>, referenceList: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($search_string | is-empty) { error make --unspanned { msg: "path parameter 'searchString' must be non-empty" } }
@@ -1860,7 +1860,7 @@ export def "pathways-diagrams-for-category get-with-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<description: string, hasAlteredPath: string, id: string, name: string, objectList: list<record>, pathwayCategories: list<string>, referenceList: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
@@ -1887,7 +1887,7 @@ export def "phenotype-phenominer-chart get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -1915,7 +1915,7 @@ export def "phenotype-phenominer-chart get-using-by-species-type-key-term-string
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -1944,7 +1944,7 @@ export def "qtls-mapped get-by-position-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<chromosome: string, mapKey: int, qtl: record<chromosome: string, flank1RgdId: int, flank2RgdId: int, inheritanceType: string, key: int, linkageImage: string, lod: float, lodImage: string, mostSignificantCmoTerm: string, name: string, notes: string, peakOffset: int, peakRgdId: int, pvalue: float, rgdId: int, sourceUrl: string, speciesTypeKey: int, symbol: string, variance: float>, start: int, stop: int, strand: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -1975,7 +1975,7 @@ export def "qtls get-list-by-position-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<chromosome: string, flank1RgdId: int, flank2RgdId: int, inheritanceType: string, key: int, linkageImage: string, lod: float, lodImage: string, mostSignificantCmoTerm: string, name: string, notes: string, peakOffset: int, peakRgdId: int, pvalue: float, rgdId: int, sourceUrl: string, speciesTypeKey: int, symbol: string, variance: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -2003,7 +2003,7 @@ export def "qtls get-by-rgd-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<chromosome: string, flank1RgdId: int, flank2RgdId: int, inheritanceType: string, key: int, linkageImage: string, lod: float, lodImage: string, mostSignificantCmoTerm: string, name: string, notes: string, peakOffset: int, peakRgdId: int, pvalue: float, rgdId: int, sourceUrl: string, speciesTypeKey: int, symbol: string, variance: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }
@@ -2031,7 +2031,7 @@ export def "sslps-mapped get-by-position-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<chromosome: string, mapKey: int, sslp: record<expectedSize: int, forwardSeq: string, key: int, name: string, notes: string, reverseSeq: string, rgdId: int, speciesTypeKey: int, sslpType: string, templateSeq: string>, start: int, stop: int, strand: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -2060,7 +2060,7 @@ export def "stats-count-active-object get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2087,7 +2087,7 @@ export def "stats-count-gene-type get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2114,7 +2114,7 @@ export def "stats-count-object-status get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2141,7 +2141,7 @@ export def "stats-count-object-with-ref-seq get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2168,7 +2168,7 @@ export def "stats-count-object-with-reference get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2196,7 +2196,7 @@ export def "stats-count-object-with-xdb get-xd-bs-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2224,7 +2224,7 @@ export def "stats-count-protein-interaction get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2251,7 +2251,7 @@ export def "stats-count-qtl-inheritance-type get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2278,7 +2278,7 @@ export def "stats-count-retired-object get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2305,7 +2305,7 @@ export def "stats-count-strain-type get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2332,7 +2332,7 @@ export def "stats-count-withdrawn-object get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2359,7 +2359,7 @@ export def "stats-count-xdb get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2387,7 +2387,7 @@ export def "stats-diff-active-object get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2416,7 +2416,7 @@ export def "stats-diff-gene-type get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2445,7 +2445,7 @@ export def "stats-diff-object-status get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2474,7 +2474,7 @@ export def "stats-diff-object-with-ref-seq get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2503,7 +2503,7 @@ export def "stats-diff-object-with-reference get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2533,7 +2533,7 @@ export def "stats-diff-object-with-xdb get-xd-bs-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2563,7 +2563,7 @@ export def "stats-diff-protein-interaction get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2592,7 +2592,7 @@ export def "stats-diff-qtl-inheritance-type get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2621,7 +2621,7 @@ export def "stats-diff-retired-object get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2650,7 +2650,7 @@ export def "stats-diff-strain-type get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2679,7 +2679,7 @@ export def "stats-diff-withdrawn-object get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2708,7 +2708,7 @@ export def "stats-diff-xdb get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($species_type_key | is-empty) { error make --unspanned { msg: "path parameter 'speciesTypeKey' must be non-empty" } }
@@ -2736,7 +2736,7 @@ export def "stats-term get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($acc_id | is-empty) { error make --unspanned { msg: "path parameter 'accId' must be non-empty" } }
@@ -2761,7 +2761,7 @@ export def "strains-all get-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<backgroundStrainRgdId: int, chrAltered: string, color: string, geneticStatus: string, genetics: string, imageUrl: string, inbredGen: string, key: int, lastStatus: string, lastStatusObject: record<cryopreservedEmbryo: bool, cryopreservedSperm: bool, cryorecovery: bool, key: int, liveAnimals: bool, statusDate: string, strainRgdId: int>, modificationMethod: string, name: string, notes: string, origin: string, researchUse: string, rgdId: int, source: string, speciesTypeKey: int, statusLog: list<record>, strain: string, strainTypeName: string, substrain: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/strains/all")
@@ -2788,7 +2788,7 @@ export def "strains get-by-position-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<backgroundStrainRgdId: int, chrAltered: string, color: string, geneticStatus: string, genetics: string, imageUrl: string, inbredGen: string, key: int, lastStatus: string, lastStatusObject: record<cryopreservedEmbryo: bool, cryopreservedSperm: bool, cryorecovery: bool, key: int, liveAnimals: bool, statusDate: string, strainRgdId: int>, modificationMethod: string, name: string, notes: string, origin: string, researchUse: string, rgdId: int, source: string, speciesTypeKey: int, statusLog: list<record>, strain: string, strainTypeName: string, substrain: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($chr | is-empty) { error make --unspanned { msg: "path parameter 'chr' must be non-empty" } }
@@ -2816,7 +2816,7 @@ export def "strains get-by-rgd-using" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<backgroundStrainRgdId: int, chrAltered: string, color: string, geneticStatus: string, genetics: string, imageUrl: string, inbredGen: string, key: int, lastStatus: string, lastStatusObject: record<cryopreservedEmbryo: bool, cryopreservedSperm: bool, cryorecovery: bool, key: int, liveAnimals: bool, statusDate: string, strainRgdId: int>, modificationMethod: string, name: string, notes: string, origin: string, researchUse: string, rgdId: int, source: string, speciesTypeKey: int, statusLog: table<cryopreservedEmbryo: bool, cryopreservedSperm: bool, cryorecovery: bool, key: int, liveAnimals: bool, statusDate: string, strainRgdId: int>, strain: string, strainTypeName: string, substrain: string, symbol: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rgd_id | is-empty) { error make --unspanned { msg: "path parameter 'rgdId' must be non-empty" } }

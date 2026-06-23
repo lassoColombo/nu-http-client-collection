@@ -179,7 +179,7 @@ export def "apply-yara-rules create" [
   file: string # file (format: binary)
   --is-unpacking-required: string@is-unpacking-required-completer
   rules: list<string>
-]: any -> any {
+]: any -> record<result: record<error_message: string, is_success: bool, matched_yara_rules: list<list>, yara_command: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -231,7 +231,7 @@ export def "emulation-output create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # file (format: binary)
-]: any -> any {
+]: any -> record<output: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -263,7 +263,7 @@ export def "generate-partial-yara-rules generate" [
   --is-unpacking-required: string@is-unpacking-required-completer
   --minimum-string-length: string
   --strings-to-ignore: list<string>
-]: any -> any {
+]: any -> record<rule: record<meta: record<date: string, md5sum: string, sha256sum: string, sha512sum: string>, name: string, strings: list<list>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -292,7 +292,7 @@ export def "unpack create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # file (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

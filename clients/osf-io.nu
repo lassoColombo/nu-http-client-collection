@@ -197,7 +197,7 @@ export def "addons list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<categories: list, description: string, name: string, url: string>, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/addons/")
@@ -221,7 +221,7 @@ export def "citations-styles list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<date_parsed: string, short_title: string, summary: string, title: string>, id: string, links: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/citations/styles/")
@@ -246,7 +246,7 @@ export def "citations-styles get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<date_parsed: string, short_title: string, summary: string, title: string>, id: string, links: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($style_id | is-empty) { error make --unspanned { msg: "path parameter 'style_id' must be non-empty" } }
@@ -271,7 +271,7 @@ export def "collections list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bookmarks: bool, collected_type_choices: list, date_created: string, date_modified: string, is_promoted: bool, is_public: bool, issue_choices: list, program_area_choices: list, status_choices: list, title: string, volume_choices: list>, id: string, links: record<self: string>, relationships: record<collected_metadata: string, linked_nodes: string, linked_preprints: string, linked_registrations: string, node_links: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/collections/")
@@ -348,7 +348,7 @@ export def "collections get-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bookmarks: bool, collected_type_choices: list, date_created: string, date_modified: string, is_promoted: bool, is_public: bool, issue_choices: list, program_area_choices: list, status_choices: list, title: string, volume_choices: list>, id: string, links: record<self: string>, relationships: record<collected_metadata: string, linked_nodes: string, linked_preprints: string, linked_registrations: string, node_links: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collection_id' must be non-empty" } }
@@ -867,7 +867,7 @@ export def "comments get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<can_edit: bool, content: string, date_created: string, date_modified: string, deleted: bool, has_children: bool, has_report: bool, is_abuse: bool, is_ham: bool, modified: bool, page: string>, id: string, links: record<self: string>, relationships: record<node: string, replies: string, reports: string, target: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comment_id | is-empty) { error make --unspanned { msg: "path parameter 'comment_id' must be non-empty" } }
@@ -921,7 +921,7 @@ export def "draft-registrations list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<category: string, current_user_permissions: list<string>, datetime_initiated: string, datetime_updated: string, description: string, has_project: bool, node_license: record<copyright_holders: list, year: int>, registration_metadata: record, registration_responses: record, tags: list<string>, title: string>, id: string, links: record<html: string>, relationships: record<branched_from: string, initiator: string, registration_schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/draft_registrations/")
@@ -947,7 +947,7 @@ export def "draft-registrations create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   attributes: record # The properties of the Draft Registration entity. — shape: {category?: string, description?: string, node_license?: record, registration_metadata?: record, registration_responses?: record, tags?: list<string>, title?: string}
-]: any -> any {
+]: any -> record<attributes: record<category: string, current_user_permissions: list<string>, datetime_initiated: string, datetime_updated: string, description: string, has_project: bool, node_license: record<copyright_holders: list, year: int>, registration_metadata: record, registration_responses: record, tags: list<string>, title: string>, id: string, links: record<html: string>, relationships: record<branched_from: string, initiator: string, registration_schema: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -998,7 +998,7 @@ export def "draft-registrations get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<category: string, current_user_permissions: list<string>, datetime_initiated: string, datetime_updated: string, description: string, has_project: bool, node_license: record<copyright_holders: list, year: int>, registration_metadata: record, registration_responses: record, tags: list<string>, title: string>, id: string, links: record<html: string>, relationships: record<branched_from: string, initiator: string, registration_schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($draft_id | is-empty) { error make --unspanned { msg: "path parameter 'draft_id' must be non-empty" } }
@@ -1134,7 +1134,7 @@ export def "draft-registrations-institutions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<auth_url: string, description: string, logo_path: string, name: string>, id: string, links: record<self: string>, relationships: record<nodes: string, registrations: string, users: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($draft_id | is-empty) { error make --unspanned { msg: "path parameter 'draft_id' must be non-empty" } }
@@ -1160,7 +1160,7 @@ export def "draft-registrations-subjects get-nodes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<taxonomy_name: string, text: string>, embeds: record<parent: record<data: record>>, id: string, links: record<self: string>, relationships: record<children: string, parent: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($draft_id | is-empty) { error make --unspanned { msg: "path parameter 'draft_id' must be non-empty" } }
@@ -1186,7 +1186,7 @@ export def "files get-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -1241,7 +1241,7 @@ export def "files-versions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<content_type: record, date_created: string, size: int>, id: string, links: record<html: string, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -1268,7 +1268,7 @@ export def "files-versions version-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<content_type: record, date_created: string, size: int>, id: string, links: record<html: string, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'file_id' must be non-empty" } }
@@ -1294,7 +1294,7 @@ export def "institutions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<auth_url: string, description: string, logo_path: string, name: string>, id: string, links: record<self: string>, relationships: record<nodes: string, registrations: string, users: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/")
@@ -1319,7 +1319,7 @@ export def "institutions get-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<auth_url: string, description: string, logo_path: string, name: string>, id: string, links: record<self: string>, relationships: record<nodes: string, registrations: string, users: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($institution_id | is-empty) { error make --unspanned { msg: "path parameter 'institution_id' must be non-empty" } }
@@ -1345,7 +1345,7 @@ export def "institutions-nodes list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($institution_id | is-empty) { error make --unspanned { msg: "path parameter 'institution_id' must be non-empty" } }
@@ -1396,7 +1396,7 @@ export def "institutions-users list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<active: bool, date_registered: string, family_name: string, full_name: string, given_name: string, locale: string, middle_names: string, suffix: string, timezone: string>, id: string, links: record<html: string, profile_image: string>, relationships: record<institutions: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($institution_id | is-empty) { error make --unspanned { msg: "path parameter 'institution_id' must be non-empty" } }
@@ -1422,7 +1422,7 @@ export def "license get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<name: string, required_fields: list<string>, text: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($license_id | is-empty) { error make --unspanned { msg: "path parameter 'license_id' must be non-empty" } }
@@ -1447,7 +1447,7 @@ export def "licenses list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<name: string, required_fields: list, text: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/licenses/")
@@ -1471,7 +1471,7 @@ export def "logs get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<attributes: record<action: string, date: string, params: record<addon: string, anonymous_link: bool, bucket: string, citation_name: string, contributors: string, data_set: string, destination: string, figshare_title: string, file: string, filename: string, folder: string, folder_name: string, forward_url: string, github_repo: string, github_user: string, identifiers: string, institution: string, kind: string, license: string, old_page: string, page: string, page_id: string, params_node: string, params_project: string, path: string, pointer: string, preprint: string, preprint_provider: string, previous_institution: string, source: string, study: string, tag: string, tags: string, target: string, template_node: string, title_new: string, title_original: string, updated_fields: string, urls: string, version: string, wiki: string>>, id: string, links: record<self: string>, relationships: record<linked_node: string, node: string, original_node: string, template_node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($log_id | is-empty) { error make --unspanned { msg: "path parameter 'log_id' must be non-empty" } }
@@ -1496,7 +1496,7 @@ export def "nodes list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/nodes/")
@@ -1576,7 +1576,7 @@ export def "nodes get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list<string>, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list<string>, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1631,7 +1631,7 @@ export def "nodes-addons list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<categories: list, description: string, name: string, url: string>, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1658,7 +1658,7 @@ export def "nodes-addons get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<configured: bool, enabled: bool, external_account_id: string, folder_id: string, folder_path: string, label: string, node_has_auth: bool, url: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1717,7 +1717,7 @@ export def "nodes-addons-folders list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<categories: list, description: string, name: string, url: string>, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1744,7 +1744,7 @@ export def "nodes-children list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1802,7 +1802,7 @@ export def "nodes-citation list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<author: string, doi: string, publisher: string, title: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1829,7 +1829,7 @@ export def "nodes-citation get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<citation: string>, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1856,7 +1856,7 @@ export def "nodes-comments list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<can_edit: bool, content: string, date_created: string, date_modified: string, deleted: bool, has_children: bool, has_report: bool, is_abuse: bool, is_ham: bool, modified: bool, page: string>, id: string, links: record<self: string>, relationships: record<node: string, replies: string, reports: string, target: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1913,7 +1913,7 @@ export def "nodes-contributors list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bibliographic: bool, index: int, permission: string, unregistered_contributor: string>, id: string, links: record<self: string>, relationships: record<node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -1999,7 +1999,7 @@ export def "nodes-contributors get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bibliographic: bool, index: int, permission: string, unregistered_contributor: string>, id: string, links: record<self: string>, relationships: record<node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2060,7 +2060,7 @@ export def "nodes-draft-registrations list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, current_user_permissions: list, datetime_initiated: string, datetime_updated: string, description: string, has_project: bool, node_license: record, registration_metadata: record, registration_responses: record, tags: list, title: string>, id: string, links: record<html: string>, relationships: record<branched_from: string, initiator: string, registration_schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2144,7 +2144,7 @@ export def "nodes-draft-registrations get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<category: string, current_user_permissions: list<string>, datetime_initiated: string, datetime_updated: string, description: string, has_project: bool, node_license: record<copyright_holders: list, year: int>, registration_metadata: record, registration_responses: record, tags: list<string>, title: string>, id: string, links: record<html: string>, relationships: record<branched_from: string, initiator: string, registration_schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2203,7 +2203,7 @@ export def "nodes-files list-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2230,7 +2230,7 @@ export def "nodes-files-providers get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list<string>>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2258,7 +2258,7 @@ export def "nodes-files list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2287,7 +2287,7 @@ export def "nodes-files get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list<string>>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2315,7 +2315,7 @@ export def "nodes-forks list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2373,7 +2373,7 @@ export def "nodes-identifiers list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, value: string>, id: string, links: record<self: string>, relationships: record<referent: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2399,7 +2399,7 @@ export def "nodes-institutions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<auth_url: string, description: string, logo_path: string, name: string>, id: string, links: record<self: string>, relationships: record<nodes: string, registrations: string, users: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2425,7 +2425,7 @@ export def "nodes-linked-nodes list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2451,7 +2451,7 @@ export def "nodes-logs list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<action: string, date: string, params: record>, id: string, links: record<self: string>, relationships: record<linked_node: string, node: string, original_node: string, template_node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2477,7 +2477,7 @@ export def "nodes-preprints list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<date_created: string, date_modified: string, date_published: string, doi: string, is_preprint_orphan: bool, license_record: string, subjects: list>, id: string, links: record<doi: string, html: string, preprint_doi: string, self: string>, relationships: record<bibliographic_contributors: string, citation: string, identifiers: string, license: string, node: string, primary_file: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2503,7 +2503,7 @@ export def "nodes-registrations list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, date_registered: string, date_withdrawn: string, description: string, embargo_end_date: string, fork: bool, node_license: string, pending_embargo_approval: bool, pending_registration_approval: bool, pending_withdrawal: bool, preprint: bool, public: bool, registered_meta: string, registration: bool, registration_supplement: string, tags: list, template_from: string, title: string, withdrawal_justification: string, withdrawn: bool>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, files: string, forks: string, identifiers: string, linked_nodes: string, logs: string, node_links: string, parent: string, registered_by: string, registered_from: string, registration_schema: string, root: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2529,7 +2529,7 @@ export def "nodes-view-only-links list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<anonymous: bool, date_created: string, key: string, name: string>, id: string, relationships: record<creator: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2556,7 +2556,7 @@ export def "nodes-view-only-links get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<anonymous: bool, date_created: string, key: string, name: string>, id: string, relationships: record<creator: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2583,7 +2583,7 @@ export def "nodes-wikis list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<content_type: string, current_user_can_comment: string, date_modified: string, extra: string, kind: string, materialized_path: string, name: string, path: string, size: string>, id: string, links: record<download: string, info: string, self: string>, relationships: record<comments: string, node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($node_id | is-empty) { error make --unspanned { msg: "path parameter 'node_id' must be non-empty" } }
@@ -2608,7 +2608,7 @@ export def "preprint-providers list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<advisory_board: string, banner_path: string, description: string, domain: string, domain_redirect_enabled: bool, email_contact: string, email_support: string, example: string, logo_path: string, name: string, social_facebook: string, social_instagram: string, subjects_acceptable: string>, id: string, links: record<external_url: string, preprints: string, self: string>, relationships: record<licenses_acceptable: string, preprints: string, taxonomies: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/preprint_providers/")
@@ -2633,7 +2633,7 @@ export def "preprint-providers get-detail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<advisory_board: string, banner_path: string, description: string, domain: string, domain_redirect_enabled: bool, email_contact: string, email_support: string, example: string, logo_path: string, name: string, social_facebook: string, social_instagram: string, subjects_acceptable: string>, id: string, links: record<external_url: string, preprints: string, self: string>, relationships: record<licenses_acceptable: string, preprints: string, taxonomies: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_provider_id' must be non-empty" } }
@@ -2659,7 +2659,7 @@ export def "preprint-providers-licenses list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<name: string, required_fields: list<string>, text: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_provider_id' must be non-empty" } }
@@ -2685,7 +2685,7 @@ export def "preprint-providers-preprints list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<date_created: string, date_modified: string, date_published: string, doi: string, is_preprint_orphan: bool, license_record: string, subjects: list>, id: string, links: record<doi: string, html: string, preprint_doi: string, self: string>, relationships: record<bibliographic_contributors: string, citation: string, identifiers: string, license: string, node: string, primary_file: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_provider_id' must be non-empty" } }
@@ -2711,7 +2711,7 @@ export def "preprint-providers-taxonomies list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<child_count: int, parents: list<string>, text: string>, id: string, links: record<parents: list<string>, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_provider_id' must be non-empty" } }
@@ -2736,7 +2736,7 @@ export def "preprints list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<date_created: string, date_modified: string, date_published: string, doi: string, is_preprint_orphan: bool, license_record: string, subjects: list>, id: string, links: record<doi: string, html: string, preprint_doi: string, self: string>, relationships: record<bibliographic_contributors: string, citation: string, identifiers: string, license: string, node: string, primary_file: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/preprints/")
@@ -2792,7 +2792,7 @@ export def "preprints get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<date_created: string, date_modified: string, date_published: string, doi: string, is_preprint_orphan: bool, license_record: string, subjects: list<string>>, id: string, links: record<doi: string, html: string, preprint_doi: string, self: string>, relationships: record<bibliographic_contributors: string, citation: string, identifiers: string, license: string, node: string, primary_file: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_id' must be non-empty" } }
@@ -2847,7 +2847,7 @@ export def "preprints-bibliographic-contributors list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bibliographic: bool, index: int, permission: string, unregistered_contributor: string>, id: string, links: record<self: string>, relationships: record<node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_id' must be non-empty" } }
@@ -2873,7 +2873,7 @@ export def "preprints-citation list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<author: string, doi: string, publisher: string, title: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_id' must be non-empty" } }
@@ -2900,7 +2900,7 @@ export def "preprints-citation get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<citation: string>, id: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_id' must be non-empty" } }
@@ -2927,7 +2927,7 @@ export def "preprints-contributors list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bibliographic: bool, index: int, permission: string, unregistered_contributor: string>, id: string, links: record<self: string>, relationships: record<node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preprint_id | is-empty) { error make --unspanned { msg: "path parameter 'preprint_id' must be non-empty" } }
@@ -3010,7 +3010,7 @@ export def "registrations list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, date_registered: string, date_withdrawn: string, description: string, embargo_end_date: string, fork: bool, node_license: string, pending_embargo_approval: bool, pending_registration_approval: bool, pending_withdrawal: bool, preprint: bool, public: bool, registered_meta: string, registration: bool, registration_supplement: string, tags: list, template_from: string, title: string, withdrawal_justification: string, withdrawn: bool>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, files: string, forks: string, identifiers: string, linked_nodes: string, logs: string, node_links: string, parent: string, registered_by: string, registered_from: string, registration_schema: string, root: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/registrations/")
@@ -3034,7 +3034,7 @@ export def "registrations get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list<string>, date_created: string, date_modified: string, date_registered: string, date_withdrawn: string, description: string, embargo_end_date: string, fork: bool, node_license: string, pending_embargo_approval: bool, pending_registration_approval: bool, pending_withdrawal: bool, preprint: bool, public: bool, registered_meta: string, registration: bool, registration_supplement: string, tags: list<string>, template_from: string, title: string, withdrawal_justification: string, withdrawn: bool>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, files: string, forks: string, identifiers: string, linked_nodes: string, logs: string, node_links: string, parent: string, registered_by: string, registered_from: string, registration_schema: string, root: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3090,7 +3090,7 @@ export def "registrations-children list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, date_registered: string, date_withdrawn: string, description: string, embargo_end_date: string, fork: bool, node_license: string, pending_embargo_approval: bool, pending_registration_approval: bool, pending_withdrawal: bool, preprint: bool, public: bool, registered_meta: string, registration: bool, registration_supplement: string, tags: list, template_from: string, title: string, withdrawal_justification: string, withdrawn: bool>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, files: string, forks: string, identifiers: string, linked_nodes: string, logs: string, node_links: string, parent: string, registered_by: string, registered_from: string, registration_schema: string, root: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3116,7 +3116,7 @@ export def "registrations-citations list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<date_parsed: string, short_title: string, summary: string, title: string>, id: string, links: record, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3143,7 +3143,7 @@ export def "registrations-citations get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<author: string, doi: string, publisher: string, title: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3170,7 +3170,7 @@ export def "registrations-comments list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<can_edit: bool, content: string, date_created: string, date_modified: string, deleted: bool, has_children: bool, has_report: bool, is_abuse: bool, is_ham: bool, modified: bool, page: string>, id: string, links: record<self: string>, relationships: record<node: string, replies: string, reports: string, target: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3196,7 +3196,7 @@ export def "registrations-contributors list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bibliographic: bool, index: int, permission: string, unregistered_contributor: string>, id: string, links: record<self: string>, relationships: record<node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3223,7 +3223,7 @@ export def "registrations-contributors get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<bibliographic: bool, index: int, permission: string, unregistered_contributor: string>, id: string, links: record<self: string>, relationships: record<node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3250,7 +3250,7 @@ export def "registrations-files list-providers" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3277,7 +3277,7 @@ export def "registrations-files list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3306,7 +3306,7 @@ export def "registrations-files get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<checkout: string, current_user_can_comment: bool, current_version: int, date_created: string, date_modified: string, delete_allowed: bool, extra: record, guid: string, kind: string, last_touched: string, materialized_path: string, name: string, path: string, provider: string, size: int, tags: list<string>>, id: string, links: record<delete: string, download: string, info: string, move: string, new_folder: string, self: string, upload: string>, relationships: record<checkout: string, comments: string, node: string, versions: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3334,7 +3334,7 @@ export def "registrations-forks list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, date_registered: string, date_withdrawn: string, description: string, embargo_end_date: string, fork: bool, node_license: string, pending_embargo_approval: bool, pending_registration_approval: bool, pending_withdrawal: bool, preprint: bool, public: bool, registered_meta: string, registration: bool, registration_supplement: string, tags: list, template_from: string, title: string, withdrawal_justification: string, withdrawn: bool>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, files: string, forks: string, identifiers: string, linked_nodes: string, logs: string, node_links: string, parent: string, registered_by: string, registered_from: string, registration_schema: string, root: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3390,7 +3390,7 @@ export def "registrations-identifiers list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, value: string>, id: string, links: record<self: string>, relationships: record<referent: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3416,7 +3416,7 @@ export def "registrations-institutions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<auth_url: string, description: string, logo_path: string, name: string>, id: string, links: record<self: string>, relationships: record<nodes: string, registrations: string, users: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3442,7 +3442,7 @@ export def "registrations-linked-nodes list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3468,7 +3468,7 @@ export def "registrations-logs list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<action: string, date: string, params: record>, id: string, links: record<self: string>, relationships: record<linked_node: string, node: string, original_node: string, template_node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3494,7 +3494,7 @@ export def "registrations-view-only-links list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<anonymous: bool, date_created: string, key: string, name: string>, id: string, relationships: record<creator: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3521,7 +3521,7 @@ export def "registrations-view-only-links get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<anonymous: bool, date_created: string, key: string, name: string>, id: string, relationships: record<creator: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3548,7 +3548,7 @@ export def "registrations-wikis list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<content_type: string, current_user_can_comment: string, date_modified: string, extra: string, kind: string, materialized_path: string, name: string, path: string, size: string>, id: string, links: record<download: string, info: string, self: string>, relationships: record<comments: string, node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_id' must be non-empty" } }
@@ -3573,7 +3573,7 @@ export def "schema-responses list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<date_created: int, date_modified: int, date_submitted: int, is_original_response: bool, is_pending_current_user_approval: bool, reviews_state: string, revision_justification: string, revision_responses: record, updated_response_keys: list<any>>, id: string, links: record<self: string>, relationships: record<actions: string, initiated_by: string, registration: string, registration_schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/schema_responses/")
@@ -3604,7 +3604,7 @@ export def "schema-responses create-ppost" [
   --links: record # URLs to alternative representations of the Schema Response entity. — shape: {self?: string}
   --relationships: record # Links to other entities or entity collections that have a relationship to the file entity. — shape: {actions?: string, initiated_by?: string, registration?: string, registration_schema?: string}
   type: string # The type identifier of the Schema Response (`schema-response`).
-]: any -> any {
+]: any -> record<attributes: record<date_created: int, date_modified: int, date_submitted: int, is_original_response: bool, is_pending_current_user_approval: bool, reviews_state: string, revision_justification: string, revision_responses: record, updated_response_keys: list<any>>, id: string, links: record<self: string>, relationships: record<actions: string, initiated_by: string, registration: string, registration_schema: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3657,7 +3657,7 @@ export def "schema-responses get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<date_created: int, date_modified: int, date_submitted: int, is_original_response: bool, is_pending_current_user_approval: bool, reviews_state: string, revision_justification: string, revision_responses: record, updated_response_keys: list<any>>, id: string, links: record<self: string>, relationships: record<actions: string, initiated_by: string, registration: string, registration_schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($schema_response_id | is-empty) { error make --unspanned { msg: "path parameter 'schema_response_id' must be non-empty" } }
@@ -3690,7 +3690,7 @@ export def "schema-responses update" [
   --links: record # URLs to alternative representations of the Schema Response entity. — shape: {self?: string}
   --relationships: record # Links to other entities or entity collections that have a relationship to the file entity. — shape: {actions?: string, initiated_by?: string, registration?: string, registration_schema?: string}
   type: string # The type identifier of the Schema Response (`schema-response`).
-]: any -> any {
+]: any -> record<attributes: record<date_created: int, date_modified: int, date_submitted: int, is_original_response: bool, is_pending_current_user_approval: bool, reviews_state: string, revision_justification: string, revision_responses: record, updated_response_keys: list<any>>, id: string, links: record<self: string>, relationships: record<actions: string, initiated_by: string, registration: string, registration_schema: string>, type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3719,7 +3719,7 @@ export def "schema-responses-actions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<auto: bool, comment: string, date_created: string, from_state: string, to_state: string, trigger: string, visible: bool>, id: string, links: record<self: string>, relationships: record<creator: string, target: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($schema_response_id | is-empty) { error make --unspanned { msg: "path parameter 'schema_response_id' must be non-empty" } }
@@ -3769,7 +3769,7 @@ export def "schema-responses-actions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<auto: bool, comment: string, date_created: string, from_state: string, to_state: string, trigger: string, visible: bool>, id: string, links: record<self: string>, relationships: record<creator: string, target: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($schema_response_id | is-empty) { error make --unspanned { msg: "path parameter 'schema_response_id' must be non-empty" } }
@@ -3796,7 +3796,7 @@ export def "schema-responses-schema-blocks list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<block_type: string, display_text: string, example_text: string, index: int, registration_response_key: string, required: bool, schema_block_group_key: string>, id: string, links: record<self: string>, relationships: record<schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($schema_response_id | is-empty) { error make --unspanned { msg: "path parameter 'schema_response_id' must be non-empty" } }
@@ -3822,7 +3822,7 @@ export def "schema-responses-schema-blocks get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<block_type: string, display_text: string, example_text: string, index: int, registration_response_key: string, required: bool, schema_block_group_key: string>, id: string, links: record<self: string>, relationships: record<schema: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($schema_response_id | is-empty) { error make --unspanned { msg: "path parameter 'schema_response_id' must be non-empty" } }
@@ -3848,7 +3848,7 @@ export def "schemas-registrations list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<active: bool, name: string, schema: record, schema_version: int>, id: string, links: record<self: string>, relationships: record<schema_blocks: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/schemas/registrations/")
@@ -3873,7 +3873,7 @@ export def "schemas-registrations get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<active: bool, name: string, schema: record, schema_version: int>, id: string, links: record<self: string>, relationships: record<schema_blocks: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($registration_schema_id | is-empty) { error make --unspanned { msg: "path parameter 'registration_schema_id' must be non-empty" } }
@@ -3898,7 +3898,7 @@ export def "taxonomies list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<child_count: int, parents: list, text: string>, id: string, links: record<parents: list, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/taxonomies/")
@@ -3923,7 +3923,7 @@ export def "taxonomies get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<child_count: int, parents: list<string>, text: string>, id: string, links: record<parents: list<string>, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($taxonomy_id | is-empty) { error make --unspanned { msg: "path parameter 'taxonomy_id' must be non-empty" } }
@@ -3948,7 +3948,7 @@ export def "users list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<active: bool, date_registered: string, family_name: string, full_name: string, given_name: string, locale: string, middle_names: string, suffix: string, timezone: string>, id: string, links: record<html: string, profile_image: string>, relationships: record<institutions: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/")
@@ -3973,7 +3973,7 @@ export def "users get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<active: bool, date_registered: string, family_name: string, full_name: string, given_name: string, locale: string, middle_names: string, suffix: string, timezone: string>, id: string, links: record<html: string, profile_image: string>, relationships: record<institutions: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4029,7 +4029,7 @@ export def "users-addons list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<user_has_auth: bool>, id: string, links: record<accounts: record, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4056,7 +4056,7 @@ export def "users-addons get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<user_has_auth: bool>, id: string, links: record<accounts: record, self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4084,7 +4084,7 @@ export def "users-addons-accounts list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<display_name: string, profile_url: string, provider: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4113,7 +4113,7 @@ export def "users-addons-accounts get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<display_name: string, profile_url: string, provider: string>, id: string, links: record<self: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4141,7 +4141,7 @@ export def "users-institutions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<auth_url: string, description: string, logo_path: string, name: string>, id: string, links: record<self: string>, relationships: record<nodes: string, registrations: string, users: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4167,7 +4167,7 @@ export def "users-nodes list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4193,7 +4193,7 @@ export def "users-preprints list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<date_created: string, date_modified: string, date_published: string, doi: string, is_preprint_orphan: bool, license_record: string, subjects: list>, id: string, links: record<doi: string, html: string, preprint_doi: string, self: string>, relationships: record<bibliographic_contributors: string, citation: string, identifiers: string, license: string, node: string, primary_file: string, provider: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -4244,7 +4244,7 @@ export def "view-only-links get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<anonymous: bool, date_created: string, key: string, name: string>, id: string, relationships: record<creator: string, nodes: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'link_id' must be non-empty" } }
@@ -4270,7 +4270,7 @@ export def "view-only-links-nodes list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> table<attributes: record<category: string, collection: bool, current_user_can_comment: bool, current_user_permissions: list, date_created: string, date_modified: string, description: string, fork: bool, forked_date: string, node_license: string, preprint: bool, public: bool, registration: bool, tags: list, template_from: string, title: string>, id: string, links: record<html: string, self: string>, relationships: record<affiliated_institutions: string, children: string, citation: string, comments: string, contributors: string, draft_registrations: string, files: string, forked_from: string, forks: string, identifiers: string, license: string, linked_nodes: string, logs: string, node_links: string, parent: string, preprints: string, registrations: string, root: string, template_node: string, view_only_links: string, wikis: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($link_id | is-empty) { error make --unspanned { msg: "path parameter 'link_id' must be non-empty" } }
@@ -4296,7 +4296,7 @@ export def "wikis get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> record<attributes: record<content_type: string, current_user_can_comment: string, date_modified: string, extra: string, kind: string, materialized_path: string, name: string, path: string, size: string>, id: string, links: record<download: string, info: string, self: string>, relationships: record<comments: string, node: string, user: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($wiki_id | is-empty) { error make --unspanned { msg: "path parameter 'wiki_id' must be non-empty" } }

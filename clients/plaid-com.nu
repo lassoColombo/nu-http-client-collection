@@ -20,6 +20,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -171,8 +181,9 @@ export def commands []: nothing -> table {
 # --options shape: {account_ids?: list<string>, min_last_updated_datetime?: string}
 export def "accounts-balance-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -185,7 +196,7 @@ export def "accounts-balance-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/balance/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -203,8 +214,9 @@ export def "accounts-balance-get get" [
 # --options shape: {account_ids?: list<string>}
 export def "accounts-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -217,7 +229,7 @@ export def "accounts-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -233,8 +245,9 @@ export def "accounts-get get" [
 # operationId: applicationGet
 export def "application-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -246,7 +259,7 @@ export def "application-get get" [
   secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<application: record<application_id: string, application_url: string, city: string, company_legal_name: string, country_code: string, display_name: string, join_date: string, logo_url: string, name: string, postal_code: string, reason_for_access: string, region: string, use_case: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/application/get")
   let req_body = {"application_id": $application_id, "client_id": $client_id, "secret": $secret} | compact
@@ -263,8 +276,9 @@ export def "application-get get" [
 # operationId: assetReportAuditCopyCreate
 export def "asset-report-audit-copy-create copy" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -277,7 +291,7 @@ export def "asset-report-audit-copy-create copy" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<audit_copy_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/create")
   let req_body = {"asset_report_token": $asset_report_token, "auditor_id": $auditor_id, "client_id": $client_id, "secret": $secret} | compact
@@ -294,8 +308,9 @@ export def "asset-report-audit-copy-create copy" [
 # operationId: assetReportAuditCopyGet
 export def "asset-report-audit-copy-get copy" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -307,7 +322,7 @@ export def "asset-report-audit-copy-get copy" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<report: record<asset_report_id: string, client_report_id: string, date_generated: string, days_requested: float, items: list<record>, user: record<client_user_id: string, email: string, first_name: string, last_name: string, middle_name: string, phone_number: string, ssn: string>>, request_id: string, warnings: table<cause: record, warning_code: string, warning_type: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/get")
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
@@ -324,8 +339,9 @@ export def "asset-report-audit-copy-get copy" [
 # operationId: assetReportAuditCopyRemove
 export def "asset-report-audit-copy-remove copy" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -337,7 +353,7 @@ export def "asset-report-audit-copy-remove copy" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<removed: bool, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/audit_copy/remove")
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
@@ -355,8 +371,9 @@ export def "asset-report-audit-copy-remove copy" [
 # --options shape: {add_ons?: list<string>, client_report_id?: string, include_fast_report?: bool, products?: list<string>, user?: record, webhook?: string}
 export def "asset-report-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -371,7 +388,7 @@ export def "asset-report-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<asset_report_id: string, asset_report_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/create")
   let req_body = {"access_tokens": $access_tokens, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "report_type": $report_type, "secret": $secret} | compact
@@ -388,8 +405,9 @@ export def "asset-report-create create" [
 # operationId: assetReportFilter
 export def "asset-report-filter create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -402,7 +420,7 @@ export def "asset-report-filter create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<asset_report_id: string, asset_report_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/filter")
   let req_body = {"account_ids_to_exclude": $account_ids_to_exclude, "asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
@@ -420,8 +438,9 @@ export def "asset-report-filter create" [
 # --options shape: {days_to_include?: int}
 export def "asset-report-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -436,7 +455,7 @@ export def "asset-report-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<report: record<asset_report_id: string, client_report_id: string, date_generated: string, days_requested: float, items: list<record>, user: record<client_user_id: string, email: string, first_name: string, last_name: string, middle_name: string, phone_number: string, ssn: string>>, request_id: string, warnings: table<cause: record, warning_code: string, warning_type: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/get")
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "fast_report": $fast_report, "include_insights": $include_insights, "options": $options, "secret": $secret} | compact
@@ -454,8 +473,9 @@ export def "asset-report-get get" [
 # --options shape: {days_to_include?: int}
 export def "asset-report-pdf-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -466,9 +486,9 @@ export def "asset-report-pdf-get get" [
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --options: record # An optional object to filter or add data to `/asset_report/get` results. If provided, must be non-`null`. — shape: {days_to_include?: int}
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/pdf/get")
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -486,8 +506,9 @@ export def "asset-report-pdf-get get" [
 # --options shape: {client_report_id?: string, user?: record, webhook?: string}
 export def "asset-report-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -501,7 +522,7 @@ export def "asset-report-refresh refresh" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<asset_report_id: string, asset_report_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/refresh")
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "days_requested": $days_requested, "options": $options, "secret": $secret} | compact
@@ -518,8 +539,9 @@ export def "asset-report-refresh refresh" [
 # operationId: assetReportRemove
 export def "asset-report-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -531,7 +553,7 @@ export def "asset-report-remove delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<removed: bool, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/asset_report/remove")
   let req_body = {"asset_report_token": $asset_report_token, "client_id": $client_id, "secret": $secret} | compact
@@ -549,8 +571,9 @@ export def "asset-report-remove delete" [
 # --options shape: {account_ids?: list<string>}
 export def "auth-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -563,7 +586,7 @@ export def "auth-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, numbers: record<ach: list<record>, bacs: list<record>, eft: list<record>, international: list<record>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/auth/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -580,8 +603,9 @@ export def "auth-get get" [
 # operationId: bankTransferBalanceGet
 export def "bank-transfer-balance-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -593,7 +617,7 @@ export def "bank-transfer-balance-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<balance: record<available: string, transactable: string>, origination_account_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/balance/get")
   let req_body = {"client_id": $client_id, "origination_account_id": $origination_account_id, "secret": $secret} | compact
@@ -610,8 +634,9 @@ export def "bank-transfer-balance-get get" [
 # operationId: bankTransferCancel
 export def "bank-transfer-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -623,7 +648,7 @@ export def "bank-transfer-cancel cancel" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/cancel")
   let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
@@ -641,8 +666,9 @@ export def "bank-transfer-cancel cancel" [
 # --user shape: {email_address?: string, legal_name: string}
 export def "bank-transfer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -666,7 +692,7 @@ export def "bank-transfer-create create" [
   user: record # The legal name and other information for the account holder. — shape: {email_address?: string, legal_name: string}
 ]: any -> record<bank_transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, custom_tag: string, description: string, direction: string, failure_reason: record<ach_return_code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, status: string, type: string, user: record<email_address: string, legal_name: string, routing_number: string>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "secret": $secret, "type": $type, "user": $user} | compact
@@ -683,8 +709,9 @@ export def "bank-transfer-create create" [
 # operationId: bankTransferEventList
 export def "bank-transfer-event-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -705,7 +732,7 @@ export def "bank-transfer-event-list list" [
   --start-date: string # The start datetime of bank transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
 ]: any -> record<bank_transfer_events: table<account_id: string, bank_transfer_amount: string, bank_transfer_id: string, bank_transfer_iso_currency_code: string, bank_transfer_type: string, direction: string, event_id: int, event_type: string, failure_reason: record, origination_account_id: string, timestamp: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/event/list")
   let req_body = {"account_id": $account_id, "bank_transfer_id": $bank_transfer_id, "bank_transfer_type": $bank_transfer_type, "client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "event_types": $event_types, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
@@ -722,8 +749,9 @@ export def "bank-transfer-event-list list" [
 # operationId: bankTransferEventSync
 export def "bank-transfer-event-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -736,7 +764,7 @@ export def "bank-transfer-event-sync sync" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<bank_transfer_events: table<account_id: string, bank_transfer_amount: string, bank_transfer_id: string, bank_transfer_iso_currency_code: string, bank_transfer_type: string, direction: string, event_id: int, event_type: string, failure_reason: record, origination_account_id: string, timestamp: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/event/sync")
   let req_body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
@@ -753,8 +781,9 @@ export def "bank-transfer-event-sync sync" [
 # operationId: bankTransferGet
 export def "bank-transfer-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -766,7 +795,7 @@ export def "bank-transfer-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<bank_transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, custom_tag: string, description: string, direction: string, failure_reason: record<ach_return_code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, status: string, type: string, user: record<email_address: string, legal_name: string, routing_number: string>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/get")
   let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "secret": $secret} | compact
@@ -783,8 +812,9 @@ export def "bank-transfer-get get" [
 # operationId: bankTransferList
 export def "bank-transfer-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -801,7 +831,7 @@ export def "bank-transfer-list list" [
   --start-date: string # The start datetime of bank transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
 ]: any -> record<bank_transfers: table<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, custom_tag: string, description: string, direction: string, failure_reason: record, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, status: string, type: string, user: record>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/list")
   let req_body = {"client_id": $client_id, "count": $count, "direction": $direction, "end_date": $end_date, "offset": $offset, "origination_account_id": $origination_account_id, "secret": $secret, "start_date": $start_date} | compact
@@ -818,8 +848,9 @@ export def "bank-transfer-list list" [
 # operationId: bankTransferMigrateAccount
 export def "bank-transfer-migrate-account create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -834,7 +865,7 @@ export def "bank-transfer-migrate-account create" [
   --wire-routing-number: string # The user's wire transfer routing number. This is the ABA number; for some institutions, this may differ from the ACH number used in `routing_number`.
 ]: any -> record<access_token: string, account_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/migrate_account")
   let req_body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
@@ -851,8 +882,9 @@ export def "bank-transfer-migrate-account create" [
 # operationId: bankTransferSweepGet
 export def "bank-transfer-sweep-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -864,7 +896,7 @@ export def "bank-transfer-sweep-get get" [
   sweep_id: string # Identifier of the sweep.
 ]: any -> record<request_id: string, sweep: record<amount: string, created_at: string, id: string, iso_currency_code: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/sweep/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
@@ -881,8 +913,9 @@ export def "bank-transfer-sweep-get get" [
 # operationId: bankTransferSweepList
 export def "bank-transfer-sweep-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -897,7 +930,7 @@ export def "bank-transfer-sweep-list list" [
   --start-time: string # The start datetime of sweeps to return (RFC 3339 format). (nullable, format: date-time)
 ]: any -> record<request_id: string, sweeps: table<amount: string, created_at: string, id: string, iso_currency_code: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/bank_transfer/sweep/list")
   let req_body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "origination_account_id": $origination_account_id, "secret": $secret, "start_time": $start_time} | compact
@@ -914,8 +947,9 @@ export def "bank-transfer-sweep-list list" [
 # operationId: creditBankEmploymentGet
 export def "beta-credit-bank-employment-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -927,7 +961,7 @@ export def "beta-credit-bank-employment-get get" [
   user_token: string # The user token associated with the User data is being requested for.
 ]: any -> record<bank_employment_reports: table<bank_employment_report_id: string, days_requested: int, generated_time: string, items: list, warnings: list>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/credit/v1/bank_employment/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
@@ -944,8 +978,9 @@ export def "beta-credit-bank-employment-get get" [
 # --rule_details shape: {field: "TRANSACTION_ID"|"NAME", query: string, type: "EXACT_MATCH"|"SUBSTRING_MATCH"}
 export def "beta-transactions-rules-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -959,7 +994,7 @@ export def "beta-transactions-rules-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, rule: record<created_at: string, id: string, item_id: string, personal_finance_category: string, rule_details: record<field: string, query: string, type: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/create")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "personal_finance_category": $personal_finance_category, "rule_details": $rule_details, "secret": $secret} | compact
@@ -975,8 +1010,9 @@ export def "beta-transactions-rules-create create" [
 # operationId: transactionsRulesList
 export def "beta-transactions-rules-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -988,7 +1024,7 @@ export def "beta-transactions-rules-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, rules: table<created_at: string, id: string, item_id: string, personal_finance_category: string, rule_details: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/list")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -1004,8 +1040,9 @@ export def "beta-transactions-rules-list list" [
 # operationId: transactionsRulesRemove
 export def "beta-transactions-rules-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1018,7 +1055,7 @@ export def "beta-transactions-rules-remove delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/rules/v1/remove")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "rule_id": $rule_id, "secret": $secret} | compact
@@ -1035,8 +1072,9 @@ export def "beta-transactions-rules-remove delete" [
 # --transactions item shape: {amount: float, description: string, id: string, iso_currency_code: string}
 export def "beta-transactions-enhance create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1049,7 +1087,7 @@ export def "beta-transactions-enhance create" [
   transactions: list # An array of raw transactions to be enhanced. — item shape: {amount: float, description: string, id: string, iso_currency_code: string}
 ]: any -> record<enhanced_transactions: table<amount: float, description: string, enhancements: record, id: string, iso_currency_code: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/beta/transactions/v1/enhance")
   let req_body = {"account_type": $account_type, "client_id": $client_id, "secret": $secret, "transactions": $transactions} | compact
@@ -1094,8 +1132,9 @@ export def "categories-get get" [
 # operationId: creditAssetReportFreddieMacGet
 export def "credit-asset-report-freddie-mac-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1107,7 +1146,7 @@ export def "credit-asset-report-freddie-mac-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<DEAL: record<LOANS: record<LOAN: record>, PARTIES: record<PARTY: list>, SERVICES: record<SERVICE: record>>, SchemaVersion: float, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/asset_report/freddie_mac/get")
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
@@ -1124,8 +1163,9 @@ export def "credit-asset-report-freddie-mac-get get" [
 # operationId: creditAuditCopyTokenCreate
 export def "credit-audit-copy-token-create copy" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1137,7 +1177,7 @@ export def "credit-audit-copy-token-create copy" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<audit_copy_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/create")
   let req_body = {"client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
@@ -1154,8 +1194,9 @@ export def "credit-audit-copy-token-create copy" [
 # operationId: creditReportAuditCopyRemove
 export def "credit-audit-copy-token-remove copy-report" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1167,7 +1208,7 @@ export def "credit-audit-copy-token-remove copy-report" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<removed: bool, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/remove")
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
@@ -1184,8 +1225,9 @@ export def "credit-audit-copy-token-remove copy-report" [
 # operationId: creditAuditCopyTokenUpdate
 export def "credit-audit-copy-token-update copy" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1198,7 +1240,7 @@ export def "credit-audit-copy-token-update copy" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, updated: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/audit_copy_token/update")
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "report_tokens": $report_tokens, "secret": $secret} | compact
@@ -1216,8 +1258,9 @@ export def "credit-audit-copy-token-update copy" [
 # --options shape: {count?: int}
 export def "credit-bank-income-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1230,7 +1273,7 @@ export def "credit-bank-income-get get" [
   --user-token: string # The user token associated with the User data is being requested for.
 ]: any -> record<bank_income: table<bank_income_id: string, bank_income_summary: record, days_requested: int, generated_time: string, items: list, warnings: list>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/get")
   let req_body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
@@ -1247,8 +1290,9 @@ export def "credit-bank-income-get get" [
 # operationId: creditBankIncomePdfGet
 export def "credit-bank-income-pdf-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1258,9 +1302,9 @@ export def "credit-bank-income-pdf-get get" [
   --client-id: string # Your Plaid API `client_id`. The `client_id` is required and may be provided either in the `PLAID-CLIENT-ID` header or as part of a request body.
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
   user_token: string # The user token associated with the User data is being requested for.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/pdf/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
@@ -1278,8 +1322,9 @@ export def "credit-bank-income-pdf-get get" [
 # --options shape: {days_requested?: int, webhook?: string}
 export def "credit-bank-income-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1292,7 +1337,7 @@ export def "credit-bank-income-refresh refresh" [
   user_token: string # The user token associated with the User data is being requested for.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/bank_income/refresh")
   let req_body = {"client_id": $client_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
@@ -1309,8 +1354,9 @@ export def "credit-bank-income-refresh refresh" [
 # operationId: creditEmploymentGet
 export def "credit-employment-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1322,7 +1368,7 @@ export def "credit-employment-get get" [
   user_token: string # The user token associated with the User data is being requested for.
 ]: any -> record<items: table<employment_report_token: string, employments: list, item_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/employment/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
@@ -1339,8 +1385,9 @@ export def "credit-employment-get get" [
 # operationId: creditFreddieMacReportsGet
 export def "credit-freddie-mac-reports-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1352,7 +1399,7 @@ export def "credit-freddie-mac-reports-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<VOA: record<DEAL: record<LOANS: record, PARTIES: record, SERVICES: record>, SchemaVersion: float>, VOE: record<DEAL: record<LOANS: record, PARTIES: record, SERVICES: record>, SchemaVersion: float>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/freddie_mac/reports/get")
   let req_body = {"audit_copy_token": $audit_copy_token, "client_id": $client_id, "secret": $secret} | compact
@@ -1369,8 +1416,9 @@ export def "credit-freddie-mac-reports-get get" [
 # operationId: creditPayrollIncomeGet
 export def "credit-payroll-income-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1382,7 +1430,7 @@ export def "credit-payroll-income-get get" [
   --user-token: string # The user token associated with the User data is being requested for.
 ]: any -> record<error: record<causes: list<any>, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, items: table<accounts: list, institution_id: string, institution_name: string, item_id: string, payroll_income: list, status: record, updated_at: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
@@ -1402,8 +1450,9 @@ export def "credit-payroll-income-get get" [
 # --us_military_info shape: {branch?: string, is_active_duty?: bool}
 export def "credit-payroll-income-precheck create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1419,7 +1468,7 @@ export def "credit-payroll-income-precheck create" [
   --user-token: string # The user token associated with the User data is being requested for.
 ]: any -> record<confidence: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/precheck")
   let req_body = {"access_tokens": $access_tokens, "client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "us_military_info": $us_military_info, "user_token": $user_token} | compact
@@ -1436,8 +1485,9 @@ export def "credit-payroll-income-precheck create" [
 # operationId: creditPayrollIncomeRefresh
 export def "credit-payroll-income-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1449,7 +1499,7 @@ export def "credit-payroll-income-refresh refresh" [
   --user-token: string # The user token associated with the User data is being requested for.
 ]: any -> record<request_id: string, verification_refresh_status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/payroll_income/refresh")
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
@@ -1466,8 +1516,9 @@ export def "credit-payroll-income-refresh refresh" [
 # operationId: creditRelayCreate
 export def "credit-relay-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1481,7 +1532,7 @@ export def "credit-relay-create create" [
   --webhook: string # URL to which Plaid will send webhooks when the Secondary Client successfully retrieves an Asset Report by calling `/credit/relay/get`. (nullable)
 ]: any -> record<relay_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/create")
   let req_body = {"client_id": $client_id, "report_tokens": $report_tokens, "secondary_client_id": $secondary_client_id, "secret": $secret, "webhook": $webhook} | compact
@@ -1498,8 +1549,9 @@ export def "credit-relay-create create" [
 # operationId: creditRelayGet
 export def "credit-relay-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1512,7 +1564,7 @@ export def "credit-relay-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<report: record<asset_report_id: string, client_report_id: string, date_generated: string, days_requested: float, items: list<record>, user: record<client_user_id: string, email: string, first_name: string, last_name: string, middle_name: string, phone_number: string, ssn: string>>, request_id: string, warnings: table<cause: record, warning_code: string, warning_type: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/get")
   let req_body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret} | compact
@@ -1529,8 +1581,9 @@ export def "credit-relay-get get" [
 # operationId: creditRelayRefresh
 export def "credit-relay-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1544,7 +1597,7 @@ export def "credit-relay-refresh refresh" [
   --webhook: string # The URL registered to receive webhooks when the report of a relay token has been refreshed. (nullable)
 ]: any -> record<asset_report_id: string, relay_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/refresh")
   let req_body = {"client_id": $client_id, "relay_token": $relay_token, "report_type": $report_type, "secret": $secret, "webhook": $webhook} | compact
@@ -1561,8 +1614,9 @@ export def "credit-relay-refresh refresh" [
 # operationId: creditRelayRemove
 export def "credit-relay-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1574,7 +1628,7 @@ export def "credit-relay-remove delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<removed: bool, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/relay/remove")
   let req_body = {"client_id": $client_id, "relay_token": $relay_token, "secret": $secret} | compact
@@ -1591,8 +1645,9 @@ export def "credit-relay-remove delete" [
 # operationId: creditSessionsGet
 export def "credit-sessions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1604,7 +1659,7 @@ export def "credit-sessions-get get" [
   user_token: string # The user token associated with the User data is being requested for.
 ]: any -> record<request_id: string, sessions: table<errors: list, link_session_id: string, results: record, session_start_time: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/credit/sessions/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "user_token": $user_token} | compact
@@ -1621,8 +1676,9 @@ export def "credit-sessions-get get" [
 # operationId: dashboardUserGet
 export def "dashboard-user-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1634,7 +1690,7 @@ export def "dashboard-user-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<created_at: string, email_address: string, id: string, request_id: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard_user/get")
   let req_body = {"client_id": $client_id, "dashboard_user_id": $dashboard_user_id, "secret": $secret} | compact
@@ -1651,8 +1707,9 @@ export def "dashboard-user-get get" [
 # operationId: dashboardUserList
 export def "dashboard-user-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1664,7 +1721,7 @@ export def "dashboard-user-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<dashboard_users: table<created_at: string, email_address: string, id: string, status: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/dashboard_user/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
@@ -1684,8 +1741,9 @@ export def "dashboard-user-list list" [
 # --target_user shape: {address?: record, email: string, family_name: string, given_name: string, phone: string, tax_payer_id?: string}
 export def "deposit-switch-alt-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1700,7 +1758,7 @@ export def "deposit-switch-alt-create create" [
   target_user: record # The deposit switch target user — shape: {address?: record, email: string, family_name: string, given_name: string, phone: string, tax_payer_id?: string}
 ]: any -> record<deposit_switch_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/alt/create")
   let req_body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_account": $target_account, "target_user": $target_user} | compact
@@ -1718,8 +1776,9 @@ export def "deposit-switch-alt-create create" [
 # --options shape: {transaction_item_access_tokens?: list<string>, webhook?: string}
 export def "deposit-switch-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1734,7 +1793,7 @@ export def "deposit-switch-create create" [
   target_account_id: string # Plaid Account ID that specifies the target bank account. This account will become the recipient for a user's direct deposit.
 ]: any -> record<deposit_switch_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/create")
   let req_body = {"client_id": $client_id, "country_code": $country_code, "options": $options, "secret": $secret, "target_access_token": $target_access_token, "target_account_id": $target_account_id} | compact
@@ -1751,8 +1810,9 @@ export def "deposit-switch-create create" [
 # operationId: depositSwitchGet
 export def "deposit-switch-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1764,7 +1824,7 @@ export def "deposit-switch-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account_has_multiple_allocations: bool, amount_allocated: float, date_completed: string, date_created: string, deposit_switch_id: string, employer_id: string, employer_name: string, institution_id: string, institution_name: string, is_allocated_remainder: bool, percent_allocated: float, request_id: string, state: string, switch_method: string, target_account_id: string, target_item_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/get")
   let req_body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
@@ -1781,8 +1841,9 @@ export def "deposit-switch-get get" [
 # operationId: depositSwitchTokenCreate
 export def "deposit-switch-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1794,7 +1855,7 @@ export def "deposit-switch-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<deposit_switch_token: string, deposit_switch_token_expiration_time: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/deposit_switch/token/create")
   let req_body = {"client_id": $client_id, "deposit_switch_id": $deposit_switch_id, "secret": $secret} | compact
@@ -1811,8 +1872,9 @@ export def "deposit-switch-token-create create" [
 # operationId: employersSearch
 export def "employers-search list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1825,7 +1887,7 @@ export def "employers-search list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<employers: table<address: record, confidence_score: float, employer_id: string, name: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employers/search")
   let req_body = {"client_id": $client_id, "products": $products, "query": $query, "secret": $secret} | compact
@@ -1844,8 +1906,9 @@ export def "employers-search list" [
 @deprecated
 export def "employment-verification-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1857,7 +1920,7 @@ export def "employment-verification-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<employments: table<employer: record, end_date: string, platform_ids: record, start_date: string, status: string, title: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/employment/verification/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -1878,8 +1941,9 @@ export def "employment-verification-get get" [
 # --url shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list<string>}
 export def "fdx-notifications create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1898,7 +1962,7 @@ export def "fdx-notifications create" [
   --url: record # REST application constraint (Hypermedia As The Engine Of Application State) — shape: {action?: "GET"|"POST"|"PATCH"|"DELETE"|"PUT", href: string, rel?: string, types?: list<string>}
 ]: any -> record<causes: list<any>, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/fdx/notifications")
   let req_body = {"category": $category, "notificationId": $notification_id, "notificationPayload": $notification_payload, "priority": $priority, "publisher": $publisher, "sentOn": $sent_on, "severity": $severity, "subscriber": $subscriber, "type": $type, "url": $url} | compact
@@ -1916,8 +1980,9 @@ export def "fdx-notifications create" [
 # --options shape: {account_ids?: list<string>}
 export def "identity-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1930,7 +1995,7 @@ export def "identity-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string, owners: list>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -1949,8 +2014,9 @@ export def "identity-get get" [
 # --user shape: {address?: any, email_address?: string, legal_name?: string, phone_number?: string}
 export def "identity-match create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1964,7 +2030,7 @@ export def "identity-match create" [
   --user: record # The user's legal name, phone number, email address and address used to perform fuzzy match. — shape: {address?: any, email_address?: string, legal_name?: string, phone_number?: string}
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string, address: record, email_address: record, legal_name: record, phone_number: record>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity/match")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret, "user": $user} | compact
@@ -1982,8 +2048,9 @@ export def "identity-match create" [
 # --user shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, id_number?: record, name?: record, phone_number?: string}
 export def "identity-verification-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1999,7 +2066,7 @@ export def "identity-verification-create create" [
   user: record # User information collected outside of Link, most likely via your own onboarding process. Each of the following identity fields are optional: `email_address` `phone_number` `date_of_birth` `name` `address` `id_number` Specifically, these fields are optional in that they can either be fully provided (satisfying every required field in their subschema) or omitted from the request entirely by not providing the key or value. Providing these fields via the API will result in Link skipping the data collection process for the associated user. All verification steps enabled in the associated Identity Verification Template will still be run. Verification steps will either be run immediately, or once the user completes the `accept_tos` step, depending on the value provided to the `gave_consent` field. — shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, id_number?: record, name?: record, phone_number?: string}
 ]: any -> record<client_user_id: string, completed_at: string, created_at: string, documentary_verification: record<documents: list<record>, status: string>, id: string, kyc_check: record<address: record<po_box: string, summary: string, type: string>, date_of_birth: record<summary: string>, id_number: record<summary: string>, name: record<summary: string>, phone_number: record<summary: string>, status: string>, previous_attempt_id: string, redacted_at: string, request_id: string, shareable_url: string, status: string, steps: record<accept_tos: string, documentary_verification: string, kyc_check: string, risk_check: string, selfie_check: string, verify_sms: string, watchlist_screening: string>, template: record<id: string, version: float>, user: record<address: record<city: string, country: string, postal_code: string, region: string, street: string, street2: string>, date_of_birth: string, email_address: string, id_number: record<type: string, value: string>, ip_address: string, name: record<family_name: string, given_name: string>, phone_number: string>, watchlist_screening_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/create")
   let req_body = {"client_id": $client_id, "gave_consent": $gave_consent, "is_idempotent": $is_idempotent, "is_shareable": $is_shareable, "secret": $secret, "template_id": $template_id, "user": $user} | compact
@@ -2016,8 +2083,9 @@ export def "identity-verification-create create" [
 # operationId: identityVerificationGet
 export def "identity-verification-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2029,7 +2097,7 @@ export def "identity-verification-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<client_user_id: string, completed_at: string, created_at: string, documentary_verification: record<documents: list<record>, status: string>, id: string, kyc_check: record<address: record<po_box: string, summary: string, type: string>, date_of_birth: record<summary: string>, id_number: record<summary: string>, name: record<summary: string>, phone_number: record<summary: string>, status: string>, previous_attempt_id: string, redacted_at: string, request_id: string, shareable_url: string, status: string, steps: record<accept_tos: string, documentary_verification: string, kyc_check: string, risk_check: string, selfie_check: string, verify_sms: string, watchlist_screening: string>, template: record<id: string, version: float>, user: record<address: record<city: string, country: string, postal_code: string, region: string, street: string, street2: string>, date_of_birth: string, email_address: string, id_number: record<type: string, value: string>, ip_address: string, name: record<family_name: string, given_name: string>, phone_number: string>, watchlist_screening_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/get")
   let req_body = {"client_id": $client_id, "identity_verification_id": $identity_verification_id, "secret": $secret} | compact
@@ -2046,8 +2114,9 @@ export def "identity-verification-get get" [
 # operationId: identityVerificationList
 export def "identity-verification-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2061,7 +2130,7 @@ export def "identity-verification-list list" [
   template_id: string # ID of the associated Identity Verification template. (e.g. idvtmp_4FrXJvfQU3zGUR)
 ]: any -> record<identity_verifications: table<client_user_id: string, completed_at: string, created_at: string, documentary_verification: record, id: string, kyc_check: record, previous_attempt_id: string, redacted_at: string, shareable_url: string, status: string, steps: record, template: record, user: record, watchlist_screening_id: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/list")
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "template_id": $template_id} | compact
@@ -2079,8 +2148,9 @@ export def "identity-verification-list list" [
 # --steps shape: {documentary_verification: bool, kyc_check: bool, selfie_check: bool, verify_sms: bool}
 export def "identity-verification-retry create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2095,7 +2165,7 @@ export def "identity-verification-retry create" [
   template_id: string # ID of the associated Identity Verification template. (e.g. idvtmp_4FrXJvfQU3zGUR)
 ]: any -> record<client_user_id: string, completed_at: string, created_at: string, documentary_verification: record<documents: list<record>, status: string>, id: string, kyc_check: record<address: record<po_box: string, summary: string, type: string>, date_of_birth: record<summary: string>, id_number: record<summary: string>, name: record<summary: string>, phone_number: record<summary: string>, status: string>, previous_attempt_id: string, redacted_at: string, request_id: string, shareable_url: string, status: string, steps: record<accept_tos: string, documentary_verification: string, kyc_check: string, risk_check: string, selfie_check: string, verify_sms: string, watchlist_screening: string>, template: record<id: string, version: float>, user: record<address: record<city: string, country: string, postal_code: string, region: string, street: string, street2: string>, date_of_birth: string, email_address: string, id_number: record<type: string, value: string>, ip_address: string, name: record<family_name: string, given_name: string>, phone_number: string>, watchlist_screening_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/identity_verification/retry")
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret, "steps": $steps, "strategy": $strategy, "template_id": $template_id} | compact
@@ -2115,8 +2185,9 @@ export def "identity-verification-retry create" [
 @deprecated
 export def "income-verification-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2130,7 +2201,7 @@ export def "income-verification-create create" [
   webhook: string # The URL endpoint to which Plaid should send webhooks related to the progress of the income verification process.
 ]: any -> record<income_verification_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/create")
   let req_body = {"client_id": $client_id, "options": $options, "precheck_id": $precheck_id, "secret": $secret, "webhook": $webhook} | compact
@@ -2150,8 +2221,9 @@ export def "income-verification-create create" [
 @deprecated --flag income-verification-id
 export def "income-verification-documents-download download" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2163,9 +2235,9 @@ export def "income-verification-documents-download download" [
   --document-id: string # The document ID to download. If passed, a single document will be returned in the resulting zip file, rather than all document (nullable)
   --income-verification-id: string # The ID of the verification. (DEPRECATED, nullable)
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/documents/download")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "document_id": $document_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
@@ -2185,8 +2257,9 @@ export def "income-verification-documents-download download" [
 @deprecated --flag income-verification-id
 export def "income-verification-paystubs-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2199,7 +2272,7 @@ export def "income-verification-paystubs-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<document_metadata: table<doc_id: string, doc_type: string, name: string, status: string>, error: record<causes: list<any>, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, paystubs: table<deductions: record, doc_id: string, earnings: record, employee: record, employer: record, employment_details: record, income_breakdown: list, net_pay: record, pay_period_details: record, paystub_details: record, ytd_earnings: record>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/paystubs/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
@@ -2223,8 +2296,9 @@ export def "income-verification-paystubs-get get" [
 @deprecated --flag transactions-access-token
 export def "income-verification-precheck create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2241,7 +2315,7 @@ export def "income-verification-precheck create" [
   --user: record # Information about the user whose eligibility is being evaluated. (nullable) — shape: {email_address?: string, first_name?: string, home_address?: record, last_name?: string}
 ]: any -> record<confidence: string, precheck_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/precheck")
   let req_body = {"client_id": $client_id, "employer": $employer, "payroll_institution": $payroll_institution, "secret": $secret, "transactions_access_token": $transactions_access_token, "transactions_access_tokens": $transactions_access_tokens, "us_military_info": $us_military_info, "user": $user} | compact
@@ -2261,8 +2335,9 @@ export def "income-verification-precheck create" [
 @deprecated --flag income-verification-id
 export def "income-verification-taxforms-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2275,7 +2350,7 @@ export def "income-verification-taxforms-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<document_metadata: table<doc_id: string, doc_type: string, name: string, status: string>, error: record<causes: list<any>, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, request_id: string, taxforms: table<doc_id: string, document_type: string, w2: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/income/verification/taxforms/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "income_verification_id": $income_verification_id, "secret": $secret} | compact
@@ -2293,8 +2368,9 @@ export def "income-verification-taxforms-get get" [
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, products?: list<string>, routing_numbers?: list<string>}
 export def "institutions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2309,7 +2385,7 @@ export def "institutions-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institutions: table<auth_metadata: record, country_codes: list, institution_id: string, logo: string, name: string, oauth: bool, payment_initiation_metadata: record, primary_color: string, products: list, routing_numbers: list, status: record, url: string>, request_id: string, total: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/get")
   let req_body = {"client_id": $client_id, "count": $count, "country_codes": $country_codes, "offset": $offset, "options": $options, "secret": $secret} | compact
@@ -2327,8 +2403,9 @@ export def "institutions-get get" [
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, include_status?: bool}
 export def "institutions-get-by-id get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2342,7 +2419,7 @@ export def "institutions-get-by-id get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institution: record<auth_metadata: record<supported_methods: record>, country_codes: list<string>, institution_id: string, logo: string, name: string, oauth: bool, payment_initiation_metadata: record<maximum_payment_amount: record, standing_order_metadata: record, supports_international_payments: bool, supports_refund_details: bool, supports_sepa_instant: bool>, primary_color: string, products: list<string>, routing_numbers: list<string>, status: record<auth: record, health_incidents: list, identity: record, investments: record, investments_updates: record, item_logins: record, liabilities: record, liabilities_updates: record, transactions_updates: record>, url: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/get_by_id")
   let req_body = {"client_id": $client_id, "country_codes": $country_codes, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
@@ -2360,8 +2437,9 @@ export def "institutions-get-by-id get" [
 # --options shape: {include_auth_metadata?: bool, include_optional_metadata?: bool, include_payment_initiation_metadata?: bool, oauth?: bool, payment_initiation?: record}
 export def "institutions-search list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2376,7 +2454,7 @@ export def "institutions-search list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institutions: table<auth_metadata: record, country_codes: list, institution_id: string, logo: string, name: string, oauth: bool, payment_initiation_metadata: record, primary_color: string, products: list, routing_numbers: list, status: record, url: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/institutions/search")
   let req_body = {"client_id": $client_id, "country_codes": $country_codes, "options": $options, "products": $products, "query": $query, "secret": $secret} | compact
@@ -2394,8 +2472,9 @@ export def "institutions-search list" [
 # --options shape: {account_ids?: list<string>}
 export def "investments-holdings-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2408,7 +2487,7 @@ export def "investments-holdings-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, holdings: table<account_id: string, cost_basis: float, institution_price: float, institution_price_as_of: string, institution_price_datetime: string, institution_value: float, iso_currency_code: string, quantity: float, security_id: string, unofficial_currency_code: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, securities: table<close_price: float, close_price_as_of: string, cusip: string, institution_id: string, institution_security_id: string, is_cash_equivalent: bool, isin: string, iso_currency_code: string, name: string, proxy_security_id: string, security_id: string, sedol: string, ticker_symbol: string, type: string, unofficial_currency_code: string, update_datetime: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/investments/holdings/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -2426,8 +2505,9 @@ export def "investments-holdings-get get" [
 # --options shape: {account_ids?: list<string>, count?: int, offset?: int}
 export def "investments-transactions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2442,7 +2522,7 @@ export def "investments-transactions-get get" [
   start_date: string # The earliest date for which to fetch transaction history. Dates should be formatted as YYYY-MM-DD. (format: date)
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, investment_transactions: table<account_id: string, amount: float, cancel_transaction_id: string, date: string, fees: float, investment_transaction_id: string, iso_currency_code: string, name: string, price: float, quantity: float, security_id: string, subtype: string, type: string, unofficial_currency_code: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, securities: table<close_price: float, close_price_as_of: string, cusip: string, institution_id: string, institution_security_id: string, is_cash_equivalent: bool, isin: string, iso_currency_code: string, name: string, proxy_security_id: string, security_id: string, sedol: string, ticker_symbol: string, type: string, unofficial_currency_code: string, update_datetime: string>, total_investment_transactions: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/investments/transactions/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
@@ -2459,8 +2539,9 @@ export def "investments-transactions-get get" [
 # operationId: itemAccessTokenInvalidate
 export def "item-access-token-invalidate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2472,7 +2553,7 @@ export def "item-access-token-invalidate create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<new_access_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/access_token/invalidate")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -2488,8 +2569,9 @@ export def "item-access-token-invalidate create" [
 # operationId: itemActivityList
 export def "item-activity-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2503,7 +2585,7 @@ export def "item-activity-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<activities: table<activity: string, id: string, initiated_date: string, initiator: string, scopes: record, state: string, target_application_id: string>, cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/activity/list")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
@@ -2519,8 +2601,9 @@ export def "item-activity-list list" [
 # operationId: itemApplicationList
 export def "item-application-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2532,7 +2615,7 @@ export def "item-application-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<applications: table<application_id: string, application_url: string, created_at: string, display_name: string, logo_url: string, name: string, reason_for_access: string, scopes: record>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/application/list")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -2549,8 +2632,9 @@ export def "item-application-list list" [
 # --scopes shape: {accounts?: list, new_accounts?: bool, product_access?: record}
 export def "item-application-scopes-update update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2566,7 +2650,7 @@ export def "item-application-scopes-update update" [
   --state: string # When scopes are updated during enrollment, this field must be populated with the state sent to the partner in the OAuth Login URI. This field is required when the context is `ENROLLMENT`.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/application/scopes/update")
   let req_body = {"access_token": $access_token, "application_id": $application_id, "client_id": $client_id, "context": $context, "scopes": $scopes, "secret": $secret, "state": $state} | compact
@@ -2583,8 +2667,9 @@ export def "item-application-scopes-update update" [
 # operationId: itemGet
 export def "item-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2596,7 +2681,7 @@ export def "item-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, status: record<investments: record<last_failed_update: string, last_successful_update: string>, last_webhook: record<code_sent: string, sent_at: string>, transactions: record<last_failed_update: string, last_successful_update: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -2614,8 +2699,9 @@ export def "item-get get" [
 # --user_auth shape: {auth_token: string, user_id: string}
 export def "item-import import" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2629,7 +2715,7 @@ export def "item-import import" [
   user_auth: record # Object of user ID and auth token pair, permitting Plaid to aggregate a user’s accounts — shape: {auth_token: string, user_id: string}
 ]: any -> record<access_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/import")
   let req_body = {"client_id": $client_id, "options": $options, "products": $products, "secret": $secret, "user_auth": $user_auth} | compact
@@ -2646,8 +2732,9 @@ export def "item-import import" [
 # operationId: itemCreatePublicToken
 export def "item-public-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2659,7 +2746,7 @@ export def "item-public-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<expiration: string, public_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/public_token/create")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -2676,8 +2763,9 @@ export def "item-public-token-create create" [
 # operationId: itemPublicTokenExchange
 export def "item-public-token-exchange create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2689,7 +2777,7 @@ export def "item-public-token-exchange create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<access_token: string, item_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/public_token/exchange")
   let req_body = {"client_id": $client_id, "public_token": $public_token, "secret": $secret} | compact
@@ -2706,8 +2794,9 @@ export def "item-public-token-exchange create" [
 # operationId: itemRemove
 export def "item-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2719,7 +2808,7 @@ export def "item-remove delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/remove")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -2736,8 +2825,9 @@ export def "item-remove delete" [
 # operationId: itemWebhookUpdate
 export def "item-webhook-update update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2750,7 +2840,7 @@ export def "item-webhook-update update" [
   --webhook: string # The new webhook URL to associate with the Item. To remove a webhook from an Item, set to `null`. (nullable)
 ]: any -> record<item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/item/webhook/update")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
@@ -2768,8 +2858,9 @@ export def "item-webhook-update update" [
 # --options shape: {account_ids?: list<string>}
 export def "liabilities-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2782,7 +2873,7 @@ export def "liabilities-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, liabilities: record<credit: list<record>, mortgage: list<record>, student: list<record>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/liabilities/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -2799,8 +2890,9 @@ export def "liabilities-get get" [
 # operationId: linkOauthCorrelationIdExchange
 export def "link-oauth-correlation-id-exchange create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2812,7 +2904,7 @@ export def "link-oauth-correlation-id-exchange create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<link_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/oauth/correlation_id/exchange")
   let req_body = {"client_id": $client_id, "link_correlation_id": $link_correlation_id, "secret": $secret} | compact
@@ -2842,8 +2934,9 @@ export def "link-oauth-correlation-id-exchange create" [
 # --user shape: {address?: record, client_user_id: string, date_of_birth?: string, email_address?: string, email_address_verified_time?: string, id_number?: record, legal_name?: string, name?: any, phone_number?: string, phone_number_verified_time?: string, ssn?: string}
 export def "link-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2879,7 +2972,7 @@ export def "link-token-create create" [
   --webhook: string # The destination URL to which any webhooks should be sent.
 ]: any -> record<expiration: string, link_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/token/create")
   let req_body = {"access_token": $access_token, "account_filters": $account_filters, "additional_consented_products": $additional_consented_products, "android_package_name": $android_package_name, "auth": $body_auth, "client_id": $client_id, "client_name": $client_name, "country_codes": $country_codes, "deposit_switch": $deposit_switch, "employment": $employment, "eu_config": $eu_config, "identity_verification": $identity_verification, "income_verification": $income_verification, "institution_data": $institution_data, "institution_id": $institution_id, "investments": $investments, "language": $language, "link_customization_name": $link_customization_name, "payment_initiation": $payment_initiation, "products": $products, "redirect_uri": $redirect_uri, "secret": $secret, "transfer": $transfer, "update": $update, "user": $user, "user_token": $user_token, "webhook": $webhook} | compact
@@ -2896,8 +2989,9 @@ export def "link-token-create create" [
 # operationId: linkTokenGet
 export def "link-token-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2909,7 +3003,7 @@ export def "link-token-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<created_at: string, expiration: string, link_token: string, metadata: record<account_filters: record<credit: record, depository: record, investment: record, loan: record>, client_name: string, country_codes: list<string>, initial_products: list<string>, institution_data: record<routing_number: string>, language: string, redirect_uri: string, webhook: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link/token/get")
   let req_body = {"client_id": $client_id, "link_token": $link_token, "secret": $secret} | compact
@@ -2927,8 +3021,9 @@ export def "link-token-get get" [
 # --communication_methods item shape: {address?: string, method?: "SMS"|"EMAIL"}
 export def "link-delivery-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2941,7 +3036,7 @@ export def "link-delivery-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<link_delivery_session_id: string, link_delivery_url: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link_delivery/create")
   let req_body = {"client_id": $client_id, "communication_methods": $communication_methods, "link_token": $link_token, "secret": $secret} | compact
@@ -2958,8 +3053,9 @@ export def "link-delivery-create create" [
 # operationId: linkDeliveryGet
 export def "link-delivery-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2971,7 +3067,7 @@ export def "link-delivery-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<access_tokens: list<string>, completed_at: string, created_at: string, item_ids: list<string>, request_id: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/link_delivery/get")
   let req_body = {"client_id": $client_id, "link_delivery_session_id": $link_delivery_session_id, "secret": $secret} | compact
@@ -2993,8 +3089,9 @@ export def "link-delivery-get get" [
 # --technical_contact shape: {email?: string, family_name?: string, given_name?: string}
 export def "partner-customer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3020,7 +3117,7 @@ export def "partner-customer-create create" [
   website: string # The end customer's website.
 ]: any -> record<end_customer: record, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/create")
   let req_body = {"address": $address, "application_name": $application_name, "assets_under_management": $assets_under_management, "billing_contact": $billing_contact, "client_id": $client_id, "company_name": $company_name, "create_link_customization": $create_link_customization, "customer_support_info": $customer_support_info, "is_bank_addendum_completed": $is_bank_addendum_completed, "is_diligence_attested": $is_diligence_attested, "legal_entity_name": $legal_entity_name, "logo": $logo, "products": $products, "redirect_uris": $redirect_uris, "secret": $secret, "technical_contact": $technical_contact, "website": $website} | compact
@@ -3037,8 +3134,9 @@ export def "partner-customer-create create" [
 # operationId: partnerCustomerEnable
 export def "partner-customer-enable enable" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3050,7 +3148,7 @@ export def "partner-customer-enable enable" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<production_secret: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/enable")
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
@@ -3067,8 +3165,9 @@ export def "partner-customer-enable enable" [
 # operationId: partnerCustomerGet
 export def "partner-customer-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3080,7 +3179,7 @@ export def "partner-customer-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<end_customer: record<client_id: string, company_name: string, status: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/get")
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
@@ -3097,8 +3196,9 @@ export def "partner-customer-get get" [
 # operationId: partnerCustomerOauthInstitutionsGet
 export def "partner-customer-oauth-institutions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3110,7 +3210,7 @@ export def "partner-customer-oauth-institutions-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<flowdown_status: string, institutions: table<classic_disablement_date: string, environments: record, institution_id: string, name: string, production_enablement_date: string>, questionnaire_status: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/oauth_institutions/get")
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
@@ -3127,8 +3227,9 @@ export def "partner-customer-oauth-institutions-get get" [
 # operationId: partnerCustomerRemove
 export def "partner-customer-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3140,7 +3241,7 @@ export def "partner-customer-remove delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/partner/customer/remove")
   let req_body = {"client_id": $client_id, "end_customer_client_id": $end_customer_client_id, "secret": $secret} | compact
@@ -3159,8 +3260,9 @@ export def "partner-customer-remove delete" [
 # --options shape: {bacs?: any, iban?: string, request_refund_details?: bool}
 export def "payment-initiation-consent-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3176,7 +3278,7 @@ export def "payment-initiation-consent-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<consent_id: string, request_id: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/create")
   let req_body = {"client_id": $client_id, "constraints": $constraints, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "scopes": $scopes, "secret": $secret} | compact
@@ -3193,8 +3295,9 @@ export def "payment-initiation-consent-create create" [
 # operationId: paymentInitiationConsentGet
 export def "payment-initiation-consent-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3206,7 +3309,7 @@ export def "payment-initiation-consent-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/get")
   let req_body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
@@ -3224,8 +3327,9 @@ export def "payment-initiation-consent-get get" [
 # --amount shape: {currency: "GBP"|"EUR"|"PLN"|"SEK"|"DKK"|"NOK", value: float}
 export def "payment-initiation-consent-payment-execute create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3239,7 +3343,7 @@ export def "payment-initiation-consent-payment-execute create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<payment_id: string, request_id: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/payment/execute")
   let req_body = {"amount": $amount, "client_id": $client_id, "consent_id": $consent_id, "idempotency_key": $idempotency_key, "secret": $secret} | compact
@@ -3256,8 +3360,9 @@ export def "payment-initiation-consent-payment-execute create" [
 # operationId: paymentInitiationConsentRevoke
 export def "payment-initiation-consent-revoke delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3269,7 +3374,7 @@ export def "payment-initiation-consent-revoke delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/consent/revoke")
   let req_body = {"client_id": $client_id, "consent_id": $consent_id, "secret": $secret} | compact
@@ -3288,8 +3393,9 @@ export def "payment-initiation-consent-revoke delete" [
 # --options shape: {bacs?: any, iban?: string, request_refund_details?: bool, scheme?: ""|"LOCAL_DEFAULT"|"LOCAL_INSTANT"|"SEPA_CREDIT_TRANSFER"|"SEPA_CREDIT_TRANSFER_INSTANT"}
 export def "payment-initiation-payment-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3305,7 +3411,7 @@ export def "payment-initiation-payment-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<payment_id: string, request_id: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/create")
   let req_body = {"amount": $amount, "client_id": $client_id, "options": $options, "recipient_id": $recipient_id, "reference": $reference, "schedule": $schedule, "secret": $secret} | compact
@@ -3322,8 +3428,9 @@ export def "payment-initiation-payment-create create" [
 # operationId: paymentInitiationPaymentGet
 export def "payment-initiation-payment-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3335,7 +3442,7 @@ export def "payment-initiation-payment-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<adjusted_reference: string, adjusted_scheme: string, amount: record<currency: string, value: float>, amount_refunded: record<currency: string, value: float>, bacs: record<account: string, sort_code: string>, consent_id: string, iban: string, last_status_update: string, payment_id: string, recipient_id: string, reference: string, refund_details: record<bacs: record<account: string, sort_code: string>, iban: string, name: string>, refund_ids: list<string>, schedule: record<adjusted_start_date: string, end_date: string, interval: string, interval_execution_day: int, start_date: string>, scheme: string, status: string, transaction_id: string, wallet_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/get")
   let req_body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
@@ -3352,8 +3459,9 @@ export def "payment-initiation-payment-get get" [
 # operationId: paymentInitiationPaymentList
 export def "payment-initiation-payment-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3367,7 +3475,7 @@ export def "payment-initiation-payment-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<next_cursor: string, payments: table<adjusted_reference: string, adjusted_scheme: string, amount: record, amount_refunded: record, bacs: record, consent_id: string, iban: string, last_status_update: string, payment_id: string, recipient_id: string, reference: string, refund_details: record, refund_ids: list, schedule: record, scheme: string, status: string, transaction_id: string, wallet_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/list")
   let req_body = {"client_id": $client_id, "consent_id": $consent_id, "count": $count, "cursor": $cursor, "secret": $secret} | compact
@@ -3384,8 +3492,9 @@ export def "payment-initiation-payment-list list" [
 # operationId: paymentInitiationPaymentReverse
 export def "payment-initiation-payment-reverse create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3400,7 +3509,7 @@ export def "payment-initiation-payment-reverse create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<refund_id: string, request_id: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/reverse")
   let req_body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "payment_id": $payment_id, "reference": $reference, "secret": $secret} | compact
@@ -3419,8 +3528,9 @@ export def "payment-initiation-payment-reverse create" [
 @deprecated
 export def "payment-initiation-payment-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3432,7 +3542,7 @@ export def "payment-initiation-payment-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<payment_token: string, payment_token_expiration_time: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/payment/token/create")
   let req_body = {"client_id": $client_id, "payment_id": $payment_id, "secret": $secret} | compact
@@ -3450,8 +3560,9 @@ export def "payment-initiation-payment-token-create create" [
 # --address shape: {city: string, country: string, postal_code: string, street: list<string>}
 export def "payment-initiation-recipient-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3466,7 +3577,7 @@ export def "payment-initiation-recipient-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<recipient_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/create")
   let req_body = {"address": $address, "bacs": $bacs, "client_id": $client_id, "iban": $iban, "name": $name, "secret": $secret} | compact
@@ -3483,8 +3594,9 @@ export def "payment-initiation-recipient-create create" [
 # operationId: paymentInitiationRecipientGet
 export def "payment-initiation-recipient-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3496,7 +3608,7 @@ export def "payment-initiation-recipient-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<address: record<city: string, country: string, postal_code: string, street: list<string>>, bacs: record<account: string, sort_code: string>, iban: string, name: string, recipient_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/get")
   let req_body = {"client_id": $client_id, "recipient_id": $recipient_id, "secret": $secret} | compact
@@ -3513,8 +3625,9 @@ export def "payment-initiation-recipient-get get" [
 # operationId: paymentInitiationRecipientList
 export def "payment-initiation-recipient-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3525,7 +3638,7 @@ export def "payment-initiation-recipient-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<recipients: table<address: record, bacs: record, iban: string, name: string, recipient_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_initiation/recipient/list")
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
@@ -3542,8 +3655,9 @@ export def "payment-initiation-recipient-list list" [
 # operationId: paymentProfileCreate
 export def "payment-profile-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3554,7 +3668,7 @@ export def "payment-profile-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<payment_profile_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/create")
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
@@ -3571,8 +3685,9 @@ export def "payment-profile-create create" [
 # operationId: paymentProfileGet
 export def "payment-profile-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3584,7 +3699,7 @@ export def "payment-profile-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<created_at: string, deleted_at: string, request_id: string, status: string, updated_at: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/get")
   let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
@@ -3601,8 +3716,9 @@ export def "payment-profile-get get" [
 # operationId: paymentProfileRemove
 export def "payment-profile-remove delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3614,7 +3730,7 @@ export def "payment-profile-remove delete" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/payment_profile/remove")
   let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
@@ -3631,8 +3747,9 @@ export def "payment-profile-remove delete" [
 # operationId: processorApexProcessorTokenCreate
 export def "processor-apex-processor-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3645,7 +3762,7 @@ export def "processor-apex-processor-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<processor_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/apex/processor_token/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
@@ -3662,8 +3779,9 @@ export def "processor-apex-processor-token-create create" [
 # operationId: processorAuthGet
 export def "processor-auth-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3675,7 +3793,7 @@ export def "processor-auth-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account: record<account_id: string, balances: record<available: float, current: float, iso_currency_code: string, last_updated_datetime: string, limit: float, unofficial_currency_code: string>, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, numbers: record<ach: record<account: string, account_id: string, can_transfer_in: bool, can_transfer_out: bool, routing: string, wire_routing: string>, bacs: record<account: string, account_id: string, sort_code: string>, eft: record<account: string, account_id: string, branch: string, institution: string>, international: record<account_id: string, bic: string, iban: string>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/auth/get")
   let req_body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
@@ -3693,8 +3811,9 @@ export def "processor-auth-get get" [
 # --options shape: {min_last_updated_datetime?: string}
 export def "processor-balance-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3707,7 +3826,7 @@ export def "processor-balance-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account: record<account_id: string, balances: record<available: float, current: float, iso_currency_code: string, last_updated_datetime: string, limit: float, unofficial_currency_code: string>, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/balance/get")
   let req_body = {"client_id": $client_id, "options": $options, "processor_token": $processor_token, "secret": $secret} | compact
@@ -3725,8 +3844,9 @@ export def "processor-balance-get get" [
 # --user shape: {email_address?: string, legal_name: string}
 export def "processor-bank-transfer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3749,7 +3869,7 @@ export def "processor-bank-transfer-create create" [
   user: record # The legal name and other information for the account holder. — shape: {email_address?: string, legal_name: string}
 ]: any -> record<bank_transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, custom_tag: string, description: string, direction: string, failure_reason: record<ach_return_code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, status: string, type: string, user: record<email_address: string, legal_name: string, routing_number: string>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/bank_transfer/create")
   let req_body = {"ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "custom_tag": $custom_tag, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "processor_token": $processor_token, "secret": $secret, "type": $type, "user": $user} | compact
@@ -3766,8 +3886,9 @@ export def "processor-bank-transfer-create create" [
 # operationId: processorIdentityGet
 export def "processor-identity-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3779,7 +3900,7 @@ export def "processor-identity-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<account: record<account_id: string, balances: record<available: float, current: float, iso_currency_code: string, last_updated_datetime: string, limit: float, unofficial_currency_code: string>, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string, owners: list<record>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/identity/get")
   let req_body = {"client_id": $client_id, "processor_token": $processor_token, "secret": $secret} | compact
@@ -3796,8 +3917,9 @@ export def "processor-identity-get get" [
 # operationId: processorSignalDecisionReport
 export def "processor-signal-decision-report create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3815,7 +3937,7 @@ export def "processor-signal-decision-report create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/decision/report")
   let req_body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "processor_token": $processor_token, "secret": $secret} | compact
@@ -3834,8 +3956,9 @@ export def "processor-signal-decision-report create" [
 # --user shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
 export def "processor-signal-evaluate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3855,7 +3978,7 @@ export def "processor-signal-evaluate create" [
   --user-present: oneof<nothing, bool> # `true` if the end user is present while initiating the ACH transfer and the endpoint is being called; `false` otherwise (for example, when the ACH transfer is scheduled and the end user is not present, or you call this endpoint after the ACH transfer but before submitting the Nacha file for ACH processing). (nullable)
 ]: any -> record<core_attributes: record<address_change_count_28d: int, address_change_count_90d: int, available_balance: float, balance_last_updated: string, credit_transactions_count_10d: int, credit_transactions_count_30d: int, credit_transactions_count_60d: int, credit_transactions_count_90d: int, current_balance: float, days_since_first_plaid_connection: int, days_with_negative_balance_count_90d: int, debit_transactions_count_10d: int, debit_transactions_count_30d: int, debit_transactions_count_60d: int, debit_transactions_count_90d: int, email_change_count_28d: int, email_change_count_90d: int, failed_plaid_non_oauth_authentication_attempts_count_30d: int, failed_plaid_non_oauth_authentication_attempts_count_3d: int, failed_plaid_non_oauth_authentication_attempts_count_7d: int, is_savings_or_money_market_account: bool, nsf_overdraft_transactions_count_30d: int, nsf_overdraft_transactions_count_60d: int, nsf_overdraft_transactions_count_7d: int, nsf_overdraft_transactions_count_90d: int, p10_eod_balance_30d: float, p10_eod_balance_31d_to_60d: float, p10_eod_balance_60d: float, p10_eod_balance_61d_to_90d: float, p10_eod_balance_90d: float, p50_credit_transactions_amount_28d: float, p50_debit_transactions_amount_28d: float, p50_eod_balance_30d: float, p50_eod_balance_31d_to_60d: float, p50_eod_balance_60d: float, p50_eod_balance_61d_to_90d: float, p50_eod_balance_90d: float, p90_eod_balance_30d: float, p90_eod_balance_31d_to_60d: float, p90_eod_balance_60d: float, p90_eod_balance_61d_to_90d: float, p90_eod_balance_90d: float, p95_credit_transactions_amount_28d: float, p95_debit_transactions_amount_28d: float, phone_change_count_28d: int, phone_change_count_90d: int, plaid_connections_count_30d: int, plaid_connections_count_7d: int, plaid_non_oauth_authentication_attempts_count_30d: int, plaid_non_oauth_authentication_attempts_count_3d: int, plaid_non_oauth_authentication_attempts_count_7d: int, total_credit_transactions_amount_10d: float, total_credit_transactions_amount_30d: float, total_credit_transactions_amount_60d: float, total_credit_transactions_amount_90d: float, total_debit_transactions_amount_10d: float, total_debit_transactions_amount_30d: float, total_debit_transactions_amount_60d: float, total_debit_transactions_amount_90d: float, total_plaid_connections_count: int, transactions_last_updated: string, unauthorized_transactions_count_30d: int, unauthorized_transactions_count_60d: int, unauthorized_transactions_count_7d: int, unauthorized_transactions_count_90d: int>, request_id: string, scores: record<bank_initiated_return_risk: record<risk_tier: int, score: int>, customer_initiated_return_risk: record<risk_tier: int, score: int>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/evaluate")
   let req_body = {"amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "processor_token": $processor_token, "secret": $secret, "user": $user, "user_present": $user_present} | compact
@@ -3872,8 +3995,9 @@ export def "processor-signal-evaluate create" [
 # operationId: processorSignalReturnReport
 export def "processor-signal-return-report create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3888,7 +4012,7 @@ export def "processor-signal-return-report create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/signal/return/report")
   let req_body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "processor_token": $processor_token, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
@@ -3905,8 +4029,9 @@ export def "processor-signal-return-report create" [
 # operationId: processorStripeBankAccountTokenCreate
 export def "processor-stripe-bank-account-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3919,7 +4044,7 @@ export def "processor-stripe-bank-account-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, stripe_bank_account_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/stripe/bank_account_token/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret} | compact
@@ -3936,8 +4061,9 @@ export def "processor-stripe-bank-account-token-create create" [
 # operationId: processorTokenCreate
 export def "processor-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3951,7 +4077,7 @@ export def "processor-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<processor_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/processor/token/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "processor": $processor, "secret": $secret} | compact
@@ -3968,8 +4094,9 @@ export def "processor-token-create create" [
 # operationId: sandboxBankTransferFireWebhook
 export def "sandbox-bank-transfer-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3981,7 +4108,7 @@ export def "sandbox-bank-transfer-fire-webhook create" [
   webhook: string # The URL to which the webhook should be sent.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/bank_transfer/fire_webhook")
   let req_body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
@@ -3999,8 +4126,9 @@ export def "sandbox-bank-transfer-fire-webhook create" [
 # --failure_reason shape: {ach_return_code?: string, description?: string}
 export def "sandbox-bank-transfer-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4014,7 +4142,7 @@ export def "sandbox-bank-transfer-simulate create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/bank_transfer/simulate")
   let req_body = {"bank_transfer_id": $bank_transfer_id, "client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret} | compact
@@ -4031,8 +4159,9 @@ export def "sandbox-bank-transfer-simulate create" [
 # operationId: sandboxIncomeFireWebhook
 export def "sandbox-income-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4047,7 +4176,7 @@ export def "sandbox-income-fire-webhook create" [
   webhook: string # The URL to which the webhook should be sent.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/income/fire_webhook")
   let req_body = {"client_id": $client_id, "item_id": $item_id, "secret": $secret, "user_id": $user_id, "verification_status": $verification_status, "webhook": $webhook} | compact
@@ -4064,8 +4193,9 @@ export def "sandbox-income-fire-webhook create" [
 # operationId: sandboxItemFireWebhook
 export def "sandbox-item-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4079,7 +4209,7 @@ export def "sandbox-item-fire-webhook create" [
   --webhook-type: string@webhook-type-completer # The webhook types that can be fired by this test endpoint.
 ]: any -> record<request_id: string, webhook_fired: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/fire_webhook")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret, "webhook_code": $webhook_code, "webhook_type": $webhook_type} | compact
@@ -4096,8 +4226,9 @@ export def "sandbox-item-fire-webhook create" [
 # operationId: sandboxItemResetLogin
 export def "sandbox-item-reset-login reset" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4109,7 +4240,7 @@ export def "sandbox-item-reset-login reset" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, reset_login: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/reset_login")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -4126,8 +4257,9 @@ export def "sandbox-item-reset-login reset" [
 # operationId: sandboxItemSetVerificationStatus
 export def "sandbox-item-set-verification-status update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4141,7 +4273,7 @@ export def "sandbox-item-set-verification-status update" [
   verification_status: string@verification-status-completer-1 # The verification status to set the account to.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/item/set_verification_status")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "secret": $secret, "verification_status": $verification_status} | compact
@@ -4157,8 +4289,9 @@ export def "sandbox-item-set-verification-status update" [
 # operationId: sandboxOauthSelectAccounts
 export def "sandbox-oauth-select-accounts create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4169,7 +4302,7 @@ export def "sandbox-oauth-select-accounts create" [
   oauth_state_id: string
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/oauth/select_accounts")
   let req_body = {"accounts": $accounts, "oauth_state_id": $oauth_state_id} | compact
@@ -4186,8 +4319,9 @@ export def "sandbox-oauth-select-accounts create" [
 # operationId: sandboxPaymentProfileResetLogin
 export def "sandbox-payment-profile-reset-login reset" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4199,7 +4333,7 @@ export def "sandbox-payment-profile-reset-login reset" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, reset_login: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/payment_profile/reset_login")
   let req_body = {"client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
@@ -4217,8 +4351,9 @@ export def "sandbox-payment-profile-reset-login reset" [
 # --options shape: {override_password?: string, override_username?: string}
 export def "sandbox-processor-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4231,7 +4366,7 @@ export def "sandbox-processor-token-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<processor_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/processor_token/create")
   let req_body = {"client_id": $client_id, "institution_id": $institution_id, "options": $options, "secret": $secret} | compact
@@ -4249,8 +4384,9 @@ export def "sandbox-processor-token-create create" [
 # --options shape: {income_verification?: record, override_password?: string, override_username?: string, transactions?: record, webhook?: string}
 export def "sandbox-public-token-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4265,7 +4401,7 @@ export def "sandbox-public-token-create create" [
   --user-token: string # The user token associated with the User data is being requested for.
 ]: any -> record<public_token: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/public_token/create")
   let req_body = {"client_id": $client_id, "initial_products": $initial_products, "institution_id": $institution_id, "options": $options, "secret": $secret, "user_token": $user_token} | compact
@@ -4282,8 +4418,9 @@ export def "sandbox-public-token-create create" [
 # operationId: sandboxTransferFireWebhook
 export def "sandbox-transfer-fire-webhook create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4295,7 +4432,7 @@ export def "sandbox-transfer-fire-webhook create" [
   webhook: string # The URL to which the webhook should be sent.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/fire_webhook")
   let req_body = {"client_id": $client_id, "secret": $secret, "webhook": $webhook} | compact
@@ -4312,8 +4449,9 @@ export def "sandbox-transfer-fire-webhook create" [
 # operationId: sandboxTransferRepaymentSimulate
 export def "sandbox-transfer-repayment-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4324,7 +4462,7 @@ export def "sandbox-transfer-repayment-simulate create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/repayment/simulate")
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
@@ -4342,8 +4480,9 @@ export def "sandbox-transfer-repayment-simulate create" [
 # --failure_reason shape: {ach_return_code?: string, description?: string}
 export def "sandbox-transfer-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4357,7 +4496,7 @@ export def "sandbox-transfer-simulate create" [
   transfer_id: string # Plaid’s unique identifier for a transfer.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/simulate")
   let req_body = {"client_id": $client_id, "event_type": $event_type, "failure_reason": $failure_reason, "secret": $secret, "transfer_id": $transfer_id} | compact
@@ -4374,8 +4513,9 @@ export def "sandbox-transfer-simulate create" [
 # operationId: sandboxTransferSweepSimulate
 export def "sandbox-transfer-sweep-simulate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4386,7 +4526,7 @@ export def "sandbox-transfer-sweep-simulate create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, sweep: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/sweep/simulate")
   let req_body = {"client_id": $client_id, "secret": $secret} | compact
@@ -4403,8 +4543,9 @@ export def "sandbox-transfer-sweep-simulate create" [
 # operationId: sandboxTransferTestClockAdvance
 export def "sandbox-transfer-test-clock-advance test" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4417,7 +4558,7 @@ export def "sandbox-transfer-test-clock-advance test" [
   test_clock_id: string # Plaid’s unique identifier for a test clock.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/advance")
   let req_body = {"client_id": $client_id, "new_virtual_time": $new_virtual_time, "secret": $secret, "test_clock_id": $test_clock_id} | compact
@@ -4434,8 +4575,9 @@ export def "sandbox-transfer-test-clock-advance test" [
 # operationId: sandboxTransferTestClockCreate
 export def "sandbox-transfer-test-clock-create test" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4447,7 +4589,7 @@ export def "sandbox-transfer-test-clock-create test" [
   virtual_time: string # The virtual timestamp on the test clock. This will be of the form `2006-01-02T15:04:05Z`. (format: date-time)
 ]: any -> record<request_id: string, test_clock: record<test_clock_id: string, virtual_time: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/create")
   let req_body = {"client_id": $client_id, "secret": $secret, "virtual_time": $virtual_time} | compact
@@ -4464,8 +4606,9 @@ export def "sandbox-transfer-test-clock-create test" [
 # operationId: sandboxTransferTestClockGet
 export def "sandbox-transfer-test-clock-get test" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4477,7 +4620,7 @@ export def "sandbox-transfer-test-clock-get test" [
   test_clock_id: string # Plaid’s unique identifier for a test clock.
 ]: any -> record<request_id: string, test_clock: record<test_clock_id: string, virtual_time: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "test_clock_id": $test_clock_id} | compact
@@ -4494,8 +4637,9 @@ export def "sandbox-transfer-test-clock-get test" [
 # operationId: sandboxTransferTestClockList
 export def "sandbox-transfer-test-clock-list test" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4510,7 +4654,7 @@ export def "sandbox-transfer-test-clock-list test" [
   --start-virtual-time: string # The start virtual timestamp of test clocks to return. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
 ]: any -> record<request_id: string, test_clocks: table<test_clock_id: string, virtual_time: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox/transfer/test_clock/list")
   let req_body = {"client_id": $client_id, "count": $count, "end_virtual_time": $end_virtual_time, "offset": $offset, "secret": $secret, "start_virtual_time": $start_virtual_time} | compact
@@ -4527,8 +4671,9 @@ export def "sandbox-transfer-test-clock-list test" [
 # operationId: signalDecisionReport
 export def "signal-decision-report create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4545,7 +4690,7 @@ export def "signal-decision-report create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/decision/report")
   let req_body = {"amount_instantly_available": $amount_instantly_available, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "days_funds_on_hold": $days_funds_on_hold, "decision_outcome": $decision_outcome, "initiated": $initiated, "payment_method": $payment_method, "secret": $secret} | compact
@@ -4564,8 +4709,9 @@ export def "signal-decision-report create" [
 # --user shape: {address?: record, email_address?: string, name?: record, phone_number?: string}
 export def "signal-evaluate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4586,7 +4732,7 @@ export def "signal-evaluate create" [
   --user-present: oneof<nothing, bool> # `true` if the end user is present while initiating the ACH transfer and the endpoint is being called; `false` otherwise (for example, when the ACH transfer is scheduled and the end user is not present, or you call this endpoint after the ACH transfer but before submitting the Nacha file for ACH processing). (nullable)
 ]: any -> record<core_attributes: record<address_change_count_28d: int, address_change_count_90d: int, available_balance: float, balance_last_updated: string, credit_transactions_count_10d: int, credit_transactions_count_30d: int, credit_transactions_count_60d: int, credit_transactions_count_90d: int, current_balance: float, days_since_first_plaid_connection: int, days_with_negative_balance_count_90d: int, debit_transactions_count_10d: int, debit_transactions_count_30d: int, debit_transactions_count_60d: int, debit_transactions_count_90d: int, email_change_count_28d: int, email_change_count_90d: int, failed_plaid_non_oauth_authentication_attempts_count_30d: int, failed_plaid_non_oauth_authentication_attempts_count_3d: int, failed_plaid_non_oauth_authentication_attempts_count_7d: int, is_savings_or_money_market_account: bool, nsf_overdraft_transactions_count_30d: int, nsf_overdraft_transactions_count_60d: int, nsf_overdraft_transactions_count_7d: int, nsf_overdraft_transactions_count_90d: int, p10_eod_balance_30d: float, p10_eod_balance_31d_to_60d: float, p10_eod_balance_60d: float, p10_eod_balance_61d_to_90d: float, p10_eod_balance_90d: float, p50_credit_transactions_amount_28d: float, p50_debit_transactions_amount_28d: float, p50_eod_balance_30d: float, p50_eod_balance_31d_to_60d: float, p50_eod_balance_60d: float, p50_eod_balance_61d_to_90d: float, p50_eod_balance_90d: float, p90_eod_balance_30d: float, p90_eod_balance_31d_to_60d: float, p90_eod_balance_60d: float, p90_eod_balance_61d_to_90d: float, p90_eod_balance_90d: float, p95_credit_transactions_amount_28d: float, p95_debit_transactions_amount_28d: float, phone_change_count_28d: int, phone_change_count_90d: int, plaid_connections_count_30d: int, plaid_connections_count_7d: int, plaid_non_oauth_authentication_attempts_count_30d: int, plaid_non_oauth_authentication_attempts_count_3d: int, plaid_non_oauth_authentication_attempts_count_7d: int, total_credit_transactions_amount_10d: float, total_credit_transactions_amount_30d: float, total_credit_transactions_amount_60d: float, total_credit_transactions_amount_90d: float, total_debit_transactions_amount_10d: float, total_debit_transactions_amount_30d: float, total_debit_transactions_amount_60d: float, total_debit_transactions_amount_90d: float, total_plaid_connections_count: int, transactions_last_updated: string, unauthorized_transactions_count_30d: int, unauthorized_transactions_count_60d: int, unauthorized_transactions_count_7d: int, unauthorized_transactions_count_90d: int>, request_id: string, scores: record<bank_initiated_return_risk: record<risk_tier: int, score: int>, customer_initiated_return_risk: record<risk_tier: int, score: int>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/evaluate")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "amount": $amount, "client_id": $client_id, "client_transaction_id": $client_transaction_id, "client_user_id": $client_user_id, "default_payment_method": $default_payment_method, "device": $device, "is_recurring": $is_recurring, "secret": $secret, "user": $user, "user_present": $user_present} | compact
@@ -4603,8 +4749,9 @@ export def "signal-evaluate create" [
 # operationId: signalPrepare
 export def "signal-prepare create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4616,7 +4763,7 @@ export def "signal-prepare create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/prepare")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -4633,8 +4780,9 @@ export def "signal-prepare create" [
 # operationId: signalReturnReport
 export def "signal-return-report create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4648,7 +4796,7 @@ export def "signal-return-report create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/signal/return/report")
   let req_body = {"client_id": $client_id, "client_transaction_id": $client_transaction_id, "return_code": $return_code, "returned_at": $returned_at, "secret": $secret} | compact
@@ -4667,8 +4815,9 @@ export def "signal-return-report create" [
 # --transactions item shape: {amount: float, date_posted?: string, description: string, direction: "INFLOW"|"OUTFLOW", id: string, iso_currency_code: string, location?: record, mcc?: string}
 export def "transactions-enrich create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4682,7 +4831,7 @@ export def "transactions-enrich create" [
   transactions: list # An array of transaction objects to be enriched by Plaid. Maximum of 100 transactions per request. — item shape: {amount: float, date_posted?: string, description: string, direction: "INFLOW"|"OUTFLOW", id: string, iso_currency_code: string, location?: record, mcc?: string}
 ]: any -> record<enriched_transactions: table<amount: float, description: string, direction: string, enrichments: record, id: string, iso_currency_code: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/enrich")
   let req_body = {"account_type": $account_type, "client_id": $client_id, "options": $options, "secret": $secret, "transactions": $transactions} | compact
@@ -4700,8 +4849,9 @@ export def "transactions-enrich create" [
 # --options shape: {account_ids?: list<string>, count?: int, include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool, include_personal_finance_category_beta?: bool, offset?: int}
 export def "transactions-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4716,7 +4866,7 @@ export def "transactions-get get" [
   start_date: string # The earliest date for which data should be returned. Dates should be formatted as YYYY-MM-DD. (format: date)
 ]: any -> record<accounts: table<account_id: string, balances: record, mask: string, name: string, official_name: string, persistent_account_id: string, subtype: string, type: string, verification_status: string>, item: record<available_products: list<string>, billed_products: list<string>, consent_expiration_time: string, consented_products: list<string>, error: record<causes: list, display_message: string, documentation_url: string, error_code: string, error_message: string, error_type: string, request_id: string, status: float, suggested_action: string>, institution_id: string, item_id: string, products: list<string>, update_type: string, webhook: string>, request_id: string, total_transactions: int, transactions: table<account_id: string, account_owner: string, amount: float, category: list, category_id: string, check_number: string, date: string, iso_currency_code: string, location: record, logo_url: string, merchant_name: string, name: string, original_description: string, payment_meta: record, pending: bool, pending_transaction_id: string, transaction_id: string, transaction_type: string, unofficial_currency_code: string, website: string, authorized_date: string, authorized_datetime: string, counterparties: list, datetime: string, payment_channel: string, personal_finance_category: record, personal_finance_category_icon_url: string, transaction_code: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/get")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "end_date": $end_date, "options": $options, "secret": $secret, "start_date": $start_date} | compact
@@ -4734,8 +4884,9 @@ export def "transactions-get get" [
 # --options shape: {include_personal_finance_category?: bool}
 export def "transactions-recurring-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4749,7 +4900,7 @@ export def "transactions-recurring-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<inflow_streams: table<account_id: string, average_amount: record, category: list, category_id: string, description: string, first_date: string, frequency: string, is_active: bool, last_amount: record, last_date: string, merchant_name: string, personal_finance_category: record, status: string, stream_id: string, transaction_ids: list>, outflow_streams: table<account_id: string, average_amount: record, category: list, category_id: string, description: string, first_date: string, frequency: string, is_active: bool, last_amount: record, last_date: string, merchant_name: string, personal_finance_category: record, status: string, stream_id: string, transaction_ids: list>, request_id: string, updated_datetime: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/recurring/get")
   let req_body = {"access_token": $access_token, "account_ids": $account_ids, "client_id": $client_id, "options": $options, "secret": $secret} | compact
@@ -4766,8 +4917,9 @@ export def "transactions-recurring-get get" [
 # operationId: transactionsRefresh
 export def "transactions-refresh refresh" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4779,7 +4931,7 @@ export def "transactions-refresh refresh" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/refresh")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "secret": $secret} | compact
@@ -4797,8 +4949,9 @@ export def "transactions-refresh refresh" [
 # --options shape: {include_logo_and_counterparty_beta?: bool, include_original_description?: bool, include_personal_finance_category?: bool}
 export def "transactions-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4813,7 +4966,7 @@ export def "transactions-sync sync" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<added: table<account_id: string, account_owner: string, amount: float, category: list, category_id: string, check_number: string, date: string, iso_currency_code: string, location: record, logo_url: string, merchant_name: string, name: string, original_description: string, payment_meta: record, pending: bool, pending_transaction_id: string, transaction_id: string, transaction_type: string, unofficial_currency_code: string, website: string, authorized_date: string, authorized_datetime: string, counterparties: list, datetime: string, payment_channel: string, personal_finance_category: record, personal_finance_category_icon_url: string, transaction_code: string>, has_more: bool, modified: table<account_id: string, account_owner: string, amount: float, category: list, category_id: string, check_number: string, date: string, iso_currency_code: string, location: record, logo_url: string, merchant_name: string, name: string, original_description: string, payment_meta: record, pending: bool, pending_transaction_id: string, transaction_id: string, transaction_type: string, unofficial_currency_code: string, website: string, authorized_date: string, authorized_datetime: string, counterparties: list, datetime: string, payment_channel: string, personal_finance_category: record, personal_finance_category_icon_url: string, transaction_code: string>, next_cursor: string, removed: table<transaction_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transactions/sync")
   let req_body = {"access_token": $access_token, "client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret} | compact
@@ -4833,8 +4986,9 @@ export def "transactions-sync sync" [
 @deprecated --flag origination-account-id
 export def "transfer-authorization-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4862,7 +5016,7 @@ export def "transfer-authorization-create create" [
   --with-guarantee: oneof<nothing, bool> # If set to `false`, Plaid will not offer a `guarantee_decision` for this request(Guarantee customers only). (nullable, default: true)
 ]: any -> record<authorization: record<created: string, decision: string, decision_rationale: record<code: string, description: string>, guarantee_decision: string, guarantee_decision_rationale: record<code: string, description: string>, id: string, proposed_transfer: record<account_id: string, ach_class: string, amount: string, funding_account_id: string, iso_currency_code: string, network: string, origination_account_id: string, originator_client_id: string, type: string, user: record>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/authorization/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "beacon_session_id": $beacon_session_id, "client_id": $client_id, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user, "user_present": $user_present, "with_guarantee": $with_guarantee} | compact
@@ -4879,8 +5033,9 @@ export def "transfer-authorization-create create" [
 # operationId: transferCancel
 export def "transfer-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4892,7 +5047,7 @@ export def "transfer-cancel cancel" [
   transfer_id: string # Plaid’s unique identifier for a transfer.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/cancel")
   let req_body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
@@ -4909,8 +5064,9 @@ export def "transfer-cancel cancel" [
 # operationId: transferCapabilitiesGet
 export def "transfer-capabilities-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4924,7 +5080,7 @@ export def "transfer-capabilities-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<institution_supported_networks: record<rtp: record<credit: bool>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/capabilities/get")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "client_id": $client_id, "payment_profile_token": $payment_profile_token, "secret": $secret} | compact
@@ -4949,8 +5105,9 @@ export def "transfer-capabilities-get get" [
 @deprecated --flag user
 export def "transfer-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4975,7 +5132,7 @@ export def "transfer-create create" [
   --user: record # The legal name and other information for the account holder. (DEPRECATED, nullable) — shape: {address?: record, email_address?: string, legal_name?: string, phone_number?: string}
 ]: any -> record<request_id: string, transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, description: string, expected_settlement_date: string, failure_reason: record<ach_return_code: string, description: string>, funding_account_id: string, guarantee_decision: string, guarantee_decision_rationale: record<code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, originator_client_id: string, recurring_transfer_id: string, refunds: list<record>, standard_return_window: string, status: string, sweep_status: string, type: string, unauthorized_return_window: string, user: record<address: record, email_address: string, legal_name: string, phone_number: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "authorization_id": $authorization_id, "client_id": $client_id, "description": $description, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "network": $network, "origination_account_id": $origination_account_id, "payment_profile_token": $payment_profile_token, "secret": $secret, "type": $type, "user": $user} | compact
@@ -4993,8 +5150,9 @@ export def "transfer-create create" [
 @deprecated --flag origination-account-id
 export def "transfer-event-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5017,7 +5175,7 @@ export def "transfer-event-list list" [
   --transfer-type: string@transfer-type-completer # The type of transfer. This will be either `debit` or `credit`. A `debit` indicates a transfer of money into your origination account; a `credit` indicates a transfer of money out of your origination account. (nullable)
 ]: any -> record<request_id: string, transfer_events: table<account_id: string, event_id: int, event_type: string, failure_reason: record, funding_account_id: string, origination_account_id: string, originator_client_id: string, refund_id: string, sweep_amount: string, sweep_id: string, timestamp: string, transfer_amount: string, transfer_id: string, transfer_type: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/event/list")
   let req_body = {"account_id": $account_id, "client_id": $client_id, "count": $count, "end_date": $end_date, "event_types": $event_types, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date, "sweep_id": $sweep_id, "transfer_id": $transfer_id, "transfer_type": $transfer_type} | compact
@@ -5034,8 +5192,9 @@ export def "transfer-event-list list" [
 # operationId: transferEventSync
 export def "transfer-event-sync sync" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5048,7 +5207,7 @@ export def "transfer-event-sync sync" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, transfer_events: table<account_id: string, event_id: int, event_type: string, failure_reason: record, funding_account_id: string, origination_account_id: string, originator_client_id: string, refund_id: string, sweep_amount: string, sweep_id: string, timestamp: string, transfer_amount: string, transfer_id: string, transfer_type: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/event/sync")
   let req_body = {"after_id": $after_id, "client_id": $client_id, "count": $count, "secret": $secret} | compact
@@ -5065,8 +5224,9 @@ export def "transfer-event-sync sync" [
 # operationId: transferGet
 export def "transfer-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5078,7 +5238,7 @@ export def "transfer-get get" [
   transfer_id: string # Plaid’s unique identifier for a transfer.
 ]: any -> record<request_id: string, transfer: record<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, description: string, expected_settlement_date: string, failure_reason: record<ach_return_code: string, description: string>, funding_account_id: string, guarantee_decision: string, guarantee_decision_rationale: record<code: string, description: string>, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, originator_client_id: string, recurring_transfer_id: string, refunds: list<record>, standard_return_window: string, status: string, sweep_status: string, type: string, unauthorized_return_window: string, user: record<address: record, email_address: string, legal_name: string, phone_number: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "transfer_id": $transfer_id} | compact
@@ -5097,8 +5257,9 @@ export def "transfer-get get" [
 @deprecated --flag origination-account-id
 export def "transfer-intent-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5121,7 +5282,7 @@ export def "transfer-intent-create create" [
   user: record # The legal name and other information for the account holder. — shape: {address?: record, email_address?: string, legal_name: string, phone_number?: string}
 ]: any -> record<request_id: string, transfer_intent: record<account_id: string, ach_class: string, amount: string, created: string, description: string, funding_account_id: string, id: string, iso_currency_code: string, metadata: record, mode: string, network: string, origination_account_id: string, require_guarantee: bool, status: string, user: record<address: record, email_address: string, legal_name: string, phone_number: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/intent/create")
   let req_body = {"account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "funding_account_id": $funding_account_id, "iso_currency_code": $iso_currency_code, "metadata": $metadata, "mode": $mode, "network": $network, "origination_account_id": $origination_account_id, "require_guarantee": $require_guarantee, "secret": $secret, "user": $user} | compact
@@ -5138,8 +5299,9 @@ export def "transfer-intent-create create" [
 # operationId: transferIntentGet
 export def "transfer-intent-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5151,7 +5313,7 @@ export def "transfer-intent-get get" [
   transfer_intent_id: string # Plaid's unique identifier for a transfer intent object.
 ]: any -> record<request_id: string, transfer_intent: record<account_id: string, ach_class: string, amount: string, authorization_decision: string, authorization_decision_rationale: record<code: string, description: string>, created: string, description: string, failure_reason: record<error_code: string, error_message: string, error_type: string>, funding_account_id: string, guarantee_decision: string, guarantee_decision_rationale: record<code: string, description: string>, id: string, iso_currency_code: string, metadata: record, mode: string, network: string, origination_account_id: string, require_guarantee: bool, status: string, transfer_id: string, user: record<address: record, email_address: string, legal_name: string, phone_number: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/intent/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "transfer_intent_id": $transfer_intent_id} | compact
@@ -5169,8 +5331,9 @@ export def "transfer-intent-get get" [
 @deprecated --flag origination-account-id
 export def "transfer-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5188,7 +5351,7 @@ export def "transfer-list list" [
   --start-date: string # The start datetime of transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
 ]: any -> record<request_id: string, transfers: table<account_id: string, ach_class: string, amount: string, cancellable: bool, created: string, description: string, expected_settlement_date: string, failure_reason: record, funding_account_id: string, guarantee_decision: string, guarantee_decision_rationale: record, id: string, iso_currency_code: string, metadata: record, network: string, origination_account_id: string, originator_client_id: string, recurring_transfer_id: string, refunds: list, standard_return_window: string, status: string, sweep_status: string, type: string, unauthorized_return_window: string, user: record>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/list")
   let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "origination_account_id": $origination_account_id, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
@@ -5205,8 +5368,9 @@ export def "transfer-list list" [
 # operationId: transferMigrateAccount
 export def "transfer-migrate-account create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5221,7 +5385,7 @@ export def "transfer-migrate-account create" [
   --wire-routing-number: string # The user's wire transfer routing number. This is the ABA number; for some institutions, this may differ from the ACH number used in `routing_number`.
 ]: any -> record<access_token: string, account_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/migrate_account")
   let req_body = {"account_number": $account_number, "account_type": $account_type, "client_id": $client_id, "routing_number": $routing_number, "secret": $secret, "wire_routing_number": $wire_routing_number} | compact
@@ -5238,8 +5402,9 @@ export def "transfer-migrate-account create" [
 # operationId: transferOriginatorCreate
 export def "transfer-originator-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5251,7 +5416,7 @@ export def "transfer-originator-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<company_name: string, originator_client_id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/create")
   let req_body = {"client_id": $client_id, "company_name": $company_name, "secret": $secret} | compact
@@ -5268,8 +5433,9 @@ export def "transfer-originator-create create" [
 # operationId: transferOriginatorGet
 export def "transfer-originator-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5281,7 +5447,7 @@ export def "transfer-originator-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<originator: record<client_id: string, company_name: string, transfer_diligence_status: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/get")
   let req_body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "secret": $secret} | compact
@@ -5298,8 +5464,9 @@ export def "transfer-originator-get get" [
 # operationId: transferOriginatorList
 export def "transfer-originator-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5312,7 +5479,7 @@ export def "transfer-originator-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<originators: table<client_id: string, transfer_diligence_status: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/originator/list")
   let req_body = {"client_id": $client_id, "count": $count, "offset": $offset, "secret": $secret} | compact
@@ -5329,8 +5496,9 @@ export def "transfer-originator-list list" [
 # operationId: transferQuestionnaireCreate
 export def "transfer-questionnaire-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5343,7 +5511,7 @@ export def "transfer-questionnaire-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<onboarding_url: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/questionnaire/create")
   let req_body = {"client_id": $client_id, "originator_client_id": $originator_client_id, "redirect_uri": $redirect_uri, "secret": $secret} | compact
@@ -5360,8 +5528,9 @@ export def "transfer-questionnaire-create create" [
 # operationId: transferRecurringCancel
 export def "transfer-recurring-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5373,7 +5542,7 @@ export def "transfer-recurring-cancel cancel" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/cancel")
   let req_body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
@@ -5394,8 +5563,9 @@ export def "transfer-recurring-cancel cancel" [
 @deprecated --flag iso-currency-code
 export def "transfer-recurring-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5421,7 +5591,7 @@ export def "transfer-recurring-create create" [
   --user-present: oneof<nothing, bool> # If the end user is initiating the specific transfer themselves via an interactive UI, this should be `true`; for automatic recurring payments where the end user is not actually initiating each individual transfer, it should be `false`. (nullable)
 ]: any -> record<decision: string, decision_rationale: record<code: string, description: string>, recurring_transfer: record, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/create")
   let req_body = {"access_token": $access_token, "account_id": $account_id, "ach_class": $ach_class, "amount": $amount, "client_id": $client_id, "description": $description, "device": $device, "funding_account_id": $funding_account_id, "idempotency_key": $idempotency_key, "iso_currency_code": $iso_currency_code, "network": $network, "schedule": $schedule, "secret": $secret, "test_clock_id": $test_clock_id, "type": $type, "user": $user, "user_present": $user_present} | compact
@@ -5438,8 +5608,9 @@ export def "transfer-recurring-create create" [
 # operationId: transferRecurringGet
 export def "transfer-recurring-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5451,7 +5622,7 @@ export def "transfer-recurring-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<recurring_transfer: record<account_id: string, ach_class: string, amount: string, created: string, description: string, funding_account_id: string, iso_currency_code: string, network: string, next_origination_date: string, origination_account_id: string, recurring_transfer_id: string, schedule: record<end_date: string, interval_count: int, interval_execution_day: int, interval_unit: string, start_date: string>, status: string, test_clock_id: string, transfer_ids: list<string>, type: string, user: record<address: record, email_address: string, legal_name: string, phone_number: string>>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/get")
   let req_body = {"client_id": $client_id, "recurring_transfer_id": $recurring_transfer_id, "secret": $secret} | compact
@@ -5468,8 +5639,9 @@ export def "transfer-recurring-get get" [
 # operationId: transferRecurringList
 export def "transfer-recurring-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5485,7 +5657,7 @@ export def "transfer-recurring-list list" [
   --start-time: string # The start datetime of recurring transfers to list. This should be in RFC 3339 format (i.e. `2019-12-06T22:35:49Z`) (nullable, format: date-time)
 ]: any -> record<recurring_transfers: table<account_id: string, ach_class: string, amount: string, created: string, description: string, funding_account_id: string, iso_currency_code: string, network: string, next_origination_date: string, origination_account_id: string, recurring_transfer_id: string, schedule: record, status: string, test_clock_id: string, transfer_ids: list, type: string, user: record>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/recurring/list")
   let req_body = {"client_id": $client_id, "count": $count, "end_time": $end_time, "funding_account_id": $funding_account_id, "offset": $offset, "secret": $secret, "start_time": $start_time} | compact
@@ -5502,8 +5674,9 @@ export def "transfer-recurring-list list" [
 # operationId: transferRefundCancel
 export def "transfer-refund-cancel cancel" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5515,7 +5688,7 @@ export def "transfer-refund-cancel cancel" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/cancel")
   let req_body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
@@ -5532,8 +5705,9 @@ export def "transfer-refund-cancel cancel" [
 # operationId: transferRefundCreate
 export def "transfer-refund-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5547,7 +5721,7 @@ export def "transfer-refund-create create" [
   transfer_id: string # The ID of the transfer to refund.
 ]: any -> record<refund: record<amount: string, created: string, id: string, status: string, transfer_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/create")
   let req_body = {"amount": $amount, "client_id": $client_id, "idempotency_key": $idempotency_key, "secret": $secret, "transfer_id": $transfer_id} | compact
@@ -5564,8 +5738,9 @@ export def "transfer-refund-create create" [
 # operationId: transferRefundGet
 export def "transfer-refund-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5577,7 +5752,7 @@ export def "transfer-refund-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<refund: record<amount: string, created: string, id: string, status: string, transfer_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/refund/get")
   let req_body = {"client_id": $client_id, "refund_id": $refund_id, "secret": $secret} | compact
@@ -5594,8 +5769,9 @@ export def "transfer-refund-get get" [
 # operationId: transferRepaymentList
 export def "transfer-repayment-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5610,7 +5786,7 @@ export def "transfer-repayment-list list" [
   --start-date: string # The start datetime of repayments to return (RFC 3339 format). (nullable, format: date-time)
 ]: any -> record<repayments: table<amount: string, created: string, iso_currency_code: string, repayment_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/repayment/list")
   let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "offset": $offset, "secret": $secret, "start_date": $start_date} | compact
@@ -5627,8 +5803,9 @@ export def "transfer-repayment-list list" [
 # operationId: transferRepaymentReturnList
 export def "transfer-repayment-return-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5642,7 +5819,7 @@ export def "transfer-repayment-return-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<repayment_returns: table<amount: string, event_id: int, iso_currency_code: string, transfer_id: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/repayment/return/list")
   let req_body = {"client_id": $client_id, "count": $count, "offset": $offset, "repayment_id": $repayment_id, "secret": $secret} | compact
@@ -5659,8 +5836,9 @@ export def "transfer-repayment-return-list list" [
 # operationId: transferSweepGet
 export def "transfer-sweep-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5672,7 +5850,7 @@ export def "transfer-sweep-get get" [
   sweep_id: string # Plaid’s unique identifier for a sweep.
 ]: any -> record<request_id: string, sweep: record<amount: string, created: string, funding_account_id: string, id: string, iso_currency_code: string, settled: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/sweep/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "sweep_id": $sweep_id} | compact
@@ -5689,8 +5867,9 @@ export def "transfer-sweep-get get" [
 # operationId: transferSweepList
 export def "transfer-sweep-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5707,7 +5886,7 @@ export def "transfer-sweep-list list" [
   --start-date: string # The start datetime of sweeps to return (RFC 3339 format). (nullable, format: date-time)
 ]: any -> record<request_id: string, sweeps: table<amount: string, created: string, funding_account_id: string, id: string, iso_currency_code: string, settled: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/transfer/sweep/list")
   let req_body = {"client_id": $client_id, "count": $count, "end_date": $end_date, "funding_account_id": $funding_account_id, "offset": $offset, "originator_client_id": $originator_client_id, "secret": $secret, "start_date": $start_date} | compact
@@ -5724,8 +5903,9 @@ export def "transfer-sweep-list list" [
 # operationId: userCreate
 export def "user-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5737,7 +5917,7 @@ export def "user-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<request_id: string, user_id: string, user_token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/user/create")
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "secret": $secret} | compact
@@ -5754,8 +5934,9 @@ export def "user-create create" [
 # operationId: walletCreate
 export def "wallet-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5767,7 +5948,7 @@ export def "wallet-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/create")
   let req_body = {"client_id": $client_id, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
@@ -5784,8 +5965,9 @@ export def "wallet-create create" [
 # operationId: walletGet
 export def "wallet-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5797,7 +5979,7 @@ export def "wallet-get get" [
   wallet_id: string # The ID of the e-wallet
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "wallet_id": $wallet_id} | compact
@@ -5814,8 +5996,9 @@ export def "wallet-get get" [
 # operationId: walletList
 export def "wallet-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5829,7 +6012,7 @@ export def "wallet-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<next_cursor: string, request_id: string, wallets: table<balance: record, numbers: record, recipient_id: string, status: string, wallet_id: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/list")
   let req_body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "iso_currency_code": $iso_currency_code, "secret": $secret} | compact
@@ -5848,8 +6031,9 @@ export def "wallet-list list" [
 # --counterparty shape: {name: string, numbers: record}
 export def "wallet-transaction-execute create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5865,7 +6049,7 @@ export def "wallet-transaction-execute create" [
   wallet_id: string # The ID of the e-wallet to debit from
 ]: any -> record<request_id: string, status: string, transaction_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/execute")
   let req_body = {"amount": $amount, "client_id": $client_id, "counterparty": $counterparty, "idempotency_key": $idempotency_key, "reference": $reference, "secret": $secret, "wallet_id": $wallet_id} | compact
@@ -5882,8 +6066,9 @@ export def "wallet-transaction-execute create" [
 # operationId: walletTransactionGet
 export def "wallet-transaction-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5895,7 +6080,7 @@ export def "wallet-transaction-get get" [
   transaction_id: string # The ID of the transaction to fetch
 ]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "transaction_id": $transaction_id} | compact
@@ -5913,8 +6098,9 @@ export def "wallet-transaction-get get" [
 # --options shape: {end_time?: string, start_time?: string}
 export def "wallet-transaction-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5929,7 +6115,7 @@ export def "wallet-transaction-list list" [
   wallet_id: string # The ID of the e-wallet to fetch transactions from
 ]: any -> record<next_cursor: string, request_id: string, transactions: table<amount: record, counterparty: record, created_at: string, last_status_update: string, payment_id: string, reference: string, status: string, transaction_id: string, type: string, wallet_id: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/wallet/transaction/list")
   let req_body = {"client_id": $client_id, "count": $count, "cursor": $cursor, "options": $options, "secret": $secret, "wallet_id": $wallet_id} | compact
@@ -5947,8 +6133,9 @@ export def "wallet-transaction-list list" [
 # --search_terms shape: {country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name: string, phone_number?: string, url?: string}
 export def "watchlist-screening-entity-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5961,7 +6148,7 @@ export def "watchlist-screening-entity-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<assignee: string, audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, client_user_id: string, id: string, request_id: string, search_terms: record<country: string, document_number: string, email_address: string, entity_watchlist_program_id: string, legal_name: string, phone_number: string, url: string, version: float>, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/create")
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
@@ -5978,8 +6165,9 @@ export def "watchlist-screening-entity-create create" [
 # operationId: watchlistScreeningEntityGet
 export def "watchlist-screening-entity-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5991,7 +6179,7 @@ export def "watchlist-screening-entity-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<assignee: string, audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, client_user_id: string, id: string, request_id: string, search_terms: record<country: string, document_number: string, email_address: string, entity_watchlist_program_id: string, legal_name: string, phone_number: string, url: string, version: float>, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/get")
   let req_body = {"client_id": $client_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
@@ -6008,8 +6196,9 @@ export def "watchlist-screening-entity-get get" [
 # operationId: watchlistScreeningEntityHistoryList
 export def "watchlist-screening-entity-history-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6022,7 +6211,7 @@ export def "watchlist-screening-entity-history-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<entity_watchlist_screenings: table<assignee: string, audit_trail: record, client_user_id: string, id: string, search_terms: record, status: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/history/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
@@ -6039,8 +6228,9 @@ export def "watchlist-screening-entity-history-list list" [
 # operationId: watchlistScreeningEntityHitList
 export def "watchlist-screening-entity-hit-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6053,7 +6243,7 @@ export def "watchlist-screening-entity-hit-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<entity_watchlist_screening_hits: table<analysis: record, data: record, first_active: string, historical_since: string, id: string, inactive_since: string, list_code: string, plaid_uid: string, review_status: string, source_uid: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/hit/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
@@ -6070,8 +6260,9 @@ export def "watchlist-screening-entity-hit-list list" [
 # operationId: watchlistScreeningEntityList
 export def "watchlist-screening-entity-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6087,7 +6278,7 @@ export def "watchlist-screening-entity-list list" [
   --status: string@status-completer # A status enum indicating whether a screening is still pending review, has been rejected, or has been cleared. (e.g. cleared)
 ]: any -> record<entity_watchlist_screenings: table<assignee: string, audit_trail: record, client_user_id: string, id: string, search_terms: record, status: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/list")
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret, "status": $status} | compact
@@ -6104,8 +6295,9 @@ export def "watchlist-screening-entity-list list" [
 # operationId: watchlistScreeningEntityProgramGet
 export def "watchlist-screening-entity-program-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6117,7 +6309,7 @@ export def "watchlist-screening-entity-program-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, created_at: string, id: string, is_archived: bool, is_rescanning_enabled: bool, lists_enabled: list<string>, name: string, name_sensitivity: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/program/get")
   let req_body = {"client_id": $client_id, "entity_watchlist_program_id": $entity_watchlist_program_id, "secret": $secret} | compact
@@ -6134,8 +6326,9 @@ export def "watchlist-screening-entity-program-get get" [
 # operationId: watchlistScreeningEntityProgramList
 export def "watchlist-screening-entity-program-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6147,7 +6340,7 @@ export def "watchlist-screening-entity-program-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<entity_watchlist_programs: table<audit_trail: record, created_at: string, id: string, is_archived: bool, is_rescanning_enabled: bool, lists_enabled: list, name: string, name_sensitivity: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/program/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
@@ -6164,8 +6357,9 @@ export def "watchlist-screening-entity-program-list list" [
 # operationId: watchlistScreeningEntityReviewCreate
 export def "watchlist-screening-entity-review-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6180,7 +6374,7 @@ export def "watchlist-screening-entity-review-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, comment: string, confirmed_hits: list<string>, dismissed_hits: list<string>, id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/review/create")
   let req_body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
@@ -6197,8 +6391,9 @@ export def "watchlist-screening-entity-review-create create" [
 # operationId: watchlistScreeningEntityReviewList
 export def "watchlist-screening-entity-review-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6211,7 +6406,7 @@ export def "watchlist-screening-entity-review-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<entity_watchlist_screening_reviews: table<audit_trail: record, comment: string, confirmed_hits: list, dismissed_hits: list, id: string>, next_cursor: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/review/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "secret": $secret} | compact
@@ -6229,8 +6424,9 @@ export def "watchlist-screening-entity-review-list list" [
 # --search_terms shape: {client_id: string, country?: string, document_number?: string, email_address?: string, entity_watchlist_program_id: string, legal_name?: string, phone_number?: string, secret: string, url?: string}
 export def "watchlist-screening-entity-update update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6247,7 +6443,7 @@ export def "watchlist-screening-entity-update update" [
   --status: string@status-completer # A status enum indicating whether a screening is still pending review, has been rejected, or has been cleared. (e.g. cleared)
 ]: any -> record<assignee: string, audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, client_user_id: string, id: string, request_id: string, search_terms: record<country: string, document_number: string, email_address: string, entity_watchlist_program_id: string, legal_name: string, phone_number: string, url: string, version: float>, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/entity/update")
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "entity_watchlist_screening_id": $entity_watchlist_screening_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status} | compact
@@ -6265,8 +6461,9 @@ export def "watchlist-screening-entity-update update" [
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name: string, watchlist_program_id: string}
 export def "watchlist-screening-individual-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6279,7 +6476,7 @@ export def "watchlist-screening-individual-create create" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<assignee: string, audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, client_user_id: string, id: string, request_id: string, search_terms: record<country: string, date_of_birth: string, document_number: string, legal_name: string, version: float, watchlist_program_id: string>, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/create")
   let req_body = {"client_id": $client_id, "client_user_id": $client_user_id, "search_terms": $search_terms, "secret": $secret} | compact
@@ -6296,8 +6493,9 @@ export def "watchlist-screening-individual-create create" [
 # operationId: watchlistScreeningIndividualGet
 export def "watchlist-screening-individual-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6309,7 +6507,7 @@ export def "watchlist-screening-individual-get get" [
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<assignee: string, audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, client_user_id: string, id: string, request_id: string, search_terms: record<country: string, date_of_birth: string, document_number: string, legal_name: string, version: float, watchlist_program_id: string>, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
@@ -6326,8 +6524,9 @@ export def "watchlist-screening-individual-get get" [
 # operationId: watchlistScreeningIndividualHistoryList
 export def "watchlist-screening-individual-history-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6340,7 +6539,7 @@ export def "watchlist-screening-individual-history-list list" [
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<next_cursor: string, request_id: string, watchlist_screenings: table<assignee: string, audit_trail: record, client_user_id: string, id: string, search_terms: record, status: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/history/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
@@ -6357,8 +6556,9 @@ export def "watchlist-screening-individual-history-list list" [
 # operationId: watchlistScreeningIndividualHitList
 export def "watchlist-screening-individual-hit-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6371,7 +6571,7 @@ export def "watchlist-screening-individual-hit-list list" [
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<next_cursor: string, request_id: string, watchlist_screening_hits: table<analysis: record, data: record, first_active: string, historical_since: string, id: string, inactive_since: string, list_code: string, plaid_uid: string, review_status: string, source_uid: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/hit/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
@@ -6388,8 +6588,9 @@ export def "watchlist-screening-individual-hit-list list" [
 # operationId: watchlistScreeningIndividualList
 export def "watchlist-screening-individual-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6405,7 +6606,7 @@ export def "watchlist-screening-individual-list list" [
   watchlist_program_id: string # ID of the associated program. (e.g. prg_2eRPsDnL66rZ7H)
 ]: any -> record<next_cursor: string, request_id: string, watchlist_screenings: table<assignee: string, audit_trail: record, client_user_id: string, id: string, search_terms: record, status: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/list")
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "cursor": $cursor, "secret": $secret, "status": $status, "watchlist_program_id": $watchlist_program_id} | compact
@@ -6422,8 +6623,9 @@ export def "watchlist-screening-individual-list list" [
 # operationId: watchlistScreeningIndividualProgramGet
 export def "watchlist-screening-individual-program-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6435,7 +6637,7 @@ export def "watchlist-screening-individual-program-get get" [
   watchlist_program_id: string # ID of the associated program. (e.g. prg_2eRPsDnL66rZ7H)
 ]: any -> record<audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, created_at: string, id: string, is_archived: bool, is_rescanning_enabled: bool, lists_enabled: list<string>, name: string, name_sensitivity: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/program/get")
   let req_body = {"client_id": $client_id, "secret": $secret, "watchlist_program_id": $watchlist_program_id} | compact
@@ -6452,8 +6654,9 @@ export def "watchlist-screening-individual-program-get get" [
 # operationId: watchlistScreeningIndividualProgramList
 export def "watchlist-screening-individual-program-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6465,7 +6668,7 @@ export def "watchlist-screening-individual-program-list list" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<next_cursor: string, request_id: string, watchlist_programs: table<audit_trail: record, created_at: string, id: string, is_archived: bool, is_rescanning_enabled: bool, lists_enabled: list, name: string, name_sensitivity: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/program/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret} | compact
@@ -6482,8 +6685,9 @@ export def "watchlist-screening-individual-program-list list" [
 # operationId: watchlistScreeningIndividualReviewCreate
 export def "watchlist-screening-individual-review-create create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6498,7 +6702,7 @@ export def "watchlist-screening-individual-review-create create" [
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, comment: string, confirmed_hits: list<string>, dismissed_hits: list<string>, id: string, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/review/create")
   let req_body = {"client_id": $client_id, "comment": $comment, "confirmed_hits": $confirmed_hits, "dismissed_hits": $dismissed_hits, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
@@ -6515,8 +6719,9 @@ export def "watchlist-screening-individual-review-create create" [
 # operationId: watchlistScreeningIndividualReviewList
 export def "watchlist-screening-individual-review-list list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6529,7 +6734,7 @@ export def "watchlist-screening-individual-review-list list" [
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<next_cursor: string, request_id: string, watchlist_screening_reviews: table<audit_trail: record, comment: string, confirmed_hits: list, dismissed_hits: list, id: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/review/list")
   let req_body = {"client_id": $client_id, "cursor": $cursor, "secret": $secret, "watchlist_screening_id": $watchlist_screening_id} | compact
@@ -6547,8 +6752,9 @@ export def "watchlist-screening-individual-review-list list" [
 # --search_terms shape: {country?: string, date_of_birth?: string, document_number?: string, legal_name?: string, watchlist_program_id?: string}
 export def "watchlist-screening-individual-update update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6565,7 +6771,7 @@ export def "watchlist-screening-individual-update update" [
   watchlist_screening_id: string # ID of the associated screening. (e.g. scr_52xR9LKo77r1Np)
 ]: any -> record<assignee: string, audit_trail: record<dashboard_user_id: string, source: string, timestamp: string>, client_user_id: string, id: string, request_id: string, search_terms: record<country: string, date_of_birth: string, document_number: string, legal_name: string, version: float, watchlist_program_id: string>, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/watchlist_screening/individual/update")
   let req_body = {"assignee": $assignee, "client_id": $client_id, "client_user_id": $client_user_id, "reset_fields": $reset_fields, "search_terms": $search_terms, "secret": $secret, "status": $status, "watchlist_screening_id": $watchlist_screening_id} | compact
@@ -6582,8 +6788,9 @@ export def "watchlist-screening-individual-update update" [
 # operationId: webhookVerificationKeyGet
 export def "webhook-verification-key-get get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientid: string # Auth token for clientId (PLAID-CLIENT-ID)
+  --token-plaidversion: string # Auth token for plaidVersion (Plaid-Version)
+  --token-secret: string # Auth token for secret (PLAID-SECRET)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6595,7 +6802,7 @@ export def "webhook-verification-key-get get" [
   --secret: string # Your Plaid API `secret`. The `secret` is required and may be provided either in the `PLAID-SECRET` header or as part of a request body.
 ]: any -> record<key: record<alg: string, created_at: int, crv: string, expired_at: int, kid: string, kty: string, use: string, x: string, y: string>, request_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "plaid-client-id"))
+  let auth = (merge-auth [(build-auth ($token_clientid | default ($env | get -o THE_PLAID_API_CLIENTID_TOKEN | default "")) "plaid-client-id") (build-auth ($token_plaidversion | default ($env | get -o THE_PLAID_API_PLAIDVERSION_TOKEN | default "")) "plaid-version") (build-auth ($token_secret | default ($env | get -o THE_PLAID_API_SECRET_TOKEN | default "")) "plaid-secret")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/webhook_verification_key/get")
   let req_body = {"client_id": $client_id, "key_id": $key_id, "secret": $secret} | compact

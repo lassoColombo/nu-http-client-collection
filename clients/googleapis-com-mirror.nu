@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -166,7 +176,7 @@ export def "accounts create" [
   --features: list<string>
   --password: string
   --user-data: list # item shape: {key?: string, value?: string}
-]: any -> any {
+]: any -> record<authTokens: table<authToken: string, type: string>, features: list<string>, password: string, userData: table<key: string, value: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -188,8 +198,8 @@ export def "accounts create" [
 # operationId: mirror.contacts.list
 export def "contacts list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -203,8 +213,8 @@ export def "contacts list" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<items: table<acceptCommands: list, acceptTypes: list, displayName: string, id: string, imageUrls: list, kind: string, phoneNumber: string, priority: int, sharingFeatures: list, source: string, speakableName: string, type: string>, kind: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp)
@@ -220,8 +230,8 @@ export def "contacts list" [
 # --acceptCommands item shape: {type?: string}
 export def "contacts create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -247,9 +257,9 @@ export def "contacts create" [
   --body-source: string # The ID of the application that created this contact. This is populated by the API
   --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
   --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are: - INDIVIDUAL - Represents a single person. This is the default. - GROUP - Represents more than a single person.
-]: any -> any {
+]: any -> record<acceptCommands: table<type: string>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/contacts" $qp)
@@ -267,8 +277,8 @@ export def "contacts create" [
 export def "contacts delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -283,7 +293,7 @@ export def "contacts delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -300,8 +310,8 @@ export def "contacts delete" [
 export def "contacts get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -315,8 +325,8 @@ export def "contacts get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<acceptCommands: table<type: string>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -334,8 +344,8 @@ export def "contacts get" [
 export def "contacts update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -361,9 +371,9 @@ export def "contacts update-by-id" [
   --body-source: string # The ID of the application that created this contact. This is populated by the API
   --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
   --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are: - INDIVIDUAL - Represents a single person. This is the default. - GROUP - Represents more than a single person.
-]: any -> any {
+]: any -> record<acceptCommands: table<type: string>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -383,8 +393,8 @@ export def "contacts update-by-id" [
 export def "contacts update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -410,9 +420,9 @@ export def "contacts update-by-id-1" [
   --body-source: string # The ID of the application that created this contact. This is populated by the API
   --speakable-name: string # Name of this contact as it should be pronounced. If this contact's name must be spoken as part of a voice disambiguation menu, this name is used as the expected pronunciation. This is useful for contact names with unpronounceable characters or whose display spelling is otherwise not phonetic.
   --type: string # The type for this contact. This is used for sorting in UIs. Allowed values are: - INDIVIDUAL - Represents a single person. This is the default. - GROUP - Represents more than a single person.
-]: any -> any {
+]: any -> record<acceptCommands: table<type: string>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -430,8 +440,8 @@ export def "contacts update-by-id-1" [
 # operationId: mirror.locations.list
 export def "locations list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -445,8 +455,8 @@ export def "locations list" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<items: table<accuracy: float, address: string, displayName: string, id: string, kind: string, latitude: float, longitude: float, timestamp: string>, kind: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/locations" $qp)
@@ -462,8 +472,8 @@ export def "locations list" [
 export def "locations get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -477,8 +487,8 @@ export def "locations get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<accuracy: float, address: string, displayName: string, id: string, kind: string, latitude: float, longitude: float, timestamp: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -495,8 +505,8 @@ export def "locations get" [
 export def "settings get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -510,8 +520,8 @@ export def "settings get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<id: string, kind: string, value: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -527,8 +537,8 @@ export def "settings get" [
 # operationId: mirror.subscriptions.list
 export def "subscriptions list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -542,8 +552,8 @@ export def "subscriptions list" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<items: table<callbackUrl: string, collection: string, id: string, kind: string, notification: record, operation: list, updated: string, userToken: string, verifyToken: string>, kind: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
@@ -559,8 +569,8 @@ export def "subscriptions list" [
 # --notification shape: {collection?: string, itemId?: string, operation?: string, userActions?: list, userToken?: string, verifyToken?: string}
 export def "subscriptions create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -583,9 +593,9 @@ export def "subscriptions create" [
   --updated: string # The time at which this subscription was last modified, formatted according to RFC 3339. (format: date-time)
   --user-token: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
   --verify-token: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
-]: any -> any {
+]: any -> record<callbackUrl: string, collection: string, id: string, kind: string, notification: record<collection: string, itemId: string, operation: string, userActions: list<record>, userToken: string, verifyToken: string>, operation: list<string>, updated: string, userToken: string, verifyToken: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/subscriptions" $qp)
@@ -603,8 +613,8 @@ export def "subscriptions create" [
 export def "subscriptions delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -619,7 +629,7 @@ export def "subscriptions delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -637,8 +647,8 @@ export def "subscriptions delete" [
 export def "subscriptions update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -661,9 +671,9 @@ export def "subscriptions update" [
   --updated: string # The time at which this subscription was last modified, formatted according to RFC 3339. (format: date-time)
   --user-token: string # An opaque token sent to the subscriber in notifications so that it can determine the ID of the user.
   --verify-token: string # A secret token sent to the subscriber in notifications so that it can verify that the notification was generated by Google.
-]: any -> any {
+]: any -> record<callbackUrl: string, collection: string, id: string, kind: string, notification: record<collection: string, itemId: string, operation: string, userActions: list<record>, userToken: string, verifyToken: string>, operation: list<string>, updated: string, userToken: string, verifyToken: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -681,8 +691,8 @@ export def "subscriptions update" [
 # operationId: mirror.timeline.list
 export def "timeline list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -703,8 +713,8 @@ export def "timeline list" [
   --page-token: string # Token for the page of results to return.
   --pinned-only: oneof<nothing, bool> # If true, only pinned items will be returned.
   --source-item-id: string # If provided, only items with the given sourceItemId will be returned.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<items: table<attachments: list, bundleId: string, canonicalUrl: string, created: string, creator: record, displayTime: string, etag: string, html: string, id: string, inReplyTo: string, isBundleCover: bool, isDeleted: bool, isPinned: bool, kind: string, location: record, menuItems: list, notification: record, pinScore: int, recipients: list, selfLink: string, sourceItemId: string, speakableText: string, speakableType: string, text: string, title: string, updated: string>, kind: string, nextPageToken: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar") (serialize-qp "bundleId" $bundle_id "scalar") (serialize-qp "includeDeleted" $include_deleted "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "orderBy" $order_by "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "pinnedOnly" $pinned_only "scalar") (serialize-qp "sourceItemId" $source_item_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeline" $qp)
@@ -719,8 +729,8 @@ export def "timeline list" [
 # operationId: mirror.timeline.insert
 export def "timeline create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -735,9 +745,9 @@ export def "timeline create" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --body: any
-]: any -> any {
+]: any -> record<attachments: table<contentType: string, contentUrl: string, id: string, isProcessingContent: bool>, bundleId: string, canonicalUrl: string, created: string, creator: record<acceptCommands: list<record>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string>, displayTime: string, etag: string, html: string, id: string, inReplyTo: string, isBundleCover: bool, isDeleted: bool, isPinned: bool, kind: string, location: record<accuracy: float, address: string, displayName: string, id: string, kind: string, latitude: float, longitude: float, timestamp: string>, menuItems: table<action: string, contextual_command: string, id: string, payload: string, removeWhenSelected: bool, values: list>, notification: record<deliveryTime: string, level: string>, pinScore: int, recipients: table<acceptCommands: list, acceptTypes: list, displayName: string, id: string, imageUrls: list, kind: string, phoneNumber: string, priority: int, sharingFeatures: list, source: string, speakableName: string, type: string>, selfLink: string, sourceItemId: string, speakableText: string, speakableType: string, text: string, title: string, updated: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/timeline" $qp)
@@ -755,8 +765,8 @@ export def "timeline create" [
 export def "timeline delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -771,7 +781,7 @@ export def "timeline delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -788,8 +798,8 @@ export def "timeline delete" [
 export def "timeline get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -803,8 +813,8 @@ export def "timeline get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<attachments: table<contentType: string, contentUrl: string, id: string, isProcessingContent: bool>, bundleId: string, canonicalUrl: string, created: string, creator: record<acceptCommands: list<record>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string>, displayTime: string, etag: string, html: string, id: string, inReplyTo: string, isBundleCover: bool, isDeleted: bool, isPinned: bool, kind: string, location: record<accuracy: float, address: string, displayName: string, id: string, kind: string, latitude: float, longitude: float, timestamp: string>, menuItems: table<action: string, contextual_command: string, id: string, payload: string, removeWhenSelected: bool, values: list>, notification: record<deliveryTime: string, level: string>, pinScore: int, recipients: table<acceptCommands: list, acceptTypes: list, displayName: string, id: string, imageUrls: list, kind: string, phoneNumber: string, priority: int, sharingFeatures: list, source: string, speakableName: string, type: string>, selfLink: string, sourceItemId: string, speakableText: string, speakableType: string, text: string, title: string, updated: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -827,8 +837,8 @@ export def "timeline get" [
 export def "timeline update-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -868,9 +878,9 @@ export def "timeline update-by-id" [
   --text: string # Text content of this item.
   --title: string # The title of this item.
   --updated: string # The time at which this item was last modified, formatted according to RFC 3339. (format: date-time)
-]: any -> any {
+]: any -> record<attachments: table<contentType: string, contentUrl: string, id: string, isProcessingContent: bool>, bundleId: string, canonicalUrl: string, created: string, creator: record<acceptCommands: list<record>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string>, displayTime: string, etag: string, html: string, id: string, inReplyTo: string, isBundleCover: bool, isDeleted: bool, isPinned: bool, kind: string, location: record<accuracy: float, address: string, displayName: string, id: string, kind: string, latitude: float, longitude: float, timestamp: string>, menuItems: table<action: string, contextual_command: string, id: string, payload: string, removeWhenSelected: bool, values: list>, notification: record<deliveryTime: string, level: string>, pinScore: int, recipients: table<acceptCommands: list, acceptTypes: list, displayName: string, id: string, imageUrls: list, kind: string, phoneNumber: string, priority: int, sharingFeatures: list, source: string, speakableName: string, type: string>, selfLink: string, sourceItemId: string, speakableText: string, speakableType: string, text: string, title: string, updated: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -889,8 +899,8 @@ export def "timeline update-by-id" [
 export def "timeline update-by-id-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -905,9 +915,9 @@ export def "timeline update-by-id-1" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --body: any
-]: any -> any {
+]: any -> record<attachments: table<contentType: string, contentUrl: string, id: string, isProcessingContent: bool>, bundleId: string, canonicalUrl: string, created: string, creator: record<acceptCommands: list<record>, acceptTypes: list<string>, displayName: string, id: string, imageUrls: list<string>, kind: string, phoneNumber: string, priority: int, sharingFeatures: list<string>, source: string, speakableName: string, type: string>, displayTime: string, etag: string, html: string, id: string, inReplyTo: string, isBundleCover: bool, isDeleted: bool, isPinned: bool, kind: string, location: record<accuracy: float, address: string, displayName: string, id: string, kind: string, latitude: float, longitude: float, timestamp: string>, menuItems: table<action: string, contextual_command: string, id: string, payload: string, removeWhenSelected: bool, values: list>, notification: record<deliveryTime: string, level: string>, pinScore: int, recipients: table<acceptCommands: list, acceptTypes: list, displayName: string, id: string, imageUrls: list, kind: string, phoneNumber: string, priority: int, sharingFeatures: list, source: string, speakableName: string, type: string>, selfLink: string, sourceItemId: string, speakableText: string, speakableType: string, text: string, title: string, updated: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -926,8 +936,8 @@ export def "timeline update-by-id-1" [
 export def "timeline-attachments list" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -941,8 +951,8 @@ export def "timeline-attachments list" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<items: table<contentType: string, contentUrl: string, id: string, isProcessingContent: bool>, kind: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -959,8 +969,8 @@ export def "timeline-attachments list" [
 export def "timeline-attachments create" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -974,8 +984,8 @@ export def "timeline-attachments create" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<contentType: string, contentUrl: string, id: string, isProcessingContent: bool> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   let qp = [(serialize-qp "alt" $alt "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "userIp" $user_ip "scalar")] | flatten | str join "&"
@@ -993,8 +1003,8 @@ export def "timeline-attachments delete" [
   item_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1009,7 +1019,7 @@ export def "timeline-attachments delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }
@@ -1028,8 +1038,8 @@ export def "timeline-attachments get" [
   item_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1043,8 +1053,8 @@ export def "timeline-attachments get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<contentType: string, contentUrl: string, id: string, isProcessingContent: bool> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o GOOGLE_MIRROR_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o GOOGLE_MIRROR_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachmentId' must be non-empty" } }

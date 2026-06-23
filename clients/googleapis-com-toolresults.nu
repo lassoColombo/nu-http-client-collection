@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -145,8 +155,8 @@ export def commands []: nothing -> table {
 export def "toolresults-v1beta3-projects-histories list" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -168,7 +178,7 @@ export def "toolresults-v1beta3-projects-histories list" [
   --page-size: int # The maximum number of Histories to fetch. Default value: 20. The server will use this default if the field is not set or has a value of 0. Any value greater than 100 will be treated as 100. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
 ]: nothing -> record<histories: table<displayName: string, historyId: string, name: string, testPlatform: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "filterByName" $filter_by_name "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -185,8 +195,8 @@ export def "toolresults-v1beta3-projects-histories list" [
 export def "toolresults-v1beta3-projects-histories create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -211,7 +221,7 @@ export def "toolresults-v1beta3-projects-histories create" [
   --test-platform: string@test-platform-completer # The platform of the test history. - In response: always set. Returns the platform of the last execution if unknown.
 ]: any -> record<displayName: string, historyId: string, name: string, testPlatform: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "requestId" $request_id "scalar")] | flatten | str join "&"
@@ -231,8 +241,8 @@ export def "toolresults-v1beta3-projects-histories get" [
   project_id: string
   history_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -251,7 +261,7 @@ export def "toolresults-v1beta3-projects-histories get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<displayName: string, historyId: string, name: string, testPlatform: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -270,8 +280,8 @@ export def "toolresults-v1beta3-projects-histories-executions list" [
   project_id: string
   history_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -292,7 +302,7 @@ export def "toolresults-v1beta3-projects-histories-executions list" [
   --page-size: int # The maximum number of Executions to fetch. Default value: 25. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
 ]: nothing -> record<executions: table<completionTime: record, creationTime: record, dimensionDefinitions: list, executionId: string, outcome: record, specification: record, state: string, testExecutionMatrixId: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -315,8 +325,8 @@ export def "toolresults-v1beta3-projects-histories-executions create" [
   project_id: string
   history_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -345,7 +355,7 @@ export def "toolresults-v1beta3-projects-histories-executions create" [
   --test-execution-matrix-id: string # TestExecution Matrix ID that the TestExecutionService uses. - In response: present if set by create - In create: optional - In update: never set
 ]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -367,8 +377,8 @@ export def "toolresults-v1beta3-projects-histories-executions get" [
   history_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -387,7 +397,7 @@ export def "toolresults-v1beta3-projects-histories-executions get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -412,8 +422,8 @@ export def "toolresults-v1beta3-projects-histories-executions update" [
   history_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -442,7 +452,7 @@ export def "toolresults-v1beta3-projects-histories-executions update" [
   --test-execution-matrix-id: string # TestExecution Matrix ID that the TestExecutionService uses. - In response: present if set by create - In create: optional - In update: never set
 ]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionDefinitions: list<record>, executionId: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, specification: record<androidTest: record<androidAppInfo: record, androidInstrumentationTest: record, androidRoboTest: record, androidTestLoop: record, testTimeout: record>, iosTest: record<iosAppInfo: record, iosRoboTest: record, iosTestLoop: record, iosXcTest: record, testTimeout: record>>, state: string, testExecutionMatrixId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -465,8 +475,8 @@ export def "toolresults-v1beta3-projects-histories-executions-clusters list" [
   history_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -485,7 +495,7 @@ export def "toolresults-v1beta3-projects-histories-executions-clusters list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<clusters: table<activity: string, clusterId: string, keyScreen: record, screens: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -507,8 +517,8 @@ export def "toolresults-v1beta3-projects-histories-executions-clusters get" [
   execution_id: string
   cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -527,7 +537,7 @@ export def "toolresults-v1beta3-projects-histories-executions-clusters get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<activity: string, clusterId: string, keyScreen: record<fileReference: string, locale: string, model: string, version: string>, screens: table<fileReference: string, locale: string, model: string, version: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -549,8 +559,8 @@ export def "toolresults-v1beta3-projects-histories-executions-environments list"
   history_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -571,7 +581,7 @@ export def "toolresults-v1beta3-projects-histories-executions-environments list"
   --page-size: int # The maximum number of Environments to fetch. Default value: 25. The server will use this default if the field is not set or has a value of 0.
   --page-token: string # A continuation token to resume the query at the next item.
 ]: nothing -> record<environments: table<completionTime: record, creationTime: record, dimensionValue: list, displayName: string, environmentId: string, environmentResult: record, executionId: string, historyId: string, projectId: string, resultsStorage: record, shardSummaries: list>, executionId: string, historyId: string, nextPageToken: string, projectId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -593,8 +603,8 @@ export def "toolresults-v1beta3-projects-histories-executions-environments get" 
   execution_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -613,7 +623,7 @@ export def "toolresults-v1beta3-projects-histories-executions-environments get" 
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, displayName: string, environmentId: string, environmentResult: record<outcome: record<failureDetail: record, inconclusiveDetail: record, skippedDetail: record, successDetail: record, summary: string>, state: string, testSuiteOverviews: list<record>>, executionId: string, historyId: string, projectId: string, resultsStorage: record<resultsStoragePath: record<fileUri: string>, xunitXmlFile: record<fileUri: string>>, shardSummaries: table<runs: list, shardResult: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -635,8 +645,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps list" [
   history_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -657,7 +667,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps list" [
   --page-size: int # The maximum number of Steps to fetch. Default value: 25. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
 ]: nothing -> record<nextPageToken: string, steps: table<completionTime: record, creationTime: record, description: string, deviceUsageDuration: record, dimensionValue: list, hasImages: bool, labels: list, multiStep: record, name: string, outcome: record, runDuration: record, state: string, stepId: string, testExecutionStep: record, toolExecutionStep: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -688,8 +698,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps create" [
   history_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -725,7 +735,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps create" [
   --tool-execution-step: record # Generic tool step to be used for binaries we do not explicitly support. For example: running cp to copy artifacts from one location to another. — shape: {toolExecution?: record}
 ]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -749,8 +759,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps get" [
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -769,7 +779,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -802,8 +812,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps update" [
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -839,7 +849,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps update" [
   --tool-execution-step: record # Generic tool step to be used for binaries we do not explicitly support. For example: running cp to copy artifacts from one location to another. — shape: {toolExecution?: record}
 ]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -864,8 +874,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -884,7 +894,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -910,8 +920,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -939,7 +949,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-metrics
   --body-step-id: string # A tool results step ID. @OutputOnly
 ]: any -> record<appStartTime: record<fullyDrawnTime: record<nanos: int, seconds: string>, initialDisplayTime: record<nanos: int, seconds: string>>, executionId: string, graphicsStats: record<buckets: list<record>, highInputLatencyCount: string, jankyFrames: string, missedVsyncCount: string, p50Millis: string, p90Millis: string, p95Millis: string, p99Millis: string, slowBitmapUploadCount: string, slowDrawCount: string, slowUiThreadCount: string, totalFrames: string>, historyId: string, perfEnvironment: record<cpuInfo: record<cpuProcessor: string, cpuSpeedInGhz: float, numberOfCores: int>, memoryInfo: record<memoryCapInKibibyte: string, memoryTotalInKibibyte: string>>, perfMetrics: list<string>, projectId: string, stepId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -964,8 +974,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -985,7 +995,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --filter: list<string> # Specify one or more PerfMetricType values such as CPU to filter the result
 ]: nothing -> record<perfSampleSeries: table<basicPerfSampleSeries: record, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1009,8 +1019,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1036,7 +1046,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   --body-step-id: string # A tool results step ID. @OutputOnly
 ]: any -> record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1062,8 +1072,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   step_id: string
   sample_series_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1082,7 +1092,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<basicPerfSampleSeries: record<perfMetricType: string, perfUnit: string, sampleSeriesLabel: string>, executionId: string, historyId: string, projectId: string, sampleSeriesId: string, stepId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1107,8 +1117,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   step_id: string
   sample_series_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1129,7 +1139,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   --page-size: int # The default page size is 500 samples, and the maximum size is 5000. If the page_size is greater than 5000, the effective page size will be 5000
   --page-token: string # Optional, the next_page_token returned in the previous response
 ]: nothing -> record<nextPageToken: string, perfSamples: table<sampleTime: record, value: float>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1155,8 +1165,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   step_id: string
   sample_series_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1177,7 +1187,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-perf-sample-
   --perf-samples: list # The set of PerfSamples to create should not include existing timestamps — item shape: {sampleTime?: record, value?: float}
 ]: any -> record<perfSamples: table<sampleTime: record, value: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1203,8 +1213,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases l
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1225,7 +1235,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases l
   --page-size: int # The maximum number of TestCases to fetch. Default value: 100. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
 ]: nothing -> record<nextPageToken: string, testCases: table<elapsedTime: record, endTime: record, skippedMessage: string, stackTraces: list, startTime: record, status: string, testCaseId: string, testCaseReference: record, toolOutputs: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1249,8 +1259,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases g
   step_id: string
   test_case_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1269,7 +1279,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-test-cases g
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<elapsedTime: record<nanos: int, seconds: string>, endTime: record<nanos: int, seconds: string>, skippedMessage: string, stackTraces: table<exception: string>, startTime: record<nanos: int, seconds: string>, status: string, testCaseId: string, testCaseReference: record<className: string, name: string, testSuiteName: string>, toolOutputs: table<creationTime: record, output: record, testCase: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1293,8 +1303,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-thumbnails l
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1315,7 +1325,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps-thumbnails l
   --page-size: int # The maximum number of thumbnails to fetch. Default value: 50. The server will use this default if the field is not set or has a value of 0. Optional.
   --page-token: string # A continuation token to resume the query at the next item. Optional.
 ]: nothing -> record<nextPageToken: string, thumbnails: table<error: record, sourceImage: record, stepId: string, thumbnail: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1339,8 +1349,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps publish-xuni
   execution_id: string
   step_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1361,7 +1371,7 @@ export def "toolresults-v1beta3-projects-histories-executions-steps publish-xuni
   --xunit-xml-files: list # URI of the Xunit XML files to publish. The maximum size of the file this reference is pointing to is 50MB. Required. — item shape: {fileUri?: string}
 ]: any -> record<completionTime: record<nanos: int, seconds: string>, creationTime: record<nanos: int, seconds: string>, description: string, deviceUsageDuration: record<nanos: int, seconds: string>, dimensionValue: table<key: string, value: string>, hasImages: bool, labels: table<key: string, value: string>, multiStep: record<multistepNumber: int, primaryStep: record<individualOutcome: list, rollUp: string>, primaryStepId: string>, name: string, outcome: record<failureDetail: record<crashed: bool, deviceOutOfMemory: bool, failedRoboscript: bool, notInstalled: bool, otherNativeCrash: bool, timedOut: bool, unableToCrawl: bool>, inconclusiveDetail: record<abortedByUser: bool, hasErrorLogs: bool, infrastructureFailure: bool>, skippedDetail: record<incompatibleAppVersion: bool, incompatibleArchitecture: bool, incompatibleDevice: bool>, successDetail: record<otherNativeCrash: bool>, summary: string>, runDuration: record<nanos: int, seconds: string>, state: string, stepId: string, testExecutionStep: record<testIssues: list<record>, testSuiteOverviews: list<record>, testTiming: record<testProcessDuration: record>, toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>, toolExecutionStep: record<toolExecution: record<commandLineArguments: list, exitCode: record, toolLogs: list, toolOutputs: list>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   if ($history_id | is-empty) { error make --unspanned { msg: "path parameter 'historyId' must be non-empty" } }
@@ -1383,8 +1393,8 @@ export def "toolresults-v1beta3-projects-histories-executions-steps publish-xuni
 export def "toolresults-v1beta3-projects-settings get" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1403,7 +1413,7 @@ export def "toolresults-v1beta3-projects-settings get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<defaultBucket: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1420,8 +1430,8 @@ export def "toolresults-v1beta3-projects-settings get" [
 export def "toolresults-v1beta3-projects create-initialize-settings" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1440,7 +1450,7 @@ export def "toolresults-v1beta3-projects create-initialize-settings" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<defaultBucket: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1457,8 +1467,8 @@ export def "toolresults-v1beta3-projects create-initialize-settings" [
 export def "toolresults-v1beta3 get-accessibility-clusters" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1478,7 +1488,7 @@ export def "toolresults-v1beta3 get-accessibility-clusters" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --locale: string # The accepted format is the canonical Unicode format with hyphen as a delimiter. Language must be lowercase, Language Script - Capitalized, Region - UPPERCASE. See http://www.unicode.org/reports/tr35/#Unicode_locale_identifier for details. Required.
 ]: nothing -> record<clusters: table<category: string, suggestions: list>, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CLOUD_TOOL_RESULTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "locale" $locale "scalar")] | flatten | str join "&"

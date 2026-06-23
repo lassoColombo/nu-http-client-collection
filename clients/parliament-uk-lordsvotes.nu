@@ -266,7 +266,7 @@ export def "data-divisions-search-total-results get" [
   --total-votes-cast-value-to-compare: int # value to compare to with the operator provided (format: int32)
   --majority-comparator: string@majority-comparator-completer # comparison operator to use
   --majority-value-to-compare: int # value to compare to with the operator provided (format: int32)
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SearchTerm" $search_term "scalar") (serialize-qp "MemberId" $member_id "scalar") (serialize-qp "IncludeWhenMemberWasTeller" $include_when_member_was_teller "scalar") (serialize-qp "StartDate" $start_date "scalar") (serialize-qp "EndDate" $end_date "scalar") (serialize-qp "DivisionNumber" $division_number "scalar") (serialize-qp "TotalVotesCast.Comparator" $total_votes_cast_comparator "scalar") (serialize-qp "TotalVotesCast.ValueToCompare" $total_votes_cast_value_to_compare "scalar") (serialize-qp "Majority.Comparator" $majority_comparator "scalar") (serialize-qp "Majority.ValueToCompare" $majority_value_to_compare "scalar")] | flatten | str join "&"

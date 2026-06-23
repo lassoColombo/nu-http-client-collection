@@ -20,6 +20,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -184,8 +194,9 @@ export def commands []: nothing -> table {
 # operationId: GetApp
 export def "app get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -193,7 +204,7 @@ export def "app get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<app: record<agora_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, async_url_enrich_enabled: bool, auto_translation_enabled: bool, before_message_send_hook_url: string, campaign_enabled: bool, cdn_expiration_seconds: float, channel_configs: record, custom_action_handler_url: string, disable_auth_checks: bool, disable_permissions_checks: bool, enforce_unique_usernames: string, file_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, grants: record, hms_options: record<app_certificate: string, app_id: string, default_role: string, role_map: record>, image_moderation_enabled: bool, image_moderation_labels: list<string>, image_upload_config: record<allowed_file_extensions: list, allowed_mime_types: list, blocked_file_extensions: list, blocked_mime_types: list>, multi_tenant_enabled: bool, name: string, organization: string, permission_version: string, policies: record, push_notifications: record<apn: record, firebase: record, huawei: record, offline_only: bool, providers: list, version: string, xiaomi: record>, reminders_interval: float, revoke_tokens_issued_before: string, search_backend: string, sqs_key: string, sqs_secret: string, sqs_url: string, suspended: bool, suspended_explanation: string, user_search_disallowed_roles: list<string>, video_provider: string, webhook_events: list<string>, webhook_url: string>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app")
   let accept_val = "application/json"
@@ -217,8 +228,9 @@ export def "app get" [
 # --xiaomi_config shape: {Disabled?: bool, package_name?: string, secret?: string}
 export def "app update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -262,7 +274,7 @@ export def "app update" [
   --xiaomi-config: record # shape: {Disabled?: bool, package_name?: string, secret?: string}
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/app")
   let req_body = {"agora_options": $agora_options, "apn_config": $apn_config, "async_moderation_config": $async_moderation_config, "async_url_enrich_enabled": $async_url_enrich_enabled, "auto_translation_enabled": $auto_translation_enabled, "before_message_send_hook_url": $before_message_send_hook_url, "cdn_expiration_seconds": $cdn_expiration_seconds, "channel_hide_members_only": $channel_hide_members_only, "custom_action_handler_url": $custom_action_handler_url, "disable_auth_checks": $disable_auth_checks, "disable_permissions_checks": $disable_permissions_checks, "enforce_unique_usernames": $enforce_unique_usernames, "file_upload_config": $file_upload_config, "firebase_config": $firebase_config, "grants": $grants, "hms_options": $hms_options, "huawei_config": $huawei_config, "image_moderation_block_labels": $image_moderation_block_labels, "image_moderation_enabled": $image_moderation_enabled, "image_moderation_labels": $image_moderation_labels, "image_upload_config": $image_upload_config, "migrate_permissions_to_v2": $migrate_permissions_to_v2, "multi_tenant_enabled": $multi_tenant_enabled, "permission_version": $permission_version, "push_config": $push_config, "reminders_interval": $reminders_interval, "revoke_tokens_issued_before": $revoke_tokens_issued_before, "sqs_key": $sqs_key, "sqs_secret": $sqs_secret, "sqs_url": $sqs_url, "user_search_disallowed_roles": $user_search_disallowed_roles, "video_provider": $video_provider, "webhook_events": $webhook_events, "webhook_url": $webhook_url, "xiaomi_config": $xiaomi_config} | compact
@@ -278,8 +290,9 @@ export def "app update" [
 # operationId: ListBlockLists
 export def "blocklists list-block-lists" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -287,7 +300,7 @@ export def "blocklists list-block-lists" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocklists: table<created_at: string, name: string, updated_at: string, words: list>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/blocklists")
   let accept_val = "application/json"
@@ -301,8 +314,9 @@ export def "blocklists list-block-lists" [
 # operationId: CreateBlockList
 export def "blocklists create-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -313,7 +327,7 @@ export def "blocklists create-block-list" [
   words: list<string> # List of words to block
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/blocklists")
   let req_body = {"name": $name, "words": $words} | compact
@@ -330,8 +344,9 @@ export def "blocklists create-block-list" [
 export def "blocklists delete-block-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -339,7 +354,7 @@ export def "blocklists delete-block-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}"))
@@ -355,8 +370,9 @@ export def "blocklists delete-block-list" [
 export def "blocklists get-block-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -364,7 +380,7 @@ export def "blocklists get-block-list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<blocklist: record<created_at: string, name: string, updated_at: string, words: list<string>>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}"))
@@ -380,8 +396,9 @@ export def "blocklists get-block-list" [
 export def "blocklists update-block-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -392,7 +409,7 @@ export def "blocklists update-block-list" [
   --words: list<string>
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/blocklists/{name}"))
@@ -410,8 +427,9 @@ export def "blocklists update-block-list" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "calls get-token" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -422,7 +440,7 @@ export def "calls get-token" [
   --user-id: string # **Server-side only**. User ID which server acts upon
 ]: any -> record<agora_app_id: string, agora_uid: float, duration: string, token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/calls/")
   let req_body = {"user": $user, "user_id": $user_id} | compact
@@ -440,8 +458,9 @@ export def "calls get-token" [
 export def "calls get-token-by-call-id" [
   call_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -452,7 +471,7 @@ export def "calls get-token-by-call-id" [
   --user-id: string # **Server-side only**. User ID which server acts upon
 ]: any -> record<agora_app_id: string, agora_uid: float, duration: string, token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($call_id | is-empty) { error make --unspanned { msg: "path parameter 'call_id' must be non-empty" } }
   let full_url = (build-url $base ({call_id: (encode-path-segment $call_id)} | format pattern "/calls/{call_id}"))
@@ -469,8 +488,9 @@ export def "calls get-token-by-call-id" [
 # operationId: QueryCampaigns
 export def "campaigns list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -479,7 +499,7 @@ export def "campaigns list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<campaigns: table<attachments: list, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, channels: record, duration: string, segments: record, users: record> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/campaigns" $qp)
@@ -495,8 +515,9 @@ export def "campaigns list" [
 # --campaign shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name: string, segment_id: string, sender_id: string, text: string}
 export def "campaigns create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -506,7 +527,7 @@ export def "campaigns create" [
   campaign: record # shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name: string, segment_id: string, sender_id: string, text: string}
 ]: any -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/campaigns")
   let req_body = {"campaign": $campaign} | compact
@@ -523,8 +544,9 @@ export def "campaigns create" [
 export def "campaigns delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -533,7 +555,7 @@ export def "campaigns delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --recipients: string
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "recipients" $recipients "scalar")] | flatten | str join "&"
@@ -551,8 +573,9 @@ export def "campaigns delete" [
 export def "campaigns update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -562,7 +585,7 @@ export def "campaigns update" [
   campaign: record # shape: {attachments?: list, channel_type?: string, defaults?: record, description?: string, name?: string, segment_id?: string, sender_id?: string, text?: string}
 ]: any -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}"))
@@ -580,8 +603,9 @@ export def "campaigns update" [
 export def "campaigns-resume update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -589,7 +613,7 @@ export def "campaigns-resume update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/resume"))
@@ -605,8 +629,9 @@ export def "campaigns-resume update" [
 export def "campaigns-schedule update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -616,7 +641,7 @@ export def "campaigns-schedule update" [
   --scheduled-for: float
 ]: any -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/schedule"))
@@ -634,8 +659,9 @@ export def "campaigns-schedule update" [
 export def "campaigns-stop stop" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -643,7 +669,7 @@ export def "campaigns-stop stop" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<campaign: record<attachments: list<record>, channel_type: string, completed_at: string, created_at: string, defaults: record, description: string, details: string, errored_messages: float, failed_at: string, id: string, name: string, resumed_at: string, scheduled_at: string, scheduled_for: string, segment_id: string, sender_id: string, sent_messages: float, status: string, stopped_at: string, task_id: string, text: string, updated_at: string>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/stop"))
@@ -659,8 +685,9 @@ export def "campaigns-stop stop" [
 export def "campaigns-test test" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -670,7 +697,7 @@ export def "campaigns-test test" [
   users: list<string>
 ]: any -> record<details: string, duration: string, results: record, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/campaigns/{id}/test"))
@@ -689,8 +716,9 @@ export def "campaigns-test test" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "channels list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -714,7 +742,7 @@ export def "channels list" [
   --watch: oneof<nothing, bool> # Whether to start watching found channels or not
 ]: any -> record<channels: table<channel: record, hidden: bool, hide_messages_before: string, members: list, membership: record, messages: list, pending_messages: list, pinned_messages: list, read: list, watcher_count: float, watchers: list>, duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/channels" $qp)
@@ -731,8 +759,9 @@ export def "channels list" [
 # operationId: DeleteChannels
 export def "channels-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -743,7 +772,7 @@ export def "channels-delete delete" [
   --hard-delete: oneof<nothing, bool> # Specify if channels and all ressources should be hard deleted
 ]: any -> record<duration: string, result: record, task_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/delete")
   let req_body = {"cids": $cids, "hard_delete": $hard_delete} | compact
@@ -760,8 +789,9 @@ export def "channels-delete delete" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "channels-read get-mark" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -772,7 +802,7 @@ export def "channels-read get-mark" [
   --user-id: string
 ]: any -> record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channels/read")
   let req_body = {"user": $user, "user_id": $user_id} | compact
@@ -793,8 +823,9 @@ export def "channels-read get-mark" [
 export def "channels-query get-or-create-by-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -814,7 +845,7 @@ export def "channels-query get-or-create-by-type" [
   --watchers: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   let qp = [(serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
@@ -834,8 +865,9 @@ export def "channels delete" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -844,7 +876,7 @@ export def "channels delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hard-delete: string
 ]: nothing -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -864,8 +896,9 @@ export def "channels update-partial" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -878,7 +911,7 @@ export def "channels update-partial" [
   --user-id: string
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -904,8 +937,9 @@ export def "channels update" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -929,7 +963,7 @@ export def "channels update" [
   --user-id: string
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -950,8 +984,9 @@ export def "channels-call create" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -965,7 +1000,7 @@ export def "channels-call create" [
   --user-id: string # **Server-side only**. User ID which server acts upon
 ]: any -> record<agora_app_id: string, agora_uid: float, call: record<agora: record<channel: string>, hms: record<room_id: string, room_name: string>, id: string, provider: string, type: string>, duration: string, token: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -986,8 +1021,9 @@ export def "channels-event send" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -997,7 +1033,7 @@ export def "channels-event send" [
   event: record # Represents an BaseEvent that happened in Stream Chat — shape: {automoderation?: bool, automoderation_scores?: record, channel?: record, channel_id?: string, channel_type?: string, cid?: string, connection_id?: string, created_at?: string, created_by?: record, me?: record, member?: record, message?: record, parent_id?: string, reaction?: record, reason?: string, team?: string, type: string, user?: record, user_id?: string, watcher_count?: float}
 ]: any -> record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1017,8 +1053,9 @@ export def "channels-file delete" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1027,7 +1064,7 @@ export def "channels-file delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1047,8 +1084,9 @@ export def "channels-file upload" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1059,7 +1097,7 @@ export def "channels-file upload" [
   --user: record # shape: {id: string}
 ]: any -> record<duration: string, file: string, thumb_url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1082,8 +1120,9 @@ export def "channels-hide create" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1095,7 +1134,7 @@ export def "channels-hide create" [
   --user-id: string
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1115,8 +1154,9 @@ export def "channels-image delete" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1125,7 +1165,7 @@ export def "channels-image delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1146,8 +1186,9 @@ export def "channels-image upload" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1159,7 +1200,7 @@ export def "channels-image upload" [
   --user: record # shape: {id: string}
 ]: any -> record<duration: string, file: string, thumb_url: string, upload_sizes: table<crop: string, height: float, resize: string, width: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1182,8 +1223,9 @@ export def "channels-message send" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1198,7 +1240,7 @@ export def "channels-message send" [
   --skip-push: oneof<nothing, bool> # Disables all push notifications for this message
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1218,8 +1260,9 @@ export def "channels-messages get-many" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1228,7 +1271,7 @@ export def "channels-messages get-many" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: string
 ]: nothing -> record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1251,8 +1294,9 @@ export def "channels-query get-or-create-by-type-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1272,7 +1316,7 @@ export def "channels-query get-or-create-by-type-id" [
   --watchers: record # shape: {id_gt?: float, id_gte?: float, id_lt?: float, id_lte?: float, limit?: float, offset?: float}
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, hidden: bool, hide_messages_before: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, membership: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, pending_messages: table<channel: record, message: record, metadata: record, user: record>, pinned_messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, read: table<last_read: string, unread_messages: float, user: record>, watcher_count: float, watchers: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1294,8 +1338,9 @@ export def "channels-read get-mark-by-type-id" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1307,7 +1352,7 @@ export def "channels-read get-mark-by-type-id" [
   --user-id: string
 ]: any -> record<duration: string, event: record<automoderation: bool, automoderation_scores: record<action: string, explicit: float, spam: float, toxic: float>, channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, me: record<banned: bool, channel_mutes: list, created_at: string, deactivated_at: string, deleted_at: string, devices: list, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list, mutes: list, online: bool, push_notifications: record, role: string, teams: list, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>, member: record<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>, message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, parent_id: string, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, reason: string, team: string, type: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string, watcher_count: float>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1328,8 +1373,9 @@ export def "channels-show create" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1340,7 +1386,7 @@ export def "channels-show create" [
   --user-id: string
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1360,8 +1406,9 @@ export def "channels-stop-watching stop" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1374,7 +1421,7 @@ export def "channels-stop-watching stop" [
   --connection-id-body: string #  (body field)
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1397,8 +1444,9 @@ export def "channels-truncate create" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1413,7 +1461,7 @@ export def "channels-truncate create" [
   --user-id: string
 ]: any -> record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record<automod: string, automod_behavior: string, automod_thresholds: record, blocklist: string, blocklist_behavior: string, commands: list, connect_events: bool, created_at: string, custom_events: bool, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool>, cooldown: float, created_at: string, created_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list<record>, mute_expires_at: string, muted: bool, own_capabilities: list<string>, team: string, truncated_at: string, truncated_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, type: string, updated_at: string>, duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1434,8 +1482,9 @@ export def "channels-unread create-mark" [
   type: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1447,7 +1496,7 @@ export def "channels-unread create-mark" [
   --user-id: string
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1465,8 +1514,9 @@ export def "channels-unread create-mark" [
 # operationId: ListChannelTypes
 export def "channeltypes list-channel-types" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1474,7 +1524,7 @@ export def "channeltypes list-channel-types" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<channel_types: record, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channeltypes")
   let accept_val = "application/json"
@@ -1489,8 +1539,9 @@ export def "channeltypes list-channel-types" [
 # --permissions item shape: {action?: "Deny"|"Allow", name: string, owner?: bool, priority: float, resources?: list<string>, roles?: list<string>}
 export def "channeltypes create-channel-type" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1520,7 +1571,7 @@ export def "channeltypes create-channel-type" [
   --url-enrichment: oneof<nothing, bool> # Enables URL enrichment
 ]: any -> record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/channeltypes")
   let req_body = {"automod": $automod, "automod_behavior": $automod_behavior, "blocklist": $blocklist, "blocklist_behavior": $blocklist_behavior, "commands": $commands, "connect_events": $connect_events, "custom_events": $custom_events, "grants": $grants, "max_message_length": $max_message_length, "message_retention": $message_retention, "mutes": $mutes, "name": $name, "permissions": $permissions, "push_notifications": $push_notifications, "reactions": $reactions, "read_events": $read_events, "replies": $replies, "search": $search, "typing_events": $typing_events, "uploads": $uploads, "url_enrichment": $url_enrichment} | compact
@@ -1537,8 +1588,9 @@ export def "channeltypes create-channel-type" [
 export def "channeltypes delete-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1546,7 +1598,7 @@ export def "channeltypes delete-channel-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}"))
@@ -1562,8 +1614,9 @@ export def "channeltypes delete-channel-type" [
 export def "channeltypes get-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1571,7 +1624,7 @@ export def "channeltypes get-channel-type" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}"))
@@ -1589,8 +1642,9 @@ export def "channeltypes get-channel-type" [
 export def "channeltypes update-channel-type" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1623,7 +1677,7 @@ export def "channeltypes update-channel-type" [
   --url-enrichment: oneof<nothing, bool>
 ]: any -> record<automod: string, automod_behavior: string, automod_thresholds: record<explicit: record<block: float, flag: float>, spam: record<block: float, flag: float>, toxic: record<block: float, flag: float>>, blocklist: string, blocklist_behavior: string, commands: list<string>, connect_events: bool, created_at: string, custom_events: bool, duration: string, grants: record, max_message_length: float, message_retention: string, mutes: bool, name: string, permissions: table<action: string, name: string, owner: bool, priority: float, resources: list, roles: list>, push_notifications: bool, quotes: bool, reactions: bool, read_events: bool, reminders: bool, replies: bool, search: bool, typing_events: bool, updated_at: string, uploads: bool, url_enrichment: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/channeltypes/{name}"))
@@ -1641,8 +1695,9 @@ export def "channeltypes update-channel-type" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "check-push check" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1660,7 +1715,7 @@ export def "check-push check" [
   --user-id: string
 ]: any -> record<device_errors: record, duration: string, general_errors: list<string>, rendered_apn_template: string, rendered_firebase_template: string, rendered_message: record, skip_devices: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check_push")
   let req_body = {"apn_template": $apn_template, "firebase_data_template": $firebase_data_template, "firebase_template": $firebase_template, "message_id": $message_id, "push_provider_name": $push_provider_name, "push_provider_type": $push_provider_type, "skip_devices": $skip_devices, "user": $user, "user_id": $user_id} | compact
@@ -1676,8 +1731,9 @@ export def "check-push check" [
 # operationId: CheckSQS
 export def "check-sqs check" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1689,7 +1745,7 @@ export def "check-sqs check" [
   --sqs-url: string # AWS SQS endpoint URL
 ]: any -> record<data: record, duration: string, error: string, status: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/check_sqs")
   let req_body = {"sqs_key": $sqs_key, "sqs_secret": $sqs_secret, "sqs_url": $sqs_url} | compact
@@ -1705,8 +1761,9 @@ export def "check-sqs check" [
 # operationId: ListCommands
 export def "commands list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1714,7 +1771,7 @@ export def "commands list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<commands: table<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commands")
   let accept_val = "application/json"
@@ -1728,8 +1785,9 @@ export def "commands list" [
 # operationId: CreateCommand
 export def "commands create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1742,7 +1800,7 @@ export def "commands create" [
   --set: string # Set name used for grouping commands
 ]: any -> record<command: record<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/commands")
   let req_body = {"args": $args, "description": $description, "name": $name, "set": $set} | compact
@@ -1759,8 +1817,9 @@ export def "commands create" [
 export def "commands delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1768,7 +1827,7 @@ export def "commands delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}"))
@@ -1784,8 +1843,9 @@ export def "commands delete" [
 export def "commands get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1793,7 +1853,7 @@ export def "commands get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<args: string, created_at: string, description: string, duration: string, name: string, set: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}"))
@@ -1809,8 +1869,9 @@ export def "commands get" [
 export def "commands update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1823,7 +1884,7 @@ export def "commands update" [
   --set: string # Set name used for grouping commands
 ]: any -> record<command: record<args: string, created_at: string, description: string, name: string, set: string, updated_at: string>, duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/commands/{name}"))
@@ -1840,8 +1901,9 @@ export def "commands update" [
 # operationId: Connect
 export def "connect get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1850,7 +1912,7 @@ export def "connect get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --json: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "json" $json "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/connect" $qp)
@@ -1865,8 +1927,9 @@ export def "connect get" [
 # operationId: DeleteDevice
 export def "devices delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1876,7 +1939,7 @@ export def "devices delete" [
   --id: string
   --user-id: string
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/devices" $qp)
@@ -1891,8 +1954,9 @@ export def "devices delete" [
 # operationId: ListDevices
 export def "devices list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1901,7 +1965,7 @@ export def "devices list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string
 ]: nothing -> record<devices: table<created_at: string, disabled: bool, disabled_reason: string, id: string, push_provider: string, push_provider_name: string, user_id: string>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "user_id" $user_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/devices" $qp)
@@ -1917,8 +1981,9 @@ export def "devices list" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "devices create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1932,7 +1997,7 @@ export def "devices create" [
   --user-id: string # **Server-side only**. User ID which server acts upon
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/devices")
   let req_body = {"id": $id, "push_provider": $push_provider, "push_provider_name": $push_provider_name, "user": $user, "user_id": $user_id} | compact
@@ -1948,8 +2013,9 @@ export def "devices create" [
 # operationId: ExportUser
 export def "export-users export" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1959,7 +2025,7 @@ export def "export-users export" [
   user_ids: list<string>
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export/users")
   let req_body = {"user_ids": $user_ids} | compact
@@ -1976,8 +2042,9 @@ export def "export-users export" [
 # --channels item shape: {cid?: string, id?: string, messages_since?: string, messages_until?: string, type?: string}
 export def "export-channels export" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1991,7 +2058,7 @@ export def "export-channels export" [
   --version: string
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/export_channels")
   let req_body = {"channels": $channels, "clear_deleted_message_text": $clear_deleted_message_text, "export_users": $export_users, "include_truncated_messages": $include_truncated_messages, "version": $version} | compact
@@ -2008,8 +2075,9 @@ export def "export-channels export" [
 export def "export-channels get-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2017,7 +2085,7 @@ export def "export-channels get-status" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, duration: string, error: record<description: any, stacktrace: string, type: string, version: string>, result: record<path: string, s3_bucket_name: string, url: string>, status: string, task_id: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/export_channels/{id}"))
@@ -2033,8 +2101,9 @@ export def "export-channels get-status" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "guest create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2044,7 +2113,7 @@ export def "guest create" [
   user: record # Represents chat user — shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 ]: any -> record<access_token: string, duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/guest")
   let req_body = {"user": $user} | compact
@@ -2060,8 +2129,9 @@ export def "guest create" [
 # operationId: CreateImportURL
 export def "import-urls create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2071,7 +2141,7 @@ export def "import-urls create" [
   --filename: string
 ]: any -> record<duration: string, path: string, upload_url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/import_urls")
   let req_body = {"filename": $filename} | compact
@@ -2087,8 +2157,9 @@ export def "import-urls create" [
 # operationId: ListImports
 export def "imports list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2096,7 +2167,7 @@ export def "imports list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, import_tasks: table<created_at: string, history: list, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports")
   let accept_val = "application/json"
@@ -2110,8 +2181,9 @@ export def "imports list" [
 # operationId: CreateImport
 export def "imports create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2122,7 +2194,7 @@ export def "imports create" [
   path: string
 ]: any -> record<duration: string, import_task: record<created_at: string, history: list<record>, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/imports")
   let req_body = {"mode": $mode, "path": $path} | compact
@@ -2139,8 +2211,9 @@ export def "imports create" [
 export def "imports get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2148,7 +2221,7 @@ export def "imports get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, import_task: record<created_at: string, history: list<record>, id: string, mode: string, path: string, result: any, size: float, state: string, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/imports/{id}"))
@@ -2163,8 +2236,9 @@ export def "imports get" [
 # operationId: LongPoll
 export def "longpoll get-long-poll" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2174,7 +2248,7 @@ export def "longpoll get-long-poll" [
   --json: string
   --connection-id: string
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "json" $json "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/longpoll" $qp)
@@ -2189,8 +2263,9 @@ export def "longpoll get-long-poll" [
 # operationId: QueryMembers
 export def "members list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2199,7 +2274,7 @@ export def "members list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<duration: string, members: table<ban_expires: string, banned: bool, channel_role: string, created_at: string, deleted_at: string, invite_accepted_at: string, invite_rejected_at: string, invited: bool, is_moderator: bool, role: string, shadow_banned: bool, updated_at: string, user: record, user_id: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/members" $qp)
@@ -2215,8 +2290,9 @@ export def "members list" [
 export def "messages delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2225,7 +2301,7 @@ export def "messages delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --hard: string
 ]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "hard" $hard "scalar")] | flatten | str join "&"
@@ -2242,8 +2318,9 @@ export def "messages delete" [
 export def "messages get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2251,7 +2328,7 @@ export def "messages get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, pending_message_metadata: record> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
@@ -2268,8 +2345,9 @@ export def "messages get" [
 export def "messages update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2281,7 +2359,7 @@ export def "messages update" [
   --skip-enrich-url: oneof<nothing, bool> # Do not try to enrich the links within message
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
@@ -2300,8 +2378,9 @@ export def "messages update" [
 export def "messages update-partial" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2315,7 +2394,7 @@ export def "messages update-partial" [
   --user-id: string
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}"))
@@ -2334,8 +2413,9 @@ export def "messages update-partial" [
 export def "messages-action create-run" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2348,7 +2428,7 @@ export def "messages-action create-run" [
   --user-id: string
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/action"))
@@ -2366,8 +2446,9 @@ export def "messages-action create-run" [
 export def "messages-commit commit" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2375,7 +2456,7 @@ export def "messages-commit commit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/commit"))
@@ -2392,8 +2473,9 @@ export def "messages-commit commit" [
 export def "messages-reaction send" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2406,7 +2488,7 @@ export def "messages-reaction send" [
   --skip-push: oneof<nothing, bool> # Skips any mobile push notifications
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/reaction"))
@@ -2425,8 +2507,9 @@ export def "messages-reaction delete" [
   id: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2435,7 +2518,7 @@ export def "messages-reaction delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --user-id: string
 ]: nothing -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, reaction: record<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, user_id: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -2453,8 +2536,9 @@ export def "messages-reaction delete" [
 export def "messages-reactions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2464,7 +2548,7 @@ export def "messages-reactions get" [
   --limit: string
   --offset: string
 ]: nothing -> record<duration: string, reactions: table<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -2481,8 +2565,9 @@ export def "messages-reactions get" [
 export def "messages-translate create" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2492,7 +2577,7 @@ export def "messages-translate create" [
   language: string@language-completer # Language to translate message to
 ]: any -> record<duration: string, message: record<attachments: list<record>, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list<record>, mentioned_users: list<record>, mml: string, own_reactions: list<record>, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list<record>, type: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/messages/{id}/translate"))
@@ -2510,8 +2595,9 @@ export def "messages-translate create" [
 export def "messages-replies get" [
   parent_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2529,7 +2615,7 @@ export def "messages-replies get" [
   --id-around: string
   --created-at-around: string
 ]: nothing -> record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($parent_id | is-empty) { error make --unspanned { msg: "path parameter 'parent_id' must be non-empty" } }
   let qp = [(serialize-qp "id_gte" $id_gte "scalar") (serialize-qp "id_gt" $id_gt "scalar") (serialize-qp "id_lte" $id_lte "scalar") (serialize-qp "id_lt" $id_lt "scalar") (serialize-qp "created_at_after_or_equal" $created_at_after_or_equal "scalar") (serialize-qp "created_at_after" $created_at_after "scalar") (serialize-qp "created_at_before_or_equal" $created_at_before_or_equal "scalar") (serialize-qp "created_at_before" $created_at_before "scalar") (serialize-qp "id_around" $id_around "scalar") (serialize-qp "created_at_around" $created_at_around "scalar")] | flatten | str join "&"
@@ -2545,8 +2631,9 @@ export def "messages-replies get" [
 # operationId: Unban
 export def "moderation-ban delete-unban" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2557,7 +2644,7 @@ export def "moderation-ban delete-unban" [
   --type: string
   --id: string
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "target_user_id" $target_user_id "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/moderation/ban" $qp)
@@ -2574,8 +2661,9 @@ export def "moderation-ban delete-unban" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-ban create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2595,7 +2683,7 @@ export def "moderation-ban create" [
   --user-id: string
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/ban")
   let req_body = {"banned_by": $banned_by, "banned_by_id": $banned_by_id, "id": $id, "ip_ban": $ip_ban, "reason": $reason, "shadow": $shadow, "target_user_id": $target_user_id, "timeout": $timeout, "type": $type, "user": $user, "user_id": $user_id} | compact
@@ -2612,8 +2700,9 @@ export def "moderation-ban create" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-flag create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2626,7 +2715,7 @@ export def "moderation-flag create" [
   --user-id: string
 ]: any -> record<duration: string, flag: record<approved_at: string, created_at: string, created_by_automod: bool, details: record<automod: record>, rejected_at: string, reviewed_at: string, target_message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, target_message_id: string, target_user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/flag")
   let req_body = {"target_message_id": $target_message_id, "target_user_id": $target_user_id, "user": $user, "user_id": $user_id} | compact
@@ -2642,8 +2731,9 @@ export def "moderation-flag create" [
 # operationId: QueryMessageFlags
 export def "moderation-flags-message list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2652,7 +2742,7 @@ export def "moderation-flags-message list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<duration: string, flags: table<approved_at: string, created_at: string, created_by_automod: bool, message: record, moderation_result: record, rejected_at: string, reviewed_at: string, reviewed_by: record, updated_at: string, user: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/moderation/flags/message" $qp)
@@ -2668,8 +2758,9 @@ export def "moderation-flags-message list" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-mute create-user" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2682,7 +2773,7 @@ export def "moderation-mute create-user" [
   --user-id: string
 ]: any -> record<duration: string, mute: record<created_at: string, expires: string, target: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, mutes: table<created_at: string, expires: string, target: record, updated_at: string, user: record>, own_user: record<banned: bool, channel_mutes: list<record>, created_at: string, deactivated_at: string, deleted_at: string, devices: list<record>, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list<string>, mutes: list<record>, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, role: string, teams: list<string>, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/mute")
   let req_body = {"target_ids": $target_ids, "timeout": $timeout, "user": $user, "user_id": $user_id} | compact
@@ -2699,8 +2790,9 @@ export def "moderation-mute create-user" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-mute-channel create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2713,7 +2805,7 @@ export def "moderation-mute-channel create" [
   --user-id: string
 ]: any -> record<channel_mute: record<channel: record<auto_translation_enabled: bool, auto_translation_language: string, cid: string, config: record, cooldown: float, created_at: string, created_by: record, deleted_at: string, disabled: bool, frozen: bool, hidden: bool, hide_messages_before: string, id: string, last_message_at: string, member_count: float, members: list, mute_expires_at: string, muted: bool, own_capabilities: list, team: string, truncated_at: string, truncated_by: record, type: string, updated_at: string>, created_at: string, expires: string, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>, channel_mutes: table<channel: record, created_at: string, expires: string, updated_at: string, user: record>, duration: string, own_user: record<banned: bool, channel_mutes: list<record>, created_at: string, deactivated_at: string, deleted_at: string, devices: list<record>, id: string, invisible: bool, language: string, last_active: string, latest_hidden_channels: list<string>, mutes: list<record>, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, role: string, teams: list<string>, total_unread_count: float, unread_channels: float, unread_count: float, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/mute/channel")
   let req_body = {"channel_cids": $channel_cids, "expiration": $expiration, "user": $user, "user_id": $user_id} | compact
@@ -2730,8 +2822,9 @@ export def "moderation-mute-channel create" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-unflag create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2744,7 +2837,7 @@ export def "moderation-unflag create" [
   --user-id: string
 ]: any -> record<duration: string, flag: record<approved_at: string, created_at: string, created_by_automod: bool, details: record<automod: record>, rejected_at: string, reviewed_at: string, target_message: record<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, target_message_id: string, target_user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>, updated_at: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, teams: list, updated_at: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/unflag")
   let req_body = {"target_message_id": $target_message_id, "target_user_id": $target_user_id, "user": $user, "user_id": $user_id} | compact
@@ -2761,8 +2854,9 @@ export def "moderation-unflag create" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-unmute create-user" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2776,7 +2870,7 @@ export def "moderation-unmute create-user" [
   --user-id: string
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/unmute")
   let req_body = {"target_id": $target_id, "target_ids": $target_ids, "timeout": $timeout, "user": $user, "user_id": $user_id} | compact
@@ -2793,8 +2887,9 @@ export def "moderation-unmute create-user" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "moderation-unmute-channel create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2808,7 +2903,7 @@ export def "moderation-unmute-channel create" [
   --user-id: string
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/moderation/unmute/channel")
   let req_body = {"channel_cid": $channel_cid, "channel_cids": $channel_cids, "expiration": $expiration, "user": $user, "user_id": $user_id} | compact
@@ -2824,8 +2919,9 @@ export def "moderation-unmute-channel create" [
 # operationId: GetOG
 export def "og get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2834,7 +2930,7 @@ export def "og get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string
 ]: nothing -> record<actions: table<name: string, style: string, text: string, type: string, value: string>, asset_url: string, author_icon: string, author_link: string, author_name: string, color: string, duration: string, fallback: string, fields: table<short: bool, title: string, value: string>, footer: string, footer_icon: string, giphy: record<fixed_height: record<frames: string, height: string, size: string, url: string, width: string>, fixed_height_downsampled: record<frames: string, height: string, size: string, url: string, width: string>, fixed_height_still: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width_downsampled: record<frames: string, height: string, size: string, url: string, width: string>, fixed_width_still: record<frames: string, height: string, size: string, url: string, width: string>, original: record<frames: string, height: string, size: string, url: string, width: string>>, image_url: string, og_scrape_url: string, original_height: float, original_width: float, pretext: string, text: string, thumb_url: string, title: string, title_link: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/og" $qp)
@@ -2849,8 +2945,9 @@ export def "og get" [
 # operationId: ListPermissions
 export def "permissions list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2858,7 +2955,7 @@ export def "permissions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, permissions: table<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/permissions")
   let accept_val = "application/json"
@@ -2873,8 +2970,9 @@ export def "permissions list" [
 export def "permissions get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2882,7 +2980,7 @@ export def "permissions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, permission: record<action: string, condition: record, custom: bool, description: string, id: string, level: string, name: string, owner: bool, same_team: bool, tags: list<string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/permissions/{id}"))
@@ -2897,8 +2995,9 @@ export def "permissions get" [
 # operationId: ListPushProviders
 export def "push-providers list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2906,7 +3005,7 @@ export def "push-providers list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, push_providers: table<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/push_providers")
   let accept_val = "application/json"
@@ -2921,8 +3020,9 @@ export def "push-providers list" [
 # --push_provider shape: {apn_auth_key?: string, apn_auth_type?: string, apn_development?: bool, apn_host?: string, apn_key_id?: string, apn_notification_template?: string, apn_p12_cert?: string, apn_team_id?: string, apn_topic?: string, created_at?: string, description?: string, disabled_at?: string, disabled_reason?: string, firebase_apn_template?: string, firebase_credentials?: string, firebase_data_template?: string, firebase_notification_template?: string, firebase_server_key?: string, huawei_app_id?: string, ... (6 more fields)}
 export def "push-providers update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2932,7 +3032,7 @@ export def "push-providers update" [
   --push-provider: record # shape: {apn_auth_key?: string, apn_auth_type?: string, apn_development?: bool, apn_host?: string, apn_key_id?: string, apn_notification_template?: string, apn_p12_cert?: string, apn_team_id?: string, apn_topic?: string, created_at?: string, description?: string, disabled_at?: string, disabled_reason?: string, firebase_apn_template?: string, firebase_credentials?: string, firebase_data_template?: string, firebase_notification_template?: string, firebase_server_key?: string, huawei_app_id?: string, ... (6 more fields)}
 ]: any -> record<duration: string, push_provider: record<apn_auth_key: string, apn_auth_type: string, apn_development: bool, apn_host: string, apn_key_id: string, apn_notification_template: string, apn_p12_cert: string, apn_team_id: string, apn_topic: string, created_at: string, description: string, disabled_at: string, disabled_reason: string, firebase_apn_template: string, firebase_credentials: string, firebase_data_template: string, firebase_notification_template: string, firebase_server_key: string, huawei_app_id: string, huawei_app_secret: string, name: string, type: float, updated_at: string, xiaomi_app_secret: string, xiaomi_package_name: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/push_providers")
   let req_body = {"push_provider": $push_provider} | compact
@@ -2950,8 +3050,9 @@ export def "push-providers delete" [
   type: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2959,7 +3060,7 @@ export def "push-providers delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2975,8 +3076,9 @@ export def "push-providers delete" [
 # operationId: QueryBannedUsers
 export def "query-banned-users list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2985,7 +3087,7 @@ export def "query-banned-users list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<bans: table<banned_by: record, channel: record, created_at: string, expires: string, reason: string, shadow: bool, user: record>, duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/query_banned_users" $qp)
@@ -3000,8 +3102,9 @@ export def "query-banned-users list" [
 # operationId: GetRateLimits
 export def "rate-limits get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3014,7 +3117,7 @@ export def "rate-limits get" [
   --web: string
   --endpoints: string
 ]: nothing -> record<android: record, duration: string, ios: record, server_side: record, web: record> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "server_side" $server_side "scalar") (serialize-qp "android" $android "scalar") (serialize-qp "ios" $ios "scalar") (serialize-qp "web" $web "scalar") (serialize-qp "endpoints" $endpoints "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/rate_limits" $qp)
@@ -3029,8 +3132,9 @@ export def "rate-limits get" [
 # operationId: QueryRecipients
 export def "recipients list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3039,7 +3143,7 @@ export def "recipients list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<campaigns: record, channels: record, duration: string, recipients: table<campaign_id: string, channel_cid: string, created_at: string, details: string, message_id: string, receiver_id: string, status: string, updated_at: string>, segments: record, users: record> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/recipients" $qp)
@@ -3054,8 +3158,9 @@ export def "recipients list" [
 # operationId: ListRoles
 export def "roles list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3063,7 +3168,7 @@ export def "roles list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, roles: table<created_at: string, custom: bool, name: string, scopes: list, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles")
   let accept_val = "application/json"
@@ -3077,8 +3182,9 @@ export def "roles list" [
 # operationId: CreateRole
 export def "roles create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3088,7 +3194,7 @@ export def "roles create" [
   name: string # Role name
 ]: any -> record<duration: string, role: record<created_at: string, custom: bool, name: string, scopes: list<string>, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/roles")
   let req_body = {"name": $name} | compact
@@ -3105,8 +3211,9 @@ export def "roles create" [
 export def "roles delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3114,7 +3221,7 @@ export def "roles delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/roles/{name}"))
@@ -3129,8 +3236,9 @@ export def "roles delete" [
 # operationId: Search
 export def "search list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3139,7 +3247,7 @@ export def "search list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<duration: string, next: string, previous: string, results: table<message: record>, results_warning: record<channel_search_cids: list<string>, channel_search_count: float, warning_code: float, warning_description: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/search" $qp)
@@ -3154,8 +3262,9 @@ export def "search list" [
 # operationId: QuerySegments
 export def "segments list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3164,7 +3273,7 @@ export def "segments list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<duration: string, segments: table<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/segments" $qp)
@@ -3180,8 +3289,9 @@ export def "segments list" [
 # --segment shape: {description?: string, filter: record, name: string, type: "user"|"channel"}
 export def "segments create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3191,7 +3301,7 @@ export def "segments create" [
   segment: record # shape: {description?: string, filter: record, name: string, type: "user"|"channel"}
 ]: any -> record<duration: string, segment: record<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/segments")
   let req_body = {"segment": $segment} | compact
@@ -3208,8 +3318,9 @@ export def "segments create" [
 export def "segments delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3217,7 +3328,7 @@ export def "segments delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/segments/{id}"))
@@ -3234,8 +3345,9 @@ export def "segments delete" [
 export def "segments update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3245,7 +3357,7 @@ export def "segments update" [
   segment: record # shape: {description?: string, filter?: record, name?: string, type?: "user"|"channel"}
 ]: any -> record<duration: string, segment: record<created_at: string, description: string, filter: record, id: string, in_use: bool, name: string, size: float, status: string, type: string, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/segments/{id}"))
@@ -3263,8 +3375,9 @@ export def "segments update" [
 # --user shape: {ban_expires?: string, banned?: bool, id: string, invisible?: bool, language?: string, push_notifications?: record, revoke_tokens_issued_before?: string, role?: string, teams?: list<string>}
 export def "sync create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3285,7 +3398,7 @@ export def "sync create" [
   --with-inaccessible-cids-body: oneof<nothing, bool> # If set to true this will add 'inaccessible_cids' to response type (body field)
 ]: any -> record<duration: string, events: table<automoderation: bool, automoderation_scores: record, channel: record, channel_id: string, channel_type: string, cid: string, connection_id: string, created_at: string, created_by: record, me: record, member: record, message: record, parent_id: string, reaction: record, reason: string, team: string, type: string, user: record, user_id: string, watcher_count: float>, inaccessible_cids: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "with_inaccessible_cids" $with_inaccessible_cids "scalar") (serialize-qp "watch" $watch "scalar") (serialize-qp "client_id" $client_id "scalar") (serialize-qp "connection_id" $connection_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/sync" $qp)
@@ -3303,8 +3416,9 @@ export def "sync create" [
 export def "tasks get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3312,7 +3426,7 @@ export def "tasks get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<created_at: string, duration: string, error: record<description: any, stacktrace: string, type: string, version: string>, result: record, status: string, task_id: string, updated_at: string> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/tasks/{id}"))
@@ -3327,8 +3441,9 @@ export def "tasks get" [
 # operationId: QueryUsers
 export def "users list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3337,7 +3452,7 @@ export def "users list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --payload: string
 ]: nothing -> record<duration: string, users: table<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record, revoke_tokens_issued_before: string, role: string, shadow_banned: bool, teams: list, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "payload" $payload "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/users" $qp)
@@ -3352,8 +3467,9 @@ export def "users list" [
 # operationId: UpdateUsersPartial
 export def "users update-partial" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3365,7 +3481,7 @@ export def "users update-partial" [
   unset: list<string>
 ]: any -> record<duration: string, users: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
   let req_body = {"id": $id, "set": $set, "unset": $unset} | compact
@@ -3381,8 +3497,9 @@ export def "users update-partial" [
 # operationId: UpdateUsers
 export def "users update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3392,7 +3509,7 @@ export def "users update" [
   users: record # Object containing users
 ]: any -> record<duration: string, users: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users")
   let req_body = {"users": $users} | compact
@@ -3408,8 +3525,9 @@ export def "users update" [
 # operationId: DeactivateUsers
 export def "users-deactivate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3421,7 +3539,7 @@ export def "users-deactivate create" [
   user_ids: list<string> # User IDs to deactivate
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/deactivate")
   let req_body = {"created_by_id": $created_by_id, "mark_messages_deleted": $mark_messages_deleted, "user_ids": $user_ids} | compact
@@ -3437,8 +3555,9 @@ export def "users-deactivate create" [
 # operationId: DeleteUsers
 export def "users-delete delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3452,7 +3571,7 @@ export def "users-delete delete" [
   user_ids: list<string> # IDs of users to delete
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/delete")
   let req_body = {"conversations": $conversations, "messages": $messages, "new_channel_owner_id": $new_channel_owner_id, "user": $user, "user_ids": $user_ids} | compact
@@ -3468,8 +3587,9 @@ export def "users-delete delete" [
 # operationId: ReactivateUsers
 export def "users-reactivate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3481,7 +3601,7 @@ export def "users-reactivate create" [
   user_ids: list<string> # User IDs to reactivate
 ]: any -> record<duration: string, task_id: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/reactivate")
   let req_body = {"created_by_id": $created_by_id, "restore_messages": $restore_messages, "user_ids": $user_ids} | compact
@@ -3497,8 +3617,9 @@ export def "users-reactivate create" [
 # operationId: RestoreUsers
 export def "users-restore create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3508,7 +3629,7 @@ export def "users-restore create" [
   user_ids: list<string>
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/users/restore")
   let req_body = {"user_ids": $user_ids} | compact
@@ -3525,8 +3646,9 @@ export def "users-restore create" [
 export def "users delete" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3537,7 +3659,7 @@ export def "users delete" [
   --hard-delete: string
   --delete-conversation-channels: string
 ]: nothing -> record<duration: string, task_id: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let qp = [(serialize-qp "mark_messages_deleted" $mark_messages_deleted "scalar") (serialize-qp "hard_delete" $hard_delete "scalar") (serialize-qp "delete_conversation_channels" $delete_conversation_channels "scalar")] | flatten | str join "&"
@@ -3554,8 +3676,9 @@ export def "users delete" [
 export def "users-deactivate create-by-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3567,7 +3690,7 @@ export def "users-deactivate create-by-user-id" [
   --body-user-id: string
 ]: any -> record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/deactivate"))
@@ -3586,8 +3709,9 @@ export def "users-deactivate create-by-user-id" [
 export def "users-event send-custom" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3597,7 +3721,7 @@ export def "users-event send-custom" [
   event: record # shape: {created_at?: string, type: string}
 ]: any -> record<duration: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/event"))
@@ -3614,8 +3738,9 @@ export def "users-event send-custom" [
 export def "users-export get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3623,7 +3748,7 @@ export def "users-export get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<duration: string, messages: table<attachments: list, before_message_send_failed: bool, cid: string, command: string, created_at: string, deleted_at: string, html: string, i18n: record, id: string, image_labels: record, latest_reactions: list, mentioned_users: list, mml: string, own_reactions: list, parent_id: string, pin_expires: string, pinned: bool, pinned_at: string, pinned_by: record, quoted_message: any, quoted_message_id: string, reaction_counts: record, reaction_scores: record, reply_count: float, shadowed: bool, show_in_channel: bool, silent: bool, text: string, thread_participants: list, type: string, updated_at: string, user: record>, reactions: table<created_at: string, message_id: string, score: float, type: string, updated_at: string, user: record, user_id: string>, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/export"))
@@ -3639,8 +3764,9 @@ export def "users-export get" [
 export def "users-reactivate create-by-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (Authorization)
+  --token-apikey: string # Auth token for api_key (api_key)
+  --token-streamauthtype: string # Auth token for stream-auth-type (Stream-Auth-Type)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3653,7 +3779,7 @@ export def "users-reactivate create-by-user-id" [
   --body-user-id: string
 ]: any -> record<duration: string, user: record<ban_expires: string, banned: bool, created_at: string, deactivated_at: string, deleted_at: string, id: string, invisible: bool, language: string, last_active: string, online: bool, push_notifications: record<disabled: bool, disabled_until: string>, revoke_tokens_issued_before: string, role: string, teams: list<string>, updated_at: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o STREAM_CHAT_API_JWT_TOKEN | default "")) "jwt") (build-auth ($token_apikey | default ($env | get -o STREAM_CHAT_API_APIKEY_TOKEN | default "")) "query-api_key") (build-auth ($token_streamauthtype | default ($env | get -o STREAM_CHAT_API_STREAMAUTHTYPE_TOKEN | default "")) "stream-auth-type")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/users/{user_id}/reactivate"))

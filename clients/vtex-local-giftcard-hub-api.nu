@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -153,7 +163,7 @@ export def "giftcardproviders list-gift-card-providers" [
   --rest-range: string # Pagination control. This query variable must follow the format _resources={from}-{to}_.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "none"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/giftcardproviders")
@@ -171,8 +181,8 @@ export def "giftcardproviders list-gift-card-providers" [
 export def "giftcardproviders delete-gift-card-providerby" [
   gift_card_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -183,8 +193,8 @@ export def "giftcardproviders delete-gift-card-providerby" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}"))
@@ -202,8 +212,8 @@ export def "giftcardproviders delete-gift-card-providerby" [
 export def "giftcardproviders create-update-gift-card-providerby" [
   gift_card_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -215,9 +225,9 @@ export def "giftcardproviders create-update-gift-card-providerby" [
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}"))
@@ -239,8 +249,8 @@ export def "giftcardproviders create-update-gift-card-providerby" [
 export def "giftcardproviders-giftcards create-gift-cardin-gift-card-provider" [
   gift_card_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -252,9 +262,9 @@ export def "giftcardproviders-giftcards create-gift-cardin-gift-card-provider" [
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards"))
@@ -276,8 +286,8 @@ export def "giftcardproviders-giftcards create-gift-cardin-gift-card-provider" [
 export def "giftcardproviders-giftcards-search get-gift-cardfrom-gift-card-provider" [
   gift_card_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -290,9 +300,9 @@ export def "giftcardproviders-giftcards-search get-gift-cardfrom-gift-card-provi
   --x-vtex-api-app-token: string # VTEX API AppToken
   --rest-range: string # Range of documents to show.
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}/giftcards/_search"))
@@ -315,8 +325,8 @@ export def "giftcardproviders-giftcards get-gift-cardfrom-gift-card-providerby" 
   gift_card_provider_id: string
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -327,8 +337,8 @@ export def "giftcardproviders-giftcards get-gift-cardfrom-gift-card-providerby" 
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -348,8 +358,8 @@ export def "giftcardproviders-giftcards-transactions list-gift-card" [
   gift_card_provider_id: string
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -360,8 +370,8 @@ export def "giftcardproviders-giftcards-transactions list-gift-card" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -381,8 +391,8 @@ export def "giftcardproviders-giftcards-transactions create-gift-card" [
   gift_card_provider_id: string
   gift_card_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -394,9 +404,9 @@ export def "giftcardproviders-giftcards-transactions create-gift-card" [
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -421,8 +431,8 @@ export def "giftcardproviders-giftcards-transactions-cancellations list-gift-car
   gift_card_id: string
   t_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -433,8 +443,8 @@ export def "giftcardproviders-giftcards-transactions-cancellations list-gift-car
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -456,8 +466,8 @@ export def "giftcardproviders-giftcards-transactions-cancellations create-gift-c
   gift_card_id: string
   t_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -469,9 +479,9 @@ export def "giftcardproviders-giftcards-transactions-cancellations create-gift-c
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -497,8 +507,8 @@ export def "giftcardproviders-giftcards-transactions-settlements list-gift-card"
   gift_card_id: string
   t_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -509,8 +519,8 @@ export def "giftcardproviders-giftcards-transactions-settlements list-gift-card"
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -534,8 +544,8 @@ export def "giftcardproviders-giftcards-transactions-settlements create-gift-car
   gift_card_id: string
   t_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -546,9 +556,9 @@ export def "giftcardproviders-giftcards-transactions-settlements create-gift-car
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json
   cart: record # e.g. {discounts: -20, grandTotal: 182, items: [{id: 2000002, name: , price: 200, productId: 2000000, quantity: 1, refId: MEV41}], itemsTotal: 200, redemptionCode: FASD-ASDS-ASDA-ASDA, relationName: loyalty-program, shipping: 2, taxes: 0} — shape: {discounts: int, grandTotal: int, items: list, itemsTotal: int, redemptionCode: string, relationName: string, shipping: int, taxes: int}
   client: record # default: {document: 42151783120, email: email@domain.com, id: 3b1ab} — shape: {document: string, email: string, id: string}
-]: any -> any {
+]: any -> record {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -574,8 +584,8 @@ export def "giftcardproviders-giftcards-transactions get-gift-card-transactionby
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -586,8 +596,8 @@ export def "giftcardproviders-giftcards-transactions get-gift-card-transactionby
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -609,8 +619,8 @@ export def "giftcardproviders-giftcards-transactions-authorization get-gift-card
   gift_card_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -621,8 +631,8 @@ export def "giftcardproviders-giftcards-transactions-authorization get-gift-card
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderID' must be non-empty" } }
   if ($gift_card_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardID' must be non-empty" } }
@@ -642,8 +652,8 @@ export def "giftcardproviders-giftcards-transactions-authorization get-gift-card
 export def "giftcardproviders get-gift-card-providerby" [
   gift_card_provider_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -654,8 +664,8 @@ export def "giftcardproviders get-gift-card-providerby" [
   --content-type: string # The Media type of the body of the request. Default value for payment provider protocol is application/json.
   --x-vtex-api-app-key: string # VTEX API AppKey
   --x-vtex-api-app-token: string # VTEX API AppToken
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+]: nothing -> record {
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o GIFTCARD_HUB_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o GIFTCARD_HUB_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($gift_card_provider_id | is-empty) { error make --unspanned { msg: "path parameter 'giftCardProviderId' must be non-empty" } }
   let full_url = (build-url $base ({gift_card_provider_id: (encode-path-segment $gift_card_provider_id)} | format pattern "/giftcardproviders/{gift_card_provider_id}"))

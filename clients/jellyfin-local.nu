@@ -470,7 +470,7 @@ export def "artists-images get" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -543,7 +543,7 @@ export def "audio-hls-stream-aac get-segment-legacy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -570,7 +570,7 @@ export def "audio-hls-stream-mp3 get-segment-legacy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -647,7 +647,7 @@ export def "audio-hls1 get-hls-segment" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -724,7 +724,7 @@ export def "audio-main-m3u8 get-variant-hls-playlist" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -799,7 +799,7 @@ export def "audio-master-m3u8 get-hls-playlist" [
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
   --enable-adaptive-bitrate-streaming: oneof<nothing, bool> # Enable adaptive bitrate streaming. (default: true)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -948,7 +948,7 @@ export def "audio-stream get" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -1096,7 +1096,7 @@ export def "audio-stream-container get" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -1215,7 +1215,7 @@ export def "audio-universal get-stream" [
   --enable-remote-media: oneof<nothing, bool> # Optional. Whether to enable remote media. (nullable)
   --break-on-non-key-frames: oneof<nothing, bool> # Optional. Whether to break on non key frames.
   --enable-redirection: oneof<nothing, bool> # Whether to enable redirection. Defaults to true. (default: true)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -1430,7 +1430,7 @@ export def "branding-css get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Branding/Css")
@@ -1454,7 +1454,7 @@ export def "branding-css-css get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Branding/Css.css")
@@ -2162,7 +2162,7 @@ export def "dlna-icons list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($file_name | is-empty) { error make --unspanned { msg: "path parameter 'fileName' must be non-empty" } }
@@ -2187,7 +2187,7 @@ export def "dlna-connection-manager get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2212,7 +2212,7 @@ export def "dlna-connection-manager-connection-manager get-by-server-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2237,7 +2237,7 @@ export def "dlna-connection-manager-connection-manager-xml get-by-server-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2262,7 +2262,7 @@ export def "dlna-connection-manager-control request-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2287,7 +2287,7 @@ export def "dlna-content-directory get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2312,7 +2312,7 @@ export def "dlna-content-directory-content-directory get-by-server-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2337,7 +2337,7 @@ export def "dlna-content-directory-content-directory-xml get-by-server-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2362,7 +2362,7 @@ export def "dlna-content-directory-control request-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2387,7 +2387,7 @@ export def "dlna-media-receiver-registrar get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2412,7 +2412,7 @@ export def "dlna-media-receiver-registrar-control request-process" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2437,7 +2437,7 @@ export def "dlna-media-receiver-registrar-media-receiver-registrar get-by-server
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2462,7 +2462,7 @@ export def "dlna-media-receiver-registrar-media-receiver-registrar-xml get-by-se
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2487,7 +2487,7 @@ export def "dlna-description get-xml" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2512,7 +2512,7 @@ export def "dlna-description-xml get-by-server-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2538,7 +2538,7 @@ export def "dlna-icons get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($server_id | is-empty) { error make --unspanned { msg: "path parameter 'serverId' must be non-empty" } }
@@ -2667,7 +2667,7 @@ export def "environment-parent-path get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --path: string # The path.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "path" $path "scalar")] | flatten | str join "&"
@@ -2745,7 +2745,7 @@ export def "fallback-font-fonts get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2855,7 +2855,7 @@ export def "genres-images get" [
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
   --image-index: int # Image index. (nullable, format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -2941,7 +2941,7 @@ export def "genres-images get-by-index" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -3062,7 +3062,7 @@ export def "images-general get-by-name-type" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -3113,7 +3113,7 @@ export def "images-media-info get-by-theme-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($theme | is-empty) { error make --unspanned { msg: "path parameter 'theme' must be non-empty" } }
@@ -3164,7 +3164,7 @@ export def "images-ratings get-by-theme-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($theme | is-empty) { error make --unspanned { msg: "path parameter 'theme' must be non-empty" } }
@@ -3190,7 +3190,7 @@ export def "images-remote get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-url: string # The image url. (format: uri)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "imageUrl" $image_url "scalar")] | flatten | str join "&"
@@ -3545,7 +3545,7 @@ export def "items-remote-search-image get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --image-url: string # The image url.
   --provider-name: string # The provider name.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "imageUrl" $image_url "scalar") (serialize-qp "providerName" $provider_name "scalar")] | flatten | str join "&"
@@ -4129,7 +4129,7 @@ export def "items-download get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -4181,7 +4181,7 @@ export def "items-file get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-2 # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -4277,7 +4277,7 @@ export def "items-images get" [
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
   --image-index: int # Image index. (nullable, format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -4419,7 +4419,7 @@ export def "items-images get-by-index" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -4567,7 +4567,7 @@ export def "items-images get-image2" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -5896,7 +5896,7 @@ export def "live-tv-listing-providers-schedules-direct-countries get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/LiveTv/ListingProviders/SchedulesDirect/Countries")
@@ -5920,7 +5920,7 @@ export def "live-tv-live-recordings-stream get-file" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($recording_id | is-empty) { error make --unspanned { msg: "path parameter 'recordingId' must be non-empty" } }
@@ -5946,7 +5946,7 @@ export def "live-tv-live-stream-files-stream-container get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($stream_id | is-empty) { error make --unspanned { msg: "path parameter 'streamId' must be non-empty" } }
@@ -7228,7 +7228,7 @@ export def "music-genres-images get" [
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
   --image-index: int # Image index. (nullable, format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -7314,7 +7314,7 @@ export def "music-genres-images get-by-index" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -7786,7 +7786,7 @@ export def "persons-images get" [
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
   --image-index: int # Image index. (nullable, format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -7872,7 +7872,7 @@ export def "persons-images get-by-index" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -7944,7 +7944,7 @@ export def "playback-bitrate-test get-bytes" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --size: int # The bitrate. Defaults to 102400. (format: int32, default: 102400)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "size" $size "scalar")] | flatten | str join "&"
@@ -8397,7 +8397,7 @@ export def "plugins-image get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($plugin_id | is-empty) { error make --unspanned { msg: "path parameter 'pluginId' must be non-empty" } }
@@ -8423,7 +8423,7 @@ export def "providers-subtitles-subtitles get-remote" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8472,7 +8472,7 @@ export def "quick-connect-authorize create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --code: string # Quick connect code to authorize.
-]: nothing -> any {
+]: nothing -> oneof<bool, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "code" $code "scalar")] | flatten | str join "&"
@@ -8548,7 +8548,7 @@ export def "quick-connect-deauthorize create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QuickConnect/Deauthorize")
@@ -8596,7 +8596,7 @@ export def "quick-connect-status get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/QuickConnect/Status")
@@ -9886,7 +9886,7 @@ export def "studios-images get" [
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
   --image-index: int # Image index. (nullable, format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -9972,7 +9972,7 @@ export def "studios-images get-by-index" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
@@ -10793,7 +10793,7 @@ export def "system-configuration get-named" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($key | is-empty) { error make --unspanned { msg: "path parameter 'key' must be non-empty" } }
@@ -10939,7 +10939,7 @@ export def "system-logs-log get-file" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --name: string # The name of the log file to get.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -10992,7 +10992,7 @@ export def "system-ping get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/System/Ping")
@@ -11016,7 +11016,7 @@ export def "system-ping create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/System/Ping")
@@ -11788,7 +11788,7 @@ export def "users-images get" [
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
   --image-index: int # Image index. (nullable, format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -11903,7 +11903,7 @@ export def "users-images get-by-index" [
   --blur: int # Optional. Blur image. (nullable, format: int32)
   --background-color: string # Optional. Apply a background color for transparent images. (nullable)
   --foreground-layer: string # Optional. Apply a foreground layer on top of the image. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -12903,7 +12903,7 @@ export def "videos-hls-stream-m3u8 get-playlist-legacy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -12932,7 +12932,7 @@ export def "videos-hls get-segment-legacy" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13010,7 +13010,7 @@ export def "videos-hls1 get-hls-segment" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13090,7 +13090,7 @@ export def "videos-live-m3u8 get-hls-stream" [
   --max-width: int # Optional. The max width. (nullable, format: int32)
   --max-height: int # Optional. The max height. (nullable, format: int32)
   --enable-subtitles-in-manifest: oneof<nothing, bool> # Optional. Whether to enable subtitles in the manifest. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13163,7 +13163,7 @@ export def "videos-main-m3u8 get-variant-hls-playlist" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13237,7 +13237,7 @@ export def "videos-master-m3u8 get-hls-playlist" [
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
   --enable-adaptive-bitrate-streaming: oneof<nothing, bool> # Enable adaptive bitrate streaming. (default: true)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13385,7 +13385,7 @@ export def "videos-stream get" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13492,7 +13492,7 @@ export def "videos-subtitles-stream-format get" [
   --copy-timestamps: oneof<nothing, bool> # Optional. Whether to copy the timestamps. (default: false)
   --add-vtt-time-map: oneof<nothing, bool> # Optional. Whether to add a VTT time map. (default: false)
   --start-position-ticks: int # Optional. The start position of the subtitle in ticks. (format: int64, default: 0)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13524,7 +13524,7 @@ export def "videos-subtitles-subtitles-m3u8 get-playlist" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --segment-length: int # The subtitle segment length. (format: int32)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13559,7 +13559,7 @@ export def "videos-subtitles-stream-format get-with-ticks" [
   --end-position-ticks: int # Optional. The end position of the subtitle in ticks. (nullable, format: int64)
   --copy-timestamps: oneof<nothing, bool> # Optional. Whether to copy the timestamps. (default: false)
   --add-vtt-time-map: oneof<nothing, bool> # Optional. Whether to add a VTT time map. (default: false)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13638,7 +13638,7 @@ export def "videos get" [
   --video-stream-index: int # Optional. The index of the video stream to use. If omitted the first video stream will be used. (nullable, format: int32)
   --context: string@context-completer # Optional. The MediaBrowser.Model.Dlna.EncodingContext.
   --stream-options: record # Optional. The streaming options. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -13745,7 +13745,7 @@ export def "videos-attachments get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'videoId' must be non-empty" } }
@@ -13841,7 +13841,7 @@ export def "web-configuration-page get-dashboard" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-3 # Response content type
   --name: string # The name of the page. (nullable)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-emby-authorization"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar")] | flatten | str join "&"

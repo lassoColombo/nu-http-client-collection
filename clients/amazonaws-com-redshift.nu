@@ -292,7 +292,7 @@ export def "api get-accept-reserved-node-exchange" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ExchangedReservedNode: record<ReservedNodeId: record, ReservedNodeOfferingId: record, NodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CurrencyCode: record, NodeCount: record, State: record, OfferingType: record, RecurringCharges: record, ReservedNodeOfferingType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedNodeId" $reserved_node_id "scalar") (serialize-qp "TargetReservedNodeOfferingId" $target_reserved_node_offering_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -328,7 +328,7 @@ export def "api create-accept-reserved-node-exchange" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ExchangedReservedNode: record<ReservedNodeId: record, ReservedNodeOfferingId: record, NodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CurrencyCode: record, NodeCount: record, State: record, OfferingType: record, RecurringCharges: record, ReservedNodeOfferingType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -370,7 +370,7 @@ export def "api get-create-partner" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DatabaseName: record, PartnerName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AccountId" $account_id "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "PartnerName" $partner_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -406,7 +406,7 @@ export def "api create-partner" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DatabaseName: record, PartnerName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -448,7 +448,7 @@ export def "api get-associate-data-share-consumer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DataShareArn" $data_share_arn "scalar") (serialize-qp "AssociateEntireAccount" $associate_entire_account "scalar") (serialize-qp "ConsumerArn" $consumer_arn "scalar") (serialize-qp "ConsumerRegion" $consumer_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -484,7 +484,7 @@ export def "api create-associate-data-share-consumer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -526,7 +526,7 @@ export def "api get-authorize-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterSecurityGroup: record<ClusterSecurityGroupName: record, Description: record, EC2SecurityGroups: record, IPRanges: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSecurityGroupName" $cluster_security_group_name "scalar") (serialize-qp "CIDRIP" $cidrip "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -562,7 +562,7 @@ export def "api create-authorize-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterSecurityGroup: record<ClusterSecurityGroupName: record, Description: record, EC2SecurityGroups: record, IPRanges: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -602,7 +602,7 @@ export def "api get-authorize-data-share" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DataShareArn" $data_share_arn "scalar") (serialize-qp "ConsumerIdentifier" $consumer_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -638,7 +638,7 @@ export def "api create-authorize-data-share" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -679,7 +679,7 @@ export def "api get-authorize-endpoint-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Grantor: record, Grantee: record, ClusterIdentifier: record, AuthorizeTime: record, ClusterStatus: record, Status: record, AllowedAllVPCs: record, AllowedVPCs: record, EndpointCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Account" $account "scalar") (serialize-qp "VpcIds" $vpc_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -715,7 +715,7 @@ export def "api create-authorize-endpoint-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Grantor: record, Grantee: record, ClusterIdentifier: record, AuthorizeTime: record, ClusterStatus: record, Status: record, AllowedAllVPCs: record, AllowedVPCs: record, EndpointCount: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -757,7 +757,7 @@ export def "api get-authorize-snapshot-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SnapshotArn" $snapshot_arn "scalar") (serialize-qp "SnapshotClusterIdentifier" $snapshot_cluster_identifier "scalar") (serialize-qp "AccountWithRestoreAccess" $account_with_restore_access "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -793,7 +793,7 @@ export def "api create-authorize-snapshot-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -832,7 +832,7 @@ export def "api get-batch-delete-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Resources: record, Errors: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Identifiers" $identifiers "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -868,7 +868,7 @@ export def "api create-batch-delete-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Resources: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -909,7 +909,7 @@ export def "api get-batch-modify-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Resources: record, Errors: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotIdentifierList" $snapshot_identifier_list "multi") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "Force" $force "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -945,7 +945,7 @@ export def "api create-batch-modify-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Resources: record, Errors: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -984,7 +984,7 @@ export def "api get-cancel-resize" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TargetNodeType: record, TargetNumberOfNodes: record, TargetClusterType: record, Status: record, ImportTablesCompleted: record, ImportTablesInProgress: record, ImportTablesNotStarted: record, AvgResizeRateInMegaBytesPerSecond: record, TotalResizeDataInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record, ResizeType: record, Message: record, TargetEncryptionType: record, DataTransferProgressPercent: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1020,7 +1020,7 @@ export def "api create-cancel-resize" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TargetNodeType: record, TargetNumberOfNodes: record, TargetClusterType: record, Status: record, ImportTablesCompleted: record, ImportTablesInProgress: record, ImportTablesNotStarted: record, AvgResizeRateInMegaBytesPerSecond: record, TotalResizeDataInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record, ResizeType: record, Message: record, TargetEncryptionType: record, DataTransferProgressPercent: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1062,7 +1062,7 @@ export def "api get-copy-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceSnapshotIdentifier" $source_snapshot_identifier "scalar") (serialize-qp "SourceSnapshotClusterIdentifier" $source_snapshot_cluster_identifier "scalar") (serialize-qp "TargetSnapshotIdentifier" $target_snapshot_identifier "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1098,7 +1098,7 @@ export def "api create-copy-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1138,7 +1138,7 @@ export def "api get-create-authentication-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AuthenticationProfileName: record, AuthenticationProfileContent: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AuthenticationProfileName" $authentication_profile_name "scalar") (serialize-qp "AuthenticationProfileContent" $authentication_profile_content "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1174,7 +1174,7 @@ export def "api create-authentication-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AuthenticationProfileName: record, AuthenticationProfileContent: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1246,7 +1246,7 @@ export def "api get-create" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBName" $db_name "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ClusterType" $cluster_type "scalar") (serialize-qp "NodeType" $node_type "scalar") (serialize-qp "MasterUsername" $master_username "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "ClusterSecurityGroups" $cluster_security_groups "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "ClusterSubnetGroupName" $cluster_subnet_group_name "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "ClusterParameterGroupName" $cluster_parameter_group_name "scalar") (serialize-qp "AutomatedSnapshotRetentionPeriod" $automated_snapshot_retention_period "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "ClusterVersion" $cluster_version "scalar") (serialize-qp "AllowVersionUpgrade" $allow_version_upgrade "scalar") (serialize-qp "NumberOfNodes" $number_of_nodes "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "Encrypted" $encrypted "scalar") (serialize-qp "HsmClientCertificateIdentifier" $hsm_client_certificate_identifier "scalar") (serialize-qp "HsmConfigurationIdentifier" $hsm_configuration_identifier "scalar") (serialize-qp "ElasticIp" $elastic_ip "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "EnhancedVpcRouting" $enhanced_vpc_routing "scalar") (serialize-qp "AdditionalInfo" $additional_info "scalar") (serialize-qp "IamRoles" $iam_roles "multi") (serialize-qp "MaintenanceTrackName" $maintenance_track_name "scalar") (serialize-qp "SnapshotScheduleIdentifier" $snapshot_schedule_identifier "scalar") (serialize-qp "AvailabilityZoneRelocation" $availability_zone_relocation "scalar") (serialize-qp "AquaConfigurationStatus" $aqua_configuration_status "scalar") (serialize-qp "DefaultIamRoleArn" $default_iam_role_arn "scalar") (serialize-qp "LoadSampleData" $load_sample_data "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1282,7 +1282,7 @@ export def "api create" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1324,7 +1324,7 @@ export def "api get-create-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterParameterGroup: record<ParameterGroupName: record, ParameterGroupFamily: record, Description: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ParameterGroupName" $parameter_group_name "scalar") (serialize-qp "ParameterGroupFamily" $parameter_group_family "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1360,7 +1360,7 @@ export def "api create-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterParameterGroup: record<ParameterGroupName: record, ParameterGroupFamily: record, Description: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1401,7 +1401,7 @@ export def "api get-create-security-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterSecurityGroup: record<ClusterSecurityGroupName: record, Description: record, EC2SecurityGroups: record, IPRanges: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSecurityGroupName" $cluster_security_group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1437,7 +1437,7 @@ export def "api create-security-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterSecurityGroup: record<ClusterSecurityGroupName: record, Description: record, EC2SecurityGroups: record, IPRanges: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1479,7 +1479,7 @@ export def "api get-create-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1515,7 +1515,7 @@ export def "api create-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1557,7 +1557,7 @@ export def "api get-create-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterSubnetGroup: record<ClusterSubnetGroupName: record, Description: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSubnetGroupName" $cluster_subnet_group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1593,7 +1593,7 @@ export def "api create-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterSubnetGroup: record<ClusterSubnetGroupName: record, Description: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1636,7 +1636,7 @@ export def "api get-create-endpoint-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterIdentifier: record, ResourceOwner: record, SubnetGroupName: record, EndpointStatus: record, EndpointName: record, EndpointCreateTime: record, Port: record, Address: record, VpcSecurityGroups: record, VpcEndpoint: record<VpcEndpointId: record, VpcId: record, NetworkInterfaces: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ResourceOwner" $resource_owner "scalar") (serialize-qp "EndpointName" $endpoint_name "scalar") (serialize-qp "SubnetGroupName" $subnet_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1672,7 +1672,7 @@ export def "api create-endpoint-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterIdentifier: record, ResourceOwner: record, SubnetGroupName: record, EndpointStatus: record, EndpointName: record, EndpointCreateTime: record, Port: record, Address: record, VpcSecurityGroups: record, VpcEndpoint: record<VpcEndpointId: record, VpcId: record, NetworkInterfaces: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1718,7 +1718,7 @@ export def "api get-create-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Severity: record, Enabled: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SnsTopicArn" $sns_topic_arn "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "SourceIds" $source_ids "multi") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "Severity" $severity "scalar") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1754,7 +1754,7 @@ export def "api create-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Severity: record, Enabled: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1794,7 +1794,7 @@ export def "api get-create-hsm-client-certificate" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HsmClientCertificate: record<HsmClientCertificateIdentifier: record, HsmClientCertificatePublicKey: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "HsmClientCertificateIdentifier" $hsm_client_certificate_identifier "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1830,7 +1830,7 @@ export def "api create-hsm-client-certificate" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HsmClientCertificate: record<HsmClientCertificateIdentifier: record, HsmClientCertificatePublicKey: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1875,7 +1875,7 @@ export def "api get-create-hsm-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<HsmConfiguration: record<HsmConfigurationIdentifier: record, Description: record, HsmIpAddress: record, HsmPartitionName: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "HsmConfigurationIdentifier" $hsm_configuration_identifier "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "HsmIpAddress" $hsm_ip_address "scalar") (serialize-qp "HsmPartitionName" $hsm_partition_name "scalar") (serialize-qp "HsmPartitionPassword" $hsm_partition_password "scalar") (serialize-qp "HsmServerPublicCertificate" $hsm_server_public_certificate "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1911,7 +1911,7 @@ export def "api create-hsm-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<HsmConfiguration: record<HsmConfigurationIdentifier: record, Description: record, HsmIpAddress: record, HsmPartitionName: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1957,7 +1957,7 @@ export def "api get-create-scheduled-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScheduledActionName: record, TargetAction: record<ResizeCluster: record<ClusterIdentifier: record, ClusterType: record, NodeType: record, NumberOfNodes: record, Classic: record, ReservedNodeId: record, TargetReservedNodeOfferingId: record>, PauseCluster: record<ClusterIdentifier: record>, ResumeCluster: record<ClusterIdentifier: record>>, Schedule: record, IamRole: record, ScheduledActionDescription: record, State: record, NextInvocations: record, StartTime: record, EndTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ScheduledActionName" $scheduled_action_name "scalar") (serialize-qp "TargetAction" $target_action "multi") (serialize-qp "Schedule" $schedule "scalar") (serialize-qp "IamRole" $iam_role "scalar") (serialize-qp "ScheduledActionDescription" $scheduled_action_description "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Enable" $enable "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1993,7 +1993,7 @@ export def "api create-scheduled-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScheduledActionName: record, TargetAction: record<ResizeCluster: record<ClusterIdentifier: record, ClusterType: record, NodeType: record, NumberOfNodes: record, Classic: record, ReservedNodeId: record, TargetReservedNodeOfferingId: record>, PauseCluster: record<ClusterIdentifier: record>, ResumeCluster: record<ClusterIdentifier: record>>, Schedule: record, IamRole: record, ScheduledActionDescription: record, State: record, NextInvocations: record, StartTime: record, EndTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2034,7 +2034,7 @@ export def "api get-create-snapshot-copy-grant" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SnapshotCopyGrant: record<SnapshotCopyGrantName: record, KmsKeyId: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotCopyGrantName" $snapshot_copy_grant_name "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2070,7 +2070,7 @@ export def "api create-snapshot-copy-grant" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<SnapshotCopyGrant: record<SnapshotCopyGrantName: record, KmsKeyId: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2114,7 +2114,7 @@ export def "api get-create-snapshot-schedule" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScheduleDefinitions: record, ScheduleIdentifier: record, ScheduleDescription: record, Tags: record, NextInvocations: record, AssociatedClusterCount: record, AssociatedClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ScheduleDefinitions" $schedule_definitions "multi") (serialize-qp "ScheduleIdentifier" $schedule_identifier "scalar") (serialize-qp "ScheduleDescription" $schedule_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "DryRun" $qp_dry_run "scalar") (serialize-qp "NextInvocations" $next_invocations "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2150,7 +2150,7 @@ export def "api create-snapshot-schedule" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScheduleDefinitions: record, ScheduleIdentifier: record, ScheduleDescription: record, Tags: record, NextInvocations: record, AssociatedClusterCount: record, AssociatedClusters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2271,7 +2271,7 @@ export def "api get-create-usage-limit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UsageLimitId: record, ClusterIdentifier: record, FeatureType: record, LimitType: record, Amount: record, Period: record, BreachAction: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "FeatureType" $feature_type "scalar") (serialize-qp "LimitType" $limit_type "scalar") (serialize-qp "Amount" $amount "scalar") (serialize-qp "Period" $period "scalar") (serialize-qp "BreachAction" $breach_action "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2307,7 +2307,7 @@ export def "api create-usage-limit" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UsageLimitId: record, ClusterIdentifier: record, FeatureType: record, LimitType: record, Amount: record, Period: record, BreachAction: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2347,7 +2347,7 @@ export def "api get-deauthorize-data-share" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DataShareArn" $data_share_arn "scalar") (serialize-qp "ConsumerIdentifier" $consumer_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2383,7 +2383,7 @@ export def "api create-deauthorize-data-share" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2422,7 +2422,7 @@ export def "api get-delete-authentication-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AuthenticationProfileName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AuthenticationProfileName" $authentication_profile_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2458,7 +2458,7 @@ export def "api create-delete-authentication-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AuthenticationProfileName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2500,7 +2500,7 @@ export def "api get-delete" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "SkipFinalClusterSnapshot" $skip_final_cluster_snapshot "scalar") (serialize-qp "FinalClusterSnapshotIdentifier" $final_cluster_snapshot_identifier "scalar") (serialize-qp "FinalClusterSnapshotRetentionPeriod" $final_cluster_snapshot_retention_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2536,7 +2536,7 @@ export def "api create-delete" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2726,7 +2726,7 @@ export def "api get-delete-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SnapshotClusterIdentifier" $snapshot_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2762,7 +2762,7 @@ export def "api create-delete-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2876,7 +2876,7 @@ export def "api get-delete-endpoint-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterIdentifier: record, ResourceOwner: record, SubnetGroupName: record, EndpointStatus: record, EndpointName: record, EndpointCreateTime: record, Port: record, Address: record, VpcSecurityGroups: record, VpcEndpoint: record<VpcEndpointId: record, VpcId: record, NetworkInterfaces: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EndpointName" $endpoint_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2912,7 +2912,7 @@ export def "api create-delete-endpoint-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterIdentifier: record, ResourceOwner: record, SubnetGroupName: record, EndpointStatus: record, EndpointName: record, EndpointCreateTime: record, Port: record, Address: record, VpcSecurityGroups: record, VpcEndpoint: record<VpcEndpointId: record, VpcId: record, NetworkInterfaces: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3179,7 +3179,7 @@ export def "api get-delete-partner" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DatabaseName: record, PartnerName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AccountId" $account_id "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "PartnerName" $partner_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3215,7 +3215,7 @@ export def "api create-delete-partner" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DatabaseName: record, PartnerName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3630,7 +3630,7 @@ export def "api get-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AccountAttributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3666,7 +3666,7 @@ export def "api create-get-account-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AccountAttributes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3705,7 +3705,7 @@ export def "api get-authentication-profiles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AuthenticationProfiles: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AuthenticationProfileName" $authentication_profile_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3741,7 +3741,7 @@ export def "api create-get-authentication-profiles" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AuthenticationProfiles: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3782,7 +3782,7 @@ export def "api get-db-revisions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ClusterDbRevisions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3820,7 +3820,7 @@ export def "api create-get-db-revisions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ClusterDbRevisions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3863,7 +3863,7 @@ export def "api get-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ParameterGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ParameterGroupName" $parameter_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3901,7 +3901,7 @@ export def "api create-get-parameter-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ParameterGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3943,7 +3943,7 @@ export def "api get-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Parameters: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ParameterGroupName" $parameter_group_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3981,7 +3981,7 @@ export def "api create-get-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Parameters: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4024,7 +4024,7 @@ export def "api get-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ClusterSecurityGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSecurityGroupName" $cluster_security_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4062,7 +4062,7 @@ export def "api create-get-security-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ClusterSecurityGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4113,7 +4113,7 @@ export def "api get-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Snapshots: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SnapshotArn" $snapshot_arn "scalar") (serialize-qp "SnapshotType" $snapshot_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "OwnerAccount" $owner_account "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "ClusterExists" $cluster_exists "scalar") (serialize-qp "SortingEntities" $sorting_entities "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4151,7 +4151,7 @@ export def "api create-get-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Snapshots: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4194,7 +4194,7 @@ export def "api get-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ClusterSubnetGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSubnetGroupName" $cluster_subnet_group_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4232,7 +4232,7 @@ export def "api create-get-subnet-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ClusterSubnetGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4273,7 +4273,7 @@ export def "api get-tracks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<MaintenanceTracks: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "MaintenanceTrackName" $maintenance_track_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4311,7 +4311,7 @@ export def "api create-get-tracks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<MaintenanceTracks: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4353,7 +4353,7 @@ export def "api get-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ClusterVersions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterVersion" $cluster_version "scalar") (serialize-qp "ClusterParameterGroupFamily" $cluster_parameter_group_family "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4391,7 +4391,7 @@ export def "api create-get-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ClusterVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4434,7 +4434,7 @@ export def "api get-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Clusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4472,7 +4472,7 @@ export def "api create-get-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Clusters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4513,7 +4513,7 @@ export def "api get-data-shares" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShares: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DataShareArn" $data_share_arn "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4551,7 +4551,7 @@ export def "api create-get-data-shares" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShares: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4593,7 +4593,7 @@ export def "api get-data-shares-for-consumer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShares: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ConsumerArn" $consumer_arn "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4631,7 +4631,7 @@ export def "api create-get-data-shares-for-consumer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShares: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4673,7 +4673,7 @@ export def "api get-data-shares-for-producer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShares: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ProducerArn" $producer_arn "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4711,7 +4711,7 @@ export def "api create-get-data-shares-for-producer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShares: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4752,7 +4752,7 @@ export def "api get-default-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DefaultClusterParameters: record<ParameterGroupFamily: record, Marker: record, Parameters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ParameterGroupFamily" $parameter_group_family "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4790,7 +4790,7 @@ export def "api create-get-default-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DefaultClusterParameters: record<ParameterGroupFamily: record, Marker: record, Parameters: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4834,7 +4834,7 @@ export def "api get-endpoint-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EndpointAccessList: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ResourceOwner" $resource_owner "scalar") (serialize-qp "EndpointName" $endpoint_name "scalar") (serialize-qp "VpcId" $vpc_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4872,7 +4872,7 @@ export def "api create-get-endpoint-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EndpointAccessList: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4915,7 +4915,7 @@ export def "api get-endpoint-authorization" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EndpointAuthorizationList: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Account" $account "scalar") (serialize-qp "Grantee" $grantee "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4953,7 +4953,7 @@ export def "api create-get-endpoint-authorization" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EndpointAuthorizationList: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4992,7 +4992,7 @@ export def "api get-event-categories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventCategoriesMapList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceType" $source_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5028,7 +5028,7 @@ export def "api create-get-event-categories" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventCategoriesMapList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5071,7 +5071,7 @@ export def "api get-event-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, EventSubscriptionsList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5109,7 +5109,7 @@ export def "api create-get-event-subscriptions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, EventSubscriptionsList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5154,7 +5154,7 @@ export def "api get-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Events: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5192,7 +5192,7 @@ export def "api create-get-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Events: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5235,7 +5235,7 @@ export def "api get-hsm-client-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, HsmClientCertificates: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "HsmClientCertificateIdentifier" $hsm_client_certificate_identifier "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5273,7 +5273,7 @@ export def "api create-get-hsm-client-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, HsmClientCertificates: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5316,7 +5316,7 @@ export def "api get-hsm-configurations" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, HsmConfigurations: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "HsmConfigurationIdentifier" $hsm_configuration_identifier "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5354,7 +5354,7 @@ export def "api create-get-hsm-configurations" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, HsmConfigurations: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5393,7 +5393,7 @@ export def "api get-logging-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoggingEnabled: record, BucketName: record, S3KeyPrefix: record, LastSuccessfulDeliveryTime: record, LastFailureTime: record, LastFailureMessage: record, LogDestinationType: record, LogExports: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5429,7 +5429,7 @@ export def "api create-get-logging-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoggingEnabled: record, BucketName: record, S3KeyPrefix: record, LastSuccessfulDeliveryTime: record, LastFailureTime: record, LastFailureMessage: record, LogDestinationType: record, LogExports: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5475,7 +5475,7 @@ export def "api get-node-configuration-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<NodeConfigurationOptionList: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ActionType" $action_type "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SnapshotArn" $snapshot_arn "scalar") (serialize-qp "OwnerAccount" $owner_account "scalar") (serialize-qp "Filter" $filter "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5513,7 +5513,7 @@ export def "api create-get-node-configuration-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<NodeConfigurationOptionList: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5555,7 +5555,7 @@ export def "api get-orderable-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OrderableClusterOptions: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterVersion" $cluster_version "scalar") (serialize-qp "NodeType" $node_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5593,7 +5593,7 @@ export def "api create-get-orderable-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OrderableClusterOptions: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5635,7 +5635,7 @@ export def "api get-partners" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PartnerIntegrationInfoList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AccountId" $account_id "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "PartnerName" $partner_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5671,7 +5671,7 @@ export def "api create-get-partners" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PartnerIntegrationInfoList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5713,7 +5713,7 @@ export def "api get-reserved-node-exchange-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReservedNodeExchangeStatusDetails: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedNodeId" $reserved_node_id "scalar") (serialize-qp "ReservedNodeExchangeRequestId" $reserved_node_exchange_request_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5751,7 +5751,7 @@ export def "api create-get-reserved-node-exchange-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReservedNodeExchangeStatusDetails: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5792,7 +5792,7 @@ export def "api get-reserved-node-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedNodeOfferings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedNodeOfferingId" $reserved_node_offering_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5830,7 +5830,7 @@ export def "api create-get-reserved-node-offerings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedNodeOfferings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5871,7 +5871,7 @@ export def "api get-reserved-nodes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedNodes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedNodeId" $reserved_node_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5909,7 +5909,7 @@ export def "api create-get-reserved-nodes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedNodes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5948,7 +5948,7 @@ export def "api get-resize" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TargetNodeType: record, TargetNumberOfNodes: record, TargetClusterType: record, Status: record, ImportTablesCompleted: record, ImportTablesInProgress: record, ImportTablesNotStarted: record, AvgResizeRateInMegaBytesPerSecond: record, TotalResizeDataInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record, ResizeType: record, Message: record, TargetEncryptionType: record, DataTransferProgressPercent: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5984,7 +5984,7 @@ export def "api create-get-resize" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TargetNodeType: record, TargetNumberOfNodes: record, TargetClusterType: record, Status: record, ImportTablesCompleted: record, ImportTablesInProgress: record, ImportTablesNotStarted: record, AvgResizeRateInMegaBytesPerSecond: record, TotalResizeDataInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record, ResizeType: record, Message: record, TargetEncryptionType: record, DataTransferProgressPercent: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6030,7 +6030,7 @@ export def "api get-scheduled-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ScheduledActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ScheduledActionName" $scheduled_action_name "scalar") (serialize-qp "TargetActionType" $target_action_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Active" $active "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6068,7 +6068,7 @@ export def "api create-get-scheduled-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ScheduledActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6111,7 +6111,7 @@ export def "api get-snapshot-copy-grants" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, SnapshotCopyGrants: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotCopyGrantName" $snapshot_copy_grant_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6149,7 +6149,7 @@ export def "api create-get-snapshot-copy-grants" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, SnapshotCopyGrants: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6193,7 +6193,7 @@ export def "api get-snapshot-schedules" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SnapshotSchedules: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ScheduleIdentifier" $schedule_identifier "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6231,7 +6231,7 @@ export def "api create-get-snapshot-schedules" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<SnapshotSchedules: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6269,7 +6269,7 @@ export def "api get-storage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TotalBackupSizeInMegaBytes: record, TotalProvisionedStorageInMegaBytes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6304,7 +6304,7 @@ export def "api create-get-storage" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TotalBackupSizeInMegaBytes: record, TotalProvisionedStorageInMegaBytes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6343,7 +6343,7 @@ export def "api get-table-restore-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TableRestoreStatusDetails: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "TableRestoreRequestId" $table_restore_request_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6381,7 +6381,7 @@ export def "api create-get-table-restore-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TableRestoreStatusDetails: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6425,7 +6425,7 @@ export def "api get-tags" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TaggedResources: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "ResourceType" $resource_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6463,7 +6463,7 @@ export def "api create-get-tags" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TaggedResources: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6508,7 +6508,7 @@ export def "api get-usage-limits" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UsageLimits: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UsageLimitId" $usage_limit_id "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "FeatureType" $feature_type "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "TagKeys" $tag_keys "multi") (serialize-qp "TagValues" $tag_values "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6546,7 +6546,7 @@ export def "api create-get-usage-limits" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UsageLimits: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6585,7 +6585,7 @@ export def "api get-disable-logging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoggingEnabled: record, BucketName: record, S3KeyPrefix: record, LastSuccessfulDeliveryTime: record, LastFailureTime: record, LastFailureMessage: record, LogDestinationType: record, LogExports: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6621,7 +6621,7 @@ export def "api create-disable-logging" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoggingEnabled: record, BucketName: record, S3KeyPrefix: record, LastSuccessfulDeliveryTime: record, LastFailureTime: record, LastFailureMessage: record, LogDestinationType: record, LogExports: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6660,7 +6660,7 @@ export def "api get-disable-snapshot-copy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6696,7 +6696,7 @@ export def "api create-disable-snapshot-copy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6738,7 +6738,7 @@ export def "api get-disassociate-data-share-consumer" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DataShareArn" $data_share_arn "scalar") (serialize-qp "DisassociateEntireAccount" $disassociate_entire_account "scalar") (serialize-qp "ConsumerArn" $consumer_arn "scalar") (serialize-qp "ConsumerRegion" $consumer_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6774,7 +6774,7 @@ export def "api create-disassociate-data-share-consumer" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6817,7 +6817,7 @@ export def "api get-enable-logging" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LoggingEnabled: record, BucketName: record, S3KeyPrefix: record, LastSuccessfulDeliveryTime: record, LastFailureTime: record, LastFailureMessage: record, LogDestinationType: record, LogExports: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "BucketName" $bucket_name "scalar") (serialize-qp "S3KeyPrefix" $s3_key_prefix "scalar") (serialize-qp "LogDestinationType" $log_destination_type "scalar") (serialize-qp "LogExports" $log_exports "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6853,7 +6853,7 @@ export def "api create-enable-logging" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LoggingEnabled: record, BucketName: record, S3KeyPrefix: record, LastSuccessfulDeliveryTime: record, LastFailureTime: record, LastFailureMessage: record, LogDestinationType: record, LogExports: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6896,7 +6896,7 @@ export def "api get-enable-snapshot-copy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DestinationRegion" $destination_region "scalar") (serialize-qp "RetentionPeriod" $retention_period "scalar") (serialize-qp "SnapshotCopyGrantName" $snapshot_copy_grant_name "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6932,7 +6932,7 @@ export def "api create-enable-snapshot-copy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6976,7 +6976,7 @@ export def "api get-credentials" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DbUser: record, DbPassword: record, Expiration: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DbUser" $db_user "scalar") (serialize-qp "DbName" $db_name "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "AutoCreate" $auto_create "scalar") (serialize-qp "DbGroups" $db_groups "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7012,7 +7012,7 @@ export def "api create-get-credentials" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DbUser: record, DbPassword: record, Expiration: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7053,7 +7053,7 @@ export def "api get-credentials-with-iam" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DbUser: record, DbPassword: record, Expiration: record, NextRefreshTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DbName" $db_name "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DurationSeconds" $duration_seconds "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7089,7 +7089,7 @@ export def "api create-get-credentials-with-iam" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DbUser: record, DbPassword: record, Expiration: record, NextRefreshTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7132,7 +7132,7 @@ export def "api get-reserved-node-exchange-configuration-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedNodeConfigurationOptionList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ActionType" $action_type "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7170,7 +7170,7 @@ export def "api create-get-reserved-node-exchange-configuration-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedNodeConfigurationOptionList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7211,7 +7211,7 @@ export def "api get-reserved-node-exchange-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedNodeOfferings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedNodeId" $reserved_node_id "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7249,7 +7249,7 @@ export def "api create-get-reserved-node-exchange-offerings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedNodeOfferings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7289,7 +7289,7 @@ export def "api get-modify-aqua-configuration" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "AquaConfigurationStatus" $aqua_configuration_status "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7325,7 +7325,7 @@ export def "api create-modify-aqua-configuration" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7365,7 +7365,7 @@ export def "api get-modify-authentication-profile" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AuthenticationProfileName: record, AuthenticationProfileContent: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AuthenticationProfileName" $authentication_profile_name "scalar") (serialize-qp "AuthenticationProfileContent" $authentication_profile_content "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7401,7 +7401,7 @@ export def "api create-modify-authentication-profile" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AuthenticationProfileName: record, AuthenticationProfileContent: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7464,7 +7464,7 @@ export def "api get-modify" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ClusterType" $cluster_type "scalar") (serialize-qp "NodeType" $node_type "scalar") (serialize-qp "NumberOfNodes" $number_of_nodes "scalar") (serialize-qp "ClusterSecurityGroups" $cluster_security_groups "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "ClusterParameterGroupName" $cluster_parameter_group_name "scalar") (serialize-qp "AutomatedSnapshotRetentionPeriod" $automated_snapshot_retention_period "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "ClusterVersion" $cluster_version "scalar") (serialize-qp "AllowVersionUpgrade" $allow_version_upgrade "scalar") (serialize-qp "HsmClientCertificateIdentifier" $hsm_client_certificate_identifier "scalar") (serialize-qp "HsmConfigurationIdentifier" $hsm_configuration_identifier "scalar") (serialize-qp "NewClusterIdentifier" $new_cluster_identifier "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "ElasticIp" $elastic_ip "scalar") (serialize-qp "EnhancedVpcRouting" $enhanced_vpc_routing "scalar") (serialize-qp "MaintenanceTrackName" $maintenance_track_name "scalar") (serialize-qp "Encrypted" $encrypted "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "AvailabilityZoneRelocation" $availability_zone_relocation "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7500,7 +7500,7 @@ export def "api create-modify" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7540,7 +7540,7 @@ export def "api get-modify-db-revision" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "RevisionTarget" $revision_target "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7576,7 +7576,7 @@ export def "api create-modify-db-revision" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7618,7 +7618,7 @@ export def "api get-modify-iam-roles" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "AddIamRoles" $add_iam_roles "multi") (serialize-qp "RemoveIamRoles" $remove_iam_roles "multi") (serialize-qp "DefaultIamRoleArn" $default_iam_role_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7654,7 +7654,7 @@ export def "api create-modify-iam-roles" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7698,7 +7698,7 @@ export def "api get-modify-maintenance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DeferMaintenance" $defer_maintenance "scalar") (serialize-qp "DeferMaintenanceIdentifier" $defer_maintenance_identifier "scalar") (serialize-qp "DeferMaintenanceStartTime" $defer_maintenance_start_time "scalar") (serialize-qp "DeferMaintenanceEndTime" $defer_maintenance_end_time "scalar") (serialize-qp "DeferMaintenanceDuration" $defer_maintenance_duration "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7734,7 +7734,7 @@ export def "api create-modify-maintenance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7774,7 +7774,7 @@ export def "api get-modify-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ParameterGroupName: record, ParameterGroupStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ParameterGroupName" $parameter_group_name "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7810,7 +7810,7 @@ export def "api create-modify-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ParameterGroupName: record, ParameterGroupStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7851,7 +7851,7 @@ export def "api get-modify-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "Force" $force "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7887,7 +7887,7 @@ export def "api create-modify-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8005,7 +8005,7 @@ export def "api get-modify-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterSubnetGroup: record<ClusterSubnetGroupName: record, Description: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSubnetGroupName" $cluster_subnet_group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8041,7 +8041,7 @@ export def "api create-modify-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterSubnetGroup: record<ClusterSubnetGroupName: record, Description: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8081,7 +8081,7 @@ export def "api get-modify-endpoint-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterIdentifier: record, ResourceOwner: record, SubnetGroupName: record, EndpointStatus: record, EndpointName: record, EndpointCreateTime: record, Port: record, Address: record, VpcSecurityGroups: record, VpcEndpoint: record<VpcEndpointId: record, VpcId: record, NetworkInterfaces: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EndpointName" $endpoint_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8117,7 +8117,7 @@ export def "api create-modify-endpoint-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterIdentifier: record, ResourceOwner: record, SubnetGroupName: record, EndpointStatus: record, EndpointName: record, EndpointCreateTime: record, Port: record, Address: record, VpcSecurityGroups: record, VpcEndpoint: record<VpcEndpointId: record, VpcId: record, NetworkInterfaces: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8162,7 +8162,7 @@ export def "api get-modify-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Severity: record, Enabled: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SnsTopicArn" $sns_topic_arn "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "SourceIds" $source_ids "multi") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "Severity" $severity "scalar") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8198,7 +8198,7 @@ export def "api create-modify-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Severity: record, Enabled: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8244,7 +8244,7 @@ export def "api get-modify-scheduled-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScheduledActionName: record, TargetAction: record<ResizeCluster: record<ClusterIdentifier: record, ClusterType: record, NodeType: record, NumberOfNodes: record, Classic: record, ReservedNodeId: record, TargetReservedNodeOfferingId: record>, PauseCluster: record<ClusterIdentifier: record>, ResumeCluster: record<ClusterIdentifier: record>>, Schedule: record, IamRole: record, ScheduledActionDescription: record, State: record, NextInvocations: record, StartTime: record, EndTime: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ScheduledActionName" $scheduled_action_name "scalar") (serialize-qp "TargetAction" $target_action "multi") (serialize-qp "Schedule" $schedule "scalar") (serialize-qp "IamRole" $iam_role "scalar") (serialize-qp "ScheduledActionDescription" $scheduled_action_description "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Enable" $enable "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8280,7 +8280,7 @@ export def "api create-modify-scheduled-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScheduledActionName: record, TargetAction: record<ResizeCluster: record<ClusterIdentifier: record, ClusterType: record, NodeType: record, NumberOfNodes: record, Classic: record, ReservedNodeId: record, TargetReservedNodeOfferingId: record>, PauseCluster: record<ClusterIdentifier: record>, ResumeCluster: record<ClusterIdentifier: record>>, Schedule: record, IamRole: record, ScheduledActionDescription: record, State: record, NextInvocations: record, StartTime: record, EndTime: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8321,7 +8321,7 @@ export def "api get-modify-snapshot-copy-retention-period" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "RetentionPeriod" $retention_period "scalar") (serialize-qp "Manual" $manual "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8357,7 +8357,7 @@ export def "api create-modify-snapshot-copy-retention-period" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8397,7 +8397,7 @@ export def "api get-modify-snapshot-schedule-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScheduleDefinitions: record, ScheduleIdentifier: record, ScheduleDescription: record, Tags: record, NextInvocations: record, AssociatedClusterCount: record, AssociatedClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ScheduleIdentifier" $schedule_identifier "scalar") (serialize-qp "ScheduleDefinitions" $schedule_definitions "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8433,7 +8433,7 @@ export def "api create-modify-snapshot-schedule-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScheduleDefinitions: record, ScheduleIdentifier: record, ScheduleDescription: record, Tags: record, NextInvocations: record, AssociatedClusterCount: record, AssociatedClusters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8474,7 +8474,7 @@ export def "api get-modify-usage-limit" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<UsageLimitId: record, ClusterIdentifier: record, FeatureType: record, LimitType: record, Amount: record, Period: record, BreachAction: record, Tags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "UsageLimitId" $usage_limit_id "scalar") (serialize-qp "Amount" $amount "scalar") (serialize-qp "BreachAction" $breach_action "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8510,7 +8510,7 @@ export def "api create-modify-usage-limit" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<UsageLimitId: record, ClusterIdentifier: record, FeatureType: record, LimitType: record, Amount: record, Period: record, BreachAction: record, Tags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8549,7 +8549,7 @@ export def "api get-pause" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8585,7 +8585,7 @@ export def "api create-pause" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8625,7 +8625,7 @@ export def "api get-purchase-reserved-node-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReservedNode: record<ReservedNodeId: record, ReservedNodeOfferingId: record, NodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CurrencyCode: record, NodeCount: record, State: record, OfferingType: record, RecurringCharges: record, ReservedNodeOfferingType: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedNodeOfferingId" $reserved_node_offering_id "scalar") (serialize-qp "NodeCount" $node_count "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8661,7 +8661,7 @@ export def "api create-purchase-reserved-node-offering" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReservedNode: record<ReservedNodeId: record, ReservedNodeOfferingId: record, NodeType: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CurrencyCode: record, NodeCount: record, State: record, OfferingType: record, RecurringCharges: record, ReservedNodeOfferingType: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8700,7 +8700,7 @@ export def "api get-reboot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8736,7 +8736,7 @@ export def "api create-reboot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8775,7 +8775,7 @@ export def "api get-reject-data-share" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DataShareArn" $data_share_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8811,7 +8811,7 @@ export def "api create-reject-data-share" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DataShareArn: record, ProducerArn: record, AllowPubliclyAccessibleConsumers: record, DataShareAssociations: record, ManagedBy: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8852,7 +8852,7 @@ export def "api get-reset-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ParameterGroupName: record, ParameterGroupStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ParameterGroupName" $parameter_group_name "scalar") (serialize-qp "ResetAllParameters" $reset_all_parameters "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8888,7 +8888,7 @@ export def "api create-reset-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ParameterGroupName: record, ParameterGroupStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8933,7 +8933,7 @@ export def "api get-resize-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "ClusterType" $cluster_type "scalar") (serialize-qp "NodeType" $node_type "scalar") (serialize-qp "NumberOfNodes" $number_of_nodes "scalar") (serialize-qp "Classic" $classic "scalar") (serialize-qp "ReservedNodeId" $reserved_node_id "scalar") (serialize-qp "TargetReservedNodeOfferingId" $target_reserved_node_offering_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8969,7 +8969,7 @@ export def "api create-resize" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9040,7 +9040,7 @@ export def "api get-restore-from-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SnapshotArn" $snapshot_arn "scalar") (serialize-qp "SnapshotClusterIdentifier" $snapshot_cluster_identifier "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "AllowVersionUpgrade" $allow_version_upgrade "scalar") (serialize-qp "ClusterSubnetGroupName" $cluster_subnet_group_name "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "OwnerAccount" $owner_account "scalar") (serialize-qp "HsmClientCertificateIdentifier" $hsm_client_certificate_identifier "scalar") (serialize-qp "HsmConfigurationIdentifier" $hsm_configuration_identifier "scalar") (serialize-qp "ElasticIp" $elastic_ip "scalar") (serialize-qp "ClusterParameterGroupName" $cluster_parameter_group_name "scalar") (serialize-qp "ClusterSecurityGroups" $cluster_security_groups "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "AutomatedSnapshotRetentionPeriod" $automated_snapshot_retention_period "scalar") (serialize-qp "ManualSnapshotRetentionPeriod" $manual_snapshot_retention_period "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "NodeType" $node_type "scalar") (serialize-qp "EnhancedVpcRouting" $enhanced_vpc_routing "scalar") (serialize-qp "AdditionalInfo" $additional_info "scalar") (serialize-qp "IamRoles" $iam_roles "multi") (serialize-qp "MaintenanceTrackName" $maintenance_track_name "scalar") (serialize-qp "SnapshotScheduleIdentifier" $snapshot_schedule_identifier "scalar") (serialize-qp "NumberOfNodes" $number_of_nodes "scalar") (serialize-qp "AvailabilityZoneRelocation" $availability_zone_relocation "scalar") (serialize-qp "AquaConfigurationStatus" $aqua_configuration_status "scalar") (serialize-qp "DefaultIamRoleArn" $default_iam_role_arn "scalar") (serialize-qp "ReservedNodeId" $reserved_node_id "scalar") (serialize-qp "TargetReservedNodeOfferingId" $target_reserved_node_offering_id "scalar") (serialize-qp "Encrypted" $encrypted "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9076,7 +9076,7 @@ export def "api create-restore-from-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9123,7 +9123,7 @@ export def "api get-restore-table-from-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TableRestoreStatus: record<TableRestoreRequestId: record, Status: record, Message: record, RequestTime: record, ProgressInMegaBytes: record, TotalDataInMegaBytes: record, ClusterIdentifier: record, SnapshotIdentifier: record, SourceDatabaseName: record, SourceSchemaName: record, SourceTableName: record, TargetDatabaseName: record, TargetSchemaName: record, NewTableName: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SourceDatabaseName" $source_database_name "scalar") (serialize-qp "SourceSchemaName" $source_schema_name "scalar") (serialize-qp "SourceTableName" $source_table_name "scalar") (serialize-qp "TargetDatabaseName" $target_database_name "scalar") (serialize-qp "TargetSchemaName" $target_schema_name "scalar") (serialize-qp "NewTableName" $new_table_name "scalar") (serialize-qp "EnableCaseSensitiveIdentifier" $enable_case_sensitive_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9159,7 +9159,7 @@ export def "api create-restore-table-from-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TableRestoreStatus: record<TableRestoreRequestId: record, Status: record, Message: record, RequestTime: record, ProgressInMegaBytes: record, TotalDataInMegaBytes: record, ClusterIdentifier: record, SnapshotIdentifier: record, SourceDatabaseName: record, SourceSchemaName: record, SourceTableName: record, TargetDatabaseName: record, TargetSchemaName: record, NewTableName: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9198,7 +9198,7 @@ export def "api get-resume" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9234,7 +9234,7 @@ export def "api create-resume" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9276,7 +9276,7 @@ export def "api get-delete-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ClusterSecurityGroup: record<ClusterSecurityGroupName: record, Description: record, EC2SecurityGroups: record, IPRanges: record, Tags: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterSecurityGroupName" $cluster_security_group_name "scalar") (serialize-qp "CIDRIP" $cidrip "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9312,7 +9312,7 @@ export def "api create-delete-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ClusterSecurityGroup: record<ClusterSecurityGroupName: record, Description: record, EC2SecurityGroups: record, IPRanges: record, Tags: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9354,7 +9354,7 @@ export def "api get-delete-endpoint-access-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Grantor: record, Grantee: record, ClusterIdentifier: record, AuthorizeTime: record, ClusterStatus: record, Status: record, AllowedAllVPCs: record, AllowedVPCs: record, EndpointCount: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Account" $account "scalar") (serialize-qp "VpcIds" $vpc_ids "multi") (serialize-qp "Force" $force "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9390,7 +9390,7 @@ export def "api create-delete-endpoint-access-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Grantor: record, Grantee: record, ClusterIdentifier: record, AuthorizeTime: record, ClusterStatus: record, Status: record, AllowedAllVPCs: record, AllowedVPCs: record, EndpointCount: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9432,7 +9432,7 @@ export def "api get-delete-snapshot-access" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "SnapshotArn" $snapshot_arn "scalar") (serialize-qp "SnapshotClusterIdentifier" $snapshot_cluster_identifier "scalar") (serialize-qp "AccountWithRestoreAccess" $account_with_restore_access "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9468,7 +9468,7 @@ export def "api create-delete-snapshot-access" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Snapshot: record<SnapshotIdentifier: record, ClusterIdentifier: record, SnapshotCreateTime: record, Status: record, Port: record, AvailabilityZone: record, ClusterCreateTime: record, MasterUsername: record, ClusterVersion: record, EngineFullVersion: record, SnapshotType: record, NodeType: record, NumberOfNodes: record, DBName: record, VpcId: record, Encrypted: record, KmsKeyId: record, EncryptedWithHSM: record, AccountsWithRestoreAccess: record, OwnerAccount: record, TotalBackupSizeInMegaBytes: record, ActualIncrementalBackupSizeInMegaBytes: record, BackupProgressInMegaBytes: record, CurrentBackupRateInMegaBytesPerSecond: record, EstimatedSecondsToCompletion: record, ElapsedTimeInSeconds: record, SourceRegion: record, Tags: record, RestorableNodeTypes: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, ManualSnapshotRetentionPeriod: record, ManualSnapshotRemainingDays: record, SnapshotRetentionStartTime: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9507,7 +9507,7 @@ export def "api get-rotate-encryption-key" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9543,7 +9543,7 @@ export def "api create-rotate-encryption-key" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Cluster: record<ClusterIdentifier: record, NodeType: record, ClusterStatus: record, ClusterAvailabilityStatus: record, ModifyStatus: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, VpcEndpoints: record>, ClusterCreateTime: record, AutomatedSnapshotRetentionPeriod: record, ManualSnapshotRetentionPeriod: record, ClusterSecurityGroups: record, VpcSecurityGroups: record, ClusterParameterGroups: record, ClusterSubnetGroupName: record, VpcId: record, AvailabilityZone: record, PreferredMaintenanceWindow: record, PendingModifiedValues: record<MasterUserPassword: record, NodeType: record, NumberOfNodes: record, ClusterType: record, ClusterVersion: record, AutomatedSnapshotRetentionPeriod: record, ClusterIdentifier: record, PubliclyAccessible: record, EnhancedVpcRouting: record, MaintenanceTrackName: record, EncryptionType: record>, ClusterVersion: record, AllowVersionUpgrade: record, NumberOfNodes: record, PubliclyAccessible: record, Encrypted: record, RestoreStatus: record<Status: record, CurrentRestoreRateInMegaBytesPerSecond: record, SnapshotSizeInMegaBytes: record, ProgressInMegaBytes: record, ElapsedTimeInSeconds: record, EstimatedTimeToCompletionInSeconds: record>, DataTransferProgress: record<Status: record, CurrentRateInMegaBytesPerSecond: record, TotalDataInMegaBytes: record, DataTransferredInMegaBytes: record, EstimatedTimeToCompletionInSeconds: record, ElapsedTimeInSeconds: record>, HsmStatus: record<HsmClientCertificateIdentifier: record, HsmConfigurationIdentifier: record, Status: record>, ClusterSnapshotCopyStatus: record<DestinationRegion: record, RetentionPeriod: record, ManualSnapshotRetentionPeriod: record, SnapshotCopyGrantName: record>, ClusterPublicKey: record, ClusterNodes: record, ElasticIpStatus: record<ElasticIp: record, Status: record>, ClusterRevisionNumber: record, Tags: record, KmsKeyId: record, EnhancedVpcRouting: record, IamRoles: record, PendingActions: record, MaintenanceTrackName: record, ElasticResizeNumberOfNodeOptions: record, DeferredMaintenanceWindows: record, SnapshotScheduleIdentifier: record, SnapshotScheduleState: record, ExpectedNextSnapshotScheduleTime: record, ExpectedNextSnapshotScheduleTimeStatus: record, NextMaintenanceWindowStartTime: record, ResizeInfo: record<ResizeType: record, AllowCancelResize: record>, AvailabilityZoneRelocationStatus: record, ClusterNamespaceArn: record, TotalStorageCapacityInMegaBytes: record, AquaConfiguration: record<AquaStatus: record, AquaConfigurationStatus: record>, DefaultIamRoleArn: record, ReservedNodeExchangeStatus: record<ReservedNodeExchangeRequestId: record, Status: record, RequestTime: record, SourceReservedNodeId: record, SourceReservedNodeType: record, SourceReservedNodeCount: record, TargetReservedNodeOfferingId: record, TargetReservedNodeType: record, TargetReservedNodeCount: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9587,7 +9587,7 @@ export def "api get-update-partner-status" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DatabaseName: record, PartnerName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AccountId" $account_id "scalar") (serialize-qp "ClusterIdentifier" $cluster_identifier "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "PartnerName" $partner_name "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "StatusMessage" $status_message "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9623,7 +9623,7 @@ export def "api create-update-partner-status" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DatabaseName: record, PartnerName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

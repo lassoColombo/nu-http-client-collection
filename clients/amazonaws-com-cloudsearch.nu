@@ -185,7 +185,7 @@ export def "api get-build-suggesters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<FieldNames: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -221,7 +221,7 @@ export def "api create-build-suggesters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<FieldNames: list<string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -260,7 +260,7 @@ export def "api get-create-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -296,7 +296,7 @@ export def "api create-domain" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -336,7 +336,7 @@ export def "api get-define-analysis-scheme" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AnalysisScheme" $analysis_scheme "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -372,7 +372,7 @@ export def "api create-define-analysis-scheme" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -412,7 +412,7 @@ export def "api get-define-expression" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Expression" $expression "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -448,7 +448,7 @@ export def "api create-define-expression" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -488,7 +488,7 @@ export def "api get-define-index-field" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "IndexField" $index_field "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -524,7 +524,7 @@ export def "api create-define-index-field" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -564,7 +564,7 @@ export def "api get-define-suggester" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Suggester" $suggester "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -600,7 +600,7 @@ export def "api create-define-suggester" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -640,7 +640,7 @@ export def "api get-delete-analysis-scheme" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AnalysisSchemeName" $analysis_scheme_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -676,7 +676,7 @@ export def "api create-delete-analysis-scheme" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AnalysisScheme: record<Options: record<AnalysisSchemeName: string, AnalysisSchemeLanguage: string, AnalysisOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -715,7 +715,7 @@ export def "api get-delete-domain" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -751,7 +751,7 @@ export def "api create-delete-domain" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DomainStatus: record<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record<Endpoint: string>, SearchService: record<Endpoint: string>, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record<MaximumReplicationCount: int, MaximumPartitionCount: int>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -791,7 +791,7 @@ export def "api get-delete-expression" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ExpressionName" $expression_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -827,7 +827,7 @@ export def "api create-delete-expression" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Expression: record<Options: record<ExpressionName: string, ExpressionValue: string>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -867,7 +867,7 @@ export def "api get-delete-index-field" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "IndexFieldName" $index_field_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -903,7 +903,7 @@ export def "api create-delete-index-field" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<IndexField: record<Options: record<IndexFieldName: record, IndexFieldType: string, IntOptions: record, DoubleOptions: record, LiteralOptions: record, TextOptions: record, DateOptions: record, LatLonOptions: record, IntArrayOptions: record, DoubleArrayOptions: record, LiteralArrayOptions: record, TextArrayOptions: record, DateArrayOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -943,7 +943,7 @@ export def "api get-delete-suggester" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "SuggesterName" $suggester_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -979,7 +979,7 @@ export def "api create-delete-suggester" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Suggester: record<Options: record<SuggesterName: string, DocumentSuggesterOptions: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1020,7 +1020,7 @@ export def "api get-analysis-schemes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AnalysisSchemes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AnalysisSchemeNames" $analysis_scheme_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1056,7 +1056,7 @@ export def "api create-get-analysis-schemes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AnalysisSchemes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1096,7 +1096,7 @@ export def "api get-availability-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1132,7 +1132,7 @@ export def "api create-get-availability-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1172,7 +1172,7 @@ export def "api get-domain-endpoint-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1208,7 +1208,7 @@ export def "api create-get-domain-endpoint-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1247,7 +1247,7 @@ export def "api get-domains" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record, SearchService: record, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainNames" $domain_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1283,7 +1283,7 @@ export def "api create-get-domains" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DomainStatusList: table<DomainId: string, DomainName: string, ARN: string, Created: record, Deleted: record, DocService: record, SearchService: record, RequiresIndexDocuments: record, Processing: record, SearchInstanceType: record, SearchPartitionCount: record, SearchInstanceCount: record, Limits: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1324,7 +1324,7 @@ export def "api get-expressions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Expressions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ExpressionNames" $expression_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1360,7 +1360,7 @@ export def "api create-get-expressions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Expressions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1401,7 +1401,7 @@ export def "api get-index-fields" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<IndexFields: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "FieldNames" $field_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1437,7 +1437,7 @@ export def "api create-get-index-fields" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<IndexFields: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1476,7 +1476,7 @@ export def "api get-scaling-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1512,7 +1512,7 @@ export def "api create-get-scaling-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1552,7 +1552,7 @@ export def "api get-service-access-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1588,7 +1588,7 @@ export def "api create-get-service-access-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1629,7 +1629,7 @@ export def "api get-suggesters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Suggesters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "SuggesterNames" $suggester_names "multi") (serialize-qp "Deployed" $deployed "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1665,7 +1665,7 @@ export def "api create-get-suggesters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Suggesters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1704,7 +1704,7 @@ export def "api get-index-documents" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<FieldNames: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1740,7 +1740,7 @@ export def "api create-index-documents" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<FieldNames: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1778,7 +1778,7 @@ export def "api get-list-domain-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainNames: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1813,7 +1813,7 @@ export def "api create-list-domain-names" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainNames: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1850,7 +1850,7 @@ export def "api get-update-availability-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1886,7 +1886,7 @@ export def "api create-update-availability-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AvailabilityOptions: record<Options: record, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1926,7 +1926,7 @@ export def "api get-update-domain-endpoint-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "DomainEndpointOptions" $domain_endpoint_options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1962,7 +1962,7 @@ export def "api create-update-domain-endpoint-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DomainEndpointOptions: record<Options: record<EnforceHTTPS: record, TLSSecurityPolicy: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2002,7 +2002,7 @@ export def "api get-update-scaling-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ScalingParameters" $scaling_parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2038,7 +2038,7 @@ export def "api create-update-scaling-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ScalingParameters: record<Options: record<DesiredInstanceType: record, DesiredReplicationCount: record, DesiredPartitionCount: record>, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2078,7 +2078,7 @@ export def "api get-update-service-access-policies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "AccessPolicies" $access_policies "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2114,7 +2114,7 @@ export def "api create-update-service-access-policies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AccessPolicies: record<Options: string, Status: record<CreationDate: record, UpdateDate: record, UpdateVersion: record, State: record, PendingDeletion: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

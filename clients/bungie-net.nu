@@ -151,7 +151,7 @@ export def "app-api-usage get-application" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --end: string # End time for query. Goes to now if not specified. (format: date-time)
   --start: string # Start time for query. Goes to 24 hours ago if not specified. (format: date-time)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<apiCalls: list<record>, throttledRequests: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($application_id | is-empty) { error make --unspanned { msg: "path parameter 'applicationId' must be non-empty" } }
@@ -176,7 +176,7 @@ export def "app-first-party get-bungie-applications" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<applicationId: int, creationDate: string, firstPublished: string, link: string, name: string, origin: string, overrideAuthorizeViewName: string, redirectUrl: string, scope: int, status: int, statusChanged: string, team: list>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/App/FirstParty/")
@@ -202,7 +202,7 @@ export def "community-content-get get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($sort | is-empty) { error make --unspanned { msg: "path parameter 'sort' must be non-empty" } }
@@ -231,7 +231,7 @@ export def "content-get-content-by-id get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --head: oneof<nothing, bool> # false
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allowComments: bool, author: record<about: string, blizzardDisplayName: string, cachedBungieGlobalDisplayName: string, cachedBungieGlobalDisplayNameCode: int, context: record, displayName: string, egsDisplayName: string, fbDisplayName: string, firstAccess: string, isDeleted: bool, lastBanReportId: int, lastUpdate: string, legacyPortalUID: int, locale: string, localeInheritDefault: bool, membershipId: int, normalizedName: string, profileBanExpire: string, profilePicture: int, profilePicturePath: string, profilePictureWidePath: string, profileTheme: int, profileThemeName: string, psnDisplayName: string, showActivity: bool, showGroupMessaging: bool, stadiaDisplayName: string, statusDate: string, statusText: string, steamDisplayName: string, successMessageFlags: int, twitchDisplayName: string, uniqueName: string, userTitle: int, userTitleDisplay: string, xboxDisplayName: string>, autoEnglishPropertyFallback: bool, cType: string, cmsPath: string, commentSummary: record<commentCount: int, topicId: int>, contentId: int, creationDate: string, hasAgeGate: bool, minimumAge: int, modifyDate: string, properties: record, ratingImagePath: string, representations: list<record>, tags: list<string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -261,7 +261,7 @@ export def "content-get-content-by-tag-and-type get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --head: oneof<nothing, bool> # Not used.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allowComments: bool, author: record<about: string, blizzardDisplayName: string, cachedBungieGlobalDisplayName: string, cachedBungieGlobalDisplayNameCode: int, context: record, displayName: string, egsDisplayName: string, fbDisplayName: string, firstAccess: string, isDeleted: bool, lastBanReportId: int, lastUpdate: string, legacyPortalUID: int, locale: string, localeInheritDefault: bool, membershipId: int, normalizedName: string, profileBanExpire: string, profilePicture: int, profilePicturePath: string, profilePictureWidePath: string, profileTheme: int, profileThemeName: string, psnDisplayName: string, showActivity: bool, showGroupMessaging: bool, stadiaDisplayName: string, statusDate: string, statusText: string, steamDisplayName: string, successMessageFlags: int, twitchDisplayName: string, uniqueName: string, userTitle: int, userTitleDisplay: string, xboxDisplayName: string>, autoEnglishPropertyFallback: bool, cType: string, cmsPath: string, commentSummary: record<commentCount: int, topicId: int>, contentId: int, creationDate: string, hasAgeGate: bool, minimumAge: int, modifyDate: string, properties: record, ratingImagePath: string, representations: list<record>, tags: list<string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
@@ -289,7 +289,7 @@ export def "content-get-content-type get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allowComments: bool, autoEnglishPropertyFallback: bool, bindIdentifierToProperty: string, boundRegex: string, bulkUploadable: bool, cType: string, contentDescription: string, forceIdentifierBinding: bool, name: string, previewImage: string, previews: list<record>, priority: int, properties: list<record>, propertySections: list<record>, reminder: string, showInContentEditor: bool, suppressCmsPath: bool, tagMetadata: list<record>, tagMetadataItems: record, typeOf: string, usageExamples: list<string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -316,7 +316,7 @@ export def "content-rss-news-articles get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --categoryfilter: string # Optionally filter response to only include news items in a certain category.
   --includebody: oneof<nothing, bool> # Optionally include full content body for each news item.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<CategoryFilter: string, CurrentPaginationToken: int, NewsArticles: list<record>, NextPaginationToken: int, ResultCountThisPage: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($page_token | is-empty) { error make --unspanned { msg: "path parameter 'pageToken' must be non-empty" } }
@@ -348,7 +348,7 @@ export def "content-search list-with-text" [
   --searchtext: string # Word or phrase for the search.
   --qp-source: string # For analytics, hint at the part of the app that triggered the search. Optional.
   --tag: string # Tag used on the content to be searched.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($locale | is-empty) { error make --unspanned { msg: "path parameter 'locale' must be non-empty" } }
@@ -379,7 +379,7 @@ export def "content-search-content-by-tag-and-type list" [
   --currentpage: int # Page number for the search results starting with page 1. (format: int32)
   --head: oneof<nothing, bool> # Not used.
   --itemsperpage: int # Not used. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($tag | is-empty) { error make --unspanned { msg: "path parameter 'tag' must be non-empty" } }
@@ -408,7 +408,7 @@ export def "content-search-help-articles list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($searchtext | is-empty) { error make --unspanned { msg: "path parameter 'searchtext' must be non-empty" } }
@@ -433,7 +433,7 @@ export def "destiny2-actions-items-equip-item create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItem/")
@@ -456,7 +456,7 @@ export def "destiny2-actions-items-equip-items create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<equipResults: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/EquipItems/")
@@ -479,7 +479,7 @@ export def "destiny2-actions-items-insert-socket-plug create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<addedInventoryItems: list<record>, item: record<characterId: int, instance: record, item: record, objectives: record, perks: record, plugObjectives: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrid: record>, removedInventoryItems: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlug/")
@@ -502,7 +502,7 @@ export def "destiny2-actions-items-insert-socket-plug-free create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<addedInventoryItems: list<record>, item: record<characterId: int, instance: record, item: record, objectives: record, perks: record, plugObjectives: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrid: record>, removedInventoryItems: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/InsertSocketPlugFree/")
@@ -525,7 +525,7 @@ export def "destiny2-actions-items-pull-from-post-master pull" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/PullFromPostmaster/")
@@ -548,7 +548,7 @@ export def "destiny2-actions-items-set-lock-state update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/SetLockState/")
@@ -571,7 +571,7 @@ export def "destiny2-actions-items-set-tracked-state update-quest" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/SetTrackedState/")
@@ -594,7 +594,7 @@ export def "destiny2-actions-items-transfer-item create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Items/TransferItem/")
@@ -617,7 +617,7 @@ export def "destiny2-actions-loadouts-clear-loadout create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/ClearLoadout/")
@@ -640,7 +640,7 @@ export def "destiny2-actions-loadouts-equip-loadout create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/EquipLoadout/")
@@ -663,7 +663,7 @@ export def "destiny2-actions-loadouts-snapshot-loadout create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/SnapshotLoadout/")
@@ -686,7 +686,7 @@ export def "destiny2-actions-loadouts-update-loadout-identifiers update" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Actions/Loadouts/UpdateLoadoutIdentifiers/")
@@ -712,7 +712,7 @@ export def "destiny2-armory-search list-destiny-entities" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page number to return, starting with 0. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<results: record, suggestedWords: list<string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
@@ -738,7 +738,7 @@ export def "destiny2-awa-awa-provide-authorization-result create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Awa/AwaProvideAuthorizationResult/")
@@ -762,7 +762,7 @@ export def "destiny2-awa-get-action-token get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<actionToken: string, developerNote: string, maximumNumberOfUses: int, membershipType: int, responseReason: int, type: int, userSelection: int, validUntil: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($correlation_id | is-empty) { error make --unspanned { msg: "path parameter 'correlationId' must be non-empty" } }
@@ -786,7 +786,7 @@ export def "destiny2-awa-initialize request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<correlationId: string, sentToSelf: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Awa/Initialize/")
@@ -809,7 +809,7 @@ export def "destiny2-clan-clan-banner-dictionary get-source" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Clan/ClanBannerDictionary/")
@@ -833,7 +833,7 @@ export def "destiny2-clan-weekly-reward-state get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activities: list<record>, availableQuests: list<record>, endDate: string, milestoneHash: int, order: int, rewards: list<record>, startDate: string, values: record, vendorHashes: list<int>, vendors: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -857,7 +857,7 @@ export def "destiny2-manifest get-destiny" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<iconImagePyramidInfo: list<record>, jsonWorldComponentContentPaths: record, jsonWorldContentPaths: record, mobileAssetContentPath: string, mobileClanBannerDatabasePath: string, mobileGearAssetDataBases: list<record>, mobileGearCDN: record, mobileWorldContentPaths: record, version: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Manifest/")
@@ -882,7 +882,7 @@ export def "destiny2-manifest get-destiny-entity-definition" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hash: int, index: int, redacted: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($entity_type | is-empty) { error make --unspanned { msg: "path parameter 'entityType' must be non-empty" } }
@@ -907,7 +907,7 @@ export def "destiny2-milestones get-public" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Milestones/")
@@ -931,7 +931,7 @@ export def "destiny2-milestones-content get-public" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<about: string, itemCategories: list<record>, status: string, tips: list<string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($milestone_hash | is-empty) { error make --unspanned { msg: "path parameter 'milestoneHash' must be non-empty" } }
@@ -956,7 +956,7 @@ export def "destiny2-search-destiny-player-by-bungie-name list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<applicableMembershipTypes: list, bungieGlobalDisplayName: string, bungieGlobalDisplayNameCode: int, crossSaveOverride: int, displayName: string, iconPath: string, isPublic: bool, membershipId: int, membershipType: int, supplementalDisplayName: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -982,7 +982,7 @@ export def "destiny2-stats-aggregate-clan-stats get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --modes: string # List of game modes for which to get leaderboards. See the documentation for DestinyActivityModeType for valid values, and pass in string representation, comma delimited.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<mode: int, statId: string, value: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1007,7 +1007,7 @@ export def "destiny2-stats-definition get-historical" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Destiny2/Stats/Definition/")
@@ -1034,7 +1034,7 @@ export def "destiny2-stats-leaderboards-clans get" [
   --maxtop: int # Maximum number of top players to return. Use a large number to get entire leaderboard. (format: int32)
   --modes: string # List of game modes for which to get leaderboards. See the documentation for DestinyActivityModeType for valid values, and pass in string representation, comma delimited.
   --statid: string # ID of stat to return rather than returning all Leaderboard stats.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1065,7 +1065,7 @@ export def "destiny2-stats-leaderboards get-for-character" [
   --maxtop: int # Maximum number of top players to return. Use a large number to get entire leaderboard. (format: int32)
   --modes: string # List of game modes for which to get leaderboards. See the documentation for DestinyActivityModeType for valid values, and pass in string representation, comma delimited.
   --statid: string # ID of stat to return rather than returning all Leaderboard stats.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1093,7 +1093,7 @@ export def "destiny2-stats-post-game-carnage-report get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activityDetails: record, activityWasStartedFromBeginning: bool, entries: list<record>, period: string, startingPhaseIndex: int, teams: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -1118,7 +1118,7 @@ export def "destiny2-stats-post-game-carnage-report-report create-offensive-play
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($activity_id | is-empty) { error make --unspanned { msg: "path parameter 'activityId' must be non-empty" } }
@@ -1143,7 +1143,7 @@ export def "destiny2-vendors get-public" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record, sales: record, stringVariables: record, vendorGroups: record, vendors: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "components" $components "csv")] | flatten | str join "&"
@@ -1175,7 +1175,7 @@ export def "destiny2-account-character-stats get-historical" [
   --groups: list<int> # Group of stats to include, otherwise only general stats are returned. Comma separated list is allowed. Values: General, Weapons, Medals
   --modes: list<int> # Game modes to return. See the documentation for DestinyActivityModeType for valid values, and pass in string representation, comma delimited.
   --period-type: int # Indicates a specific period type to return. Optional. May be: Daily, AllTime, or Activity (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1208,7 +1208,7 @@ export def "destiny2-account-character-stats-activities get-activity-history" [
   --count: int # Number of rows to return (format: int32)
   --mode: int # A filter for the activity mode to be returned. None returns all activities. See the documentation for DestinyActivityModeType for valid values, and pass in string representation. (format: int32)
   --page: int # Page number to return, starting with 0. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activities: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1238,7 +1238,7 @@ export def "destiny2-account-character-stats-aggregate-activity-stats get-destin
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activities: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1267,7 +1267,7 @@ export def "destiny2-account-character-stats-unique-weapons get-history" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<weapons: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1296,7 +1296,7 @@ export def "destiny2-account-stats get-historical" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --groups: list<int> # Groups of stats to include, otherwise only general stats are returned. Comma separated list is allowed. Values: General, Weapons, Medals.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characters: list<record>, mergedAllCharacters: record<merged: record, results: record>, mergedDeletedCharacters: record<merged: record, results: record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1327,7 +1327,7 @@ export def "destiny2-account-stats-leaderboards get" [
   --maxtop: int # Maximum number of top players to return. Use a large number to get entire leaderboard. (format: int32)
   --modes: string # List of game modes for which to get leaderboards. See the documentation for DestinyActivityModeType for valid values, and pass in string representation, comma delimited.
   --statid: string # ID of stat to return rather than returning all Leaderboard stats.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1356,7 +1356,7 @@ export def "destiny2-profile get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characterActivities: record, characterCollectibles: record, characterCraftables: record, characterCurrencyLookups: record, characterEquipment: record, characterInventories: record, characterKiosks: record, characterLoadouts: record, characterPlugSets: record, characterPresentationNodes: record, characterProgressions: record, characterRecords: record, characterRenderData: record, characterStringVariables: record, characterUninstancedItemComponents: record, characters: record, itemComponents: record, metrics: record, platformSilver: record, profile: record, profileCollectibles: record, profileCommendations: record, profileCurrencies: record, profileInventory: record, profileKiosks: record, profilePlugSets: record, profilePresentationNodes: record, profileProgression: record, profileRecords: record, profileStringVariables: record, profileTransitoryData: record, responseMintedTimestamp: string, secondaryComponentsMintedTimestamp: string, vendorReceipts: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1386,7 +1386,7 @@ export def "destiny2-profile-character get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<activities: record, character: record, collectibles: record, currencyLookups: record, equipment: record, inventory: record, itemComponents: record, kiosks: record, loadouts: record, plugSets: record, presentationNodes: record, progressions: record, records: record, renderData: record, uninstancedItemComponents: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1418,7 +1418,7 @@ export def "destiny2-profile-character-collectibles get-node-details" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<collectibleItemComponents: record, collectibles: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1451,7 +1451,7 @@ export def "destiny2-profile-character-vendors list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
   --filter: int # The filter of what vendors and items to return, if any. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record, currencyLookups: record, itemComponents: record, sales: record, stringVariables: record, vendorGroups: record, vendors: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1483,7 +1483,7 @@ export def "destiny2-profile-character-vendors get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: record, currencyLookups: record, itemComponents: record, sales: record, stringVariables: record, vendor: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1515,7 +1515,7 @@ export def "destiny2-profile-item get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --components: list<int> # A comma separated list of components to return (as strings or numeric values). See the DestinyComponentType enum for valid components to request. You must request at least one component to receive results.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<characterId: int, instance: record, item: record, objectives: record, perks: record, plugObjectives: record, renderData: record, reusablePlugs: record, sockets: record, stats: record, talentGrid: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1545,7 +1545,7 @@ export def "destiny2-profile-linked-profiles get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --get-all-memberships: oneof<nothing, bool> # (optional) if set to 'true', all memberships regardless of whether they're obscured by overrides will be returned. Normal privacy restrictions on account linking will still apply no matter what.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<bnetMembership: record, profiles: list<record>, profilesWithErrors: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -1572,7 +1572,7 @@ export def "fireteam-clan-active-count get-private" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1605,7 +1605,7 @@ export def "fireteam-clan-available get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --exclude-immediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
   --lang-filter: string # An optional language filter.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1642,7 +1642,7 @@ export def "fireteam-clan-my get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --group-filter: oneof<nothing, bool> # If true, filter by clan. Otherwise, ignore the clan and show all of the user's fireteams.
   --lang-filter: string # An optional language filter.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1672,7 +1672,7 @@ export def "fireteam-clan-summary get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<Alternates: list<record>, Members: list<record>, Summary: record<activityType: int, alternateSlotCount: int, availableAlternateSlotCount: int, availablePlayerSlotCount: int, dateCreated: string, dateModified: string, datePlayerModified: string, fireteamId: int, groupId: int, isImmediate: bool, isPublic: bool, isValid: bool, locale: string, ownerCurrentGuardianRankSnapshot: int, ownerHighestLifetimeGuardianRankSnapshot: int, ownerMembershipId: int, ownerTotalCommendationScoreSnapshot: int, platform: int, playerSlotCount: int, scheduledTime: string, title: string, titleBeforeModeration: string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -1704,7 +1704,7 @@ export def "fireteam-search-available list-public-clan" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --exclude-immediate: oneof<nothing, bool> # If you wish the result to exclude immediate fireteams, set this to true. Immediate-only can be forced using the dateRange enum.
   --lang-filter: string # An optional language filter.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($platform | is-empty) { error make --unspanned { msg: "path parameter 'platform' must be non-empty" } }
@@ -1738,7 +1738,7 @@ export def "forum-get-core-topics-paged get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --locales: string # Comma seperated list of locales posts must match to return in the result list. Default 'en'
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
@@ -1767,7 +1767,7 @@ export def "forum-get-forum-tag-suggestions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --partialtag: string # The partial tag input to generate suggestions from.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<ignoreStatus: record, tagText: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "partialtag" $partialtag "scalar")] | flatten | str join "&"
@@ -1793,7 +1793,7 @@ export def "forum-get-post-and-parent get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --showbanned: string # If this value is not null or empty, banned posts are requested to be returned
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($child_post_id | is-empty) { error make --unspanned { msg: "path parameter 'childPostId' must be non-empty" } }
@@ -1820,7 +1820,7 @@ export def "forum-get-post-and-parent-awaiting-approval get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --showbanned: string # If this value is not null or empty, banned posts are requested to be returned
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($child_post_id | is-empty) { error make --unspanned { msg: "path parameter 'childPostId' must be non-empty" } }
@@ -1853,7 +1853,7 @@ export def "forum-get-posts-threaded-paged get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --showbanned: string # If this value is not null or empty, banned posts are requested to be returned
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($parent_post_id | is-empty) { error make --unspanned { msg: "path parameter 'parentPostId' must be non-empty" } }
@@ -1891,7 +1891,7 @@ export def "forum-get-posts-threaded-paged-from-child get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --showbanned: string # If this value is not null or empty, banned posts are requested to be returned
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($child_post_id | is-empty) { error make --unspanned { msg: "path parameter 'childPostId' must be non-empty" } }
@@ -1922,7 +1922,7 @@ export def "forum-get-topic-for-content get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($content_id | is-empty) { error make --unspanned { msg: "path parameter 'contentId' must be non-empty" } }
@@ -1954,7 +1954,7 @@ export def "forum-get-topics-paged get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --locales: string # Comma seperated list of locales posts must match to return in the result list. Default 'en'
   --tagstring: string # The tags to search, if any.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
@@ -1985,7 +1985,7 @@ export def "forum-poll get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<authors: list<record>, availablePages: int, groups: list<record>, hasMore: bool, polls: list<record>, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, recruitmentDetails: list<record>, relatedPosts: list<record>, replacementContinuationToken: string, results: list<record>, searchedTags: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($topic_id | is-empty) { error make --unspanned { msg: "path parameter 'topicId' must be non-empty" } }
@@ -2009,7 +2009,7 @@ export def "forum-recruit-summaries get-recruitment-thread" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<Fireteam: list, approved: bool, conversationId: int, intensity: int, kickedPlayerIds: list, microphoneRequired: bool, playerSlotsRemaining: int, playerSlotsTotal: int, tone: int, topicId: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Forum/Recruit/Summaries/")
@@ -2032,7 +2032,7 @@ export def "get-available-locales get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GetAvailableLocales/")
@@ -2056,7 +2056,7 @@ export def "global-alerts get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --includestreaming: oneof<nothing, bool> # Determines whether Streaming Alerts are included in results
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<AlertHtml: string, AlertKey: string, AlertLevel: int, AlertLink: string, AlertTimestamp: string, AlertType: int, StreamInfo: record>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "includestreaming" $includestreaming "scalar")] | flatten | str join "&"
@@ -2080,7 +2080,7 @@ export def "group-v2-get-available-avatars get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/GetAvailableAvatars/")
@@ -2103,7 +2103,7 @@ export def "group-v2-get-available-themes get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<description: string, folder: string, name: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/GetAvailableThemes/")
@@ -2127,7 +2127,7 @@ export def "group-v2-get-user-clan-invite-setting get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($m_type | is-empty) { error make --unspanned { msg: "path parameter 'mType' must be non-empty" } }
@@ -2153,7 +2153,7 @@ export def "group-v2-name get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allianceStatus: int, alliedIds: list<int>, currentUserMemberMap: record, currentUserMembershipsInactiveForDestiny: bool, currentUserPotentialMemberMap: record, detail: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>, founder: record<bungieNetUserInfo: record, destinyUserInfo: record, groupId: int, isOnline: bool, joinDate: string, lastOnlineStatusChange: int, memberType: int>, groupJoinInviteCount: int, parentGroup: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_name | is-empty) { error make --unspanned { msg: "path parameter 'groupName' must be non-empty" } }
@@ -2178,7 +2178,7 @@ export def "group-v2-name-v2 get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allianceStatus: int, alliedIds: list<int>, currentUserMemberMap: record, currentUserMembershipsInactiveForDestiny: bool, currentUserPotentialMemberMap: record, detail: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>, founder: record<bungieNetUserInfo: record, destinyUserInfo: record, groupId: int, isOnline: bool, joinDate: string, lastOnlineStatusChange: int, memberType: int>, groupJoinInviteCount: int, parentGroup: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/NameV2/")
@@ -2203,7 +2203,7 @@ export def "group-v2-recommended get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<about: string, avatarPath: string, capabilities: int, clanInfo: record, creationDate: string, groupId: int, groupType: int, locale: string, memberCount: int, membershipOption: int, motto: string, name: string, theme: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_type | is-empty) { error make --unspanned { msg: "path parameter 'groupType' must be non-empty" } }
@@ -2231,7 +2231,7 @@ export def "group-v2-recover get-for-founder" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -2257,7 +2257,7 @@ export def "group-v2-search list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/GroupV2/Search/")
@@ -2284,7 +2284,7 @@ export def "group-v2-user-potential get-for-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -2315,7 +2315,7 @@ export def "group-v2-user get-for-member" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<areAllMembershipsInactive: record, hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_type | is-empty) { error make --unspanned { msg: "path parameter 'membershipType' must be non-empty" } }
@@ -2343,7 +2343,7 @@ export def "group-v2 get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<allianceStatus: int, alliedIds: list<int>, currentUserMemberMap: record, currentUserMembershipsInactiveForDestiny: bool, currentUserPotentialMemberMap: record, detail: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>, founder: record<bungieNetUserInfo: record, destinyUserInfo: record, groupId: int, isOnline: bool, joinDate: string, lastOnlineStatusChange: int, memberType: int>, groupJoinInviteCount: int, parentGroup: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2370,7 +2370,7 @@ export def "group-v2-admin-abdicate-foundership create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2398,7 +2398,7 @@ export def "group-v2-admins-and-founder get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2425,7 +2425,7 @@ export def "group-v2-banned get-members" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 entries. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2451,7 +2451,7 @@ export def "group-v2-edit create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2476,7 +2476,7 @@ export def "group-v2-edit-clan-banner create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2501,7 +2501,7 @@ export def "group-v2-edit-founder-options create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2529,7 +2529,7 @@ export def "group-v2-members get" [
   --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
   --member-type: int # Filter out other member types. Use None for all members. (format: int32)
   --name-search: string # The name fragment upon which a search should be executed for members with matching display or unique names.
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2557,7 +2557,7 @@ export def "group-v2-members-approve approve-pending" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2584,7 +2584,7 @@ export def "group-v2-members-approve-all approve-pending" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<entityId: int, result: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2609,7 +2609,7 @@ export def "group-v2-members-approve-list approve-pending" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<entityId: int, result: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2634,7 +2634,7 @@ export def "group-v2-members-deny-all list-pending" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<entityId: int, result: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2659,7 +2659,7 @@ export def "group-v2-members-deny-list list-pending" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<entityId: int, result: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2686,7 +2686,7 @@ export def "group-v2-members-individual-invite create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<resolution: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2715,7 +2715,7 @@ export def "group-v2-members-individual-invite-cancel cancel" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<resolution: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2743,7 +2743,7 @@ export def "group-v2-members-invited-individuals get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2770,7 +2770,7 @@ export def "group-v2-members-pending get-memberships" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --currentpage: int # Page number (starting with 1). Each page has a fixed size of 50 items per page. (format: int32)
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2798,7 +2798,7 @@ export def "group-v2-members-ban create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2827,7 +2827,7 @@ export def "group-v2-members-kick create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<group: record<about: string, allowChat: bool, avatarImageIndex: int, avatarPath: string, banExpireDate: string, bannerPath: string, chatSecurity: int, clanInfo: record, conversationId: int, creationDate: string, defaultPublicity: int, enableInvitationMessagingForAdmins: bool, features: record, groupId: int, groupType: int, homepage: int, isDefaultPostPublic: bool, isPublic: bool, isPublicTopicAdminOnly: bool, locale: string, memberCount: int, membershipIdCreated: int, membershipOption: int, modificationDate: string, motto: string, name: string, tags: list, theme: string>, groupDeleted: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2857,7 +2857,7 @@ export def "group-v2-members-set-membership-type create-edit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2887,7 +2887,7 @@ export def "group-v2-members-unban create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2914,7 +2914,7 @@ export def "group-v2-optional-conversations get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<chatEnabled: bool, chatName: string, chatSecurity: int, conversationId: int, groupId: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2939,7 +2939,7 @@ export def "group-v2-optional-conversations-add create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2965,7 +2965,7 @@ export def "group-v2-optional-conversations-edit create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: int, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'groupId' must be non-empty" } }
@@ -2990,7 +2990,7 @@ export def "settings get-common" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<clanBannerDecalColors: list<record>, clanBannerDecals: list<record>, clanBannerGonfalonColors: list<record>, clanBannerGonfalonDetailColors: list<record>, clanBannerGonfalonDetails: list<record>, clanBannerGonfalons: list<record>, clanBannerStandards: list<record>, defaultGroupTheme: record<childSettings: list, displayName: string, identifier: string, imagePath: string, isDefault: bool, summary: string>, destiny2CoreSettings: record<activeSealsRootNodeHash: int, activeTriumphsRootNodeHash: int, ammoTypeHeavyIcon: string, ammoTypePrimaryIcon: string, ammoTypeSpecialIcon: string, badgesRootNode: int, collectionRootNode: int, craftingRootNodeHash: int, currentRankProgressionHashes: list, currentSeasonHash: int, currentSeasonalArtifactHash: int, exoticCatalystsRootNodeHash: int, futureSeasonHashes: list, guardianRankConstantsHash: int, guardianRanksRootNodeHash: int, insertPlugFreeBlockedSocketTypeHashes: list, insertPlugFreeProtectedPlugItemHashes: list, legacySealsRootNodeHash: int, legacyTriumphsRootNodeHash: int, loadoutConstantsHash: int, loreRootNodeHash: int, medalsRootNode: int, medalsRootNodeHash: int, metricsRootNode: int, pastSeasonHashes: list, recordsRootNode: int, seasonalChallengesPresentationNodeHash: int, undiscoveredCollectibleImage: string>, destinyMembershipTypes: list<record>, emailSettings: record<optInDefinitions: record, subscriptionDefinitions: record, views: record>, environment: string, fireteamActivities: list<record>, forumCategories: list<record>, groupAvatars: list<record>, ignoreReasons: list<record>, recruitmentActivities: list<record>, recruitmentMiscTags: list<record>, recruitmentPlatformTags: list<record>, systemContentLocales: list<record>, systems: record, userContentLocales: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Settings/")
@@ -3013,7 +3013,7 @@ export def "social-friends get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<friends: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Social/Friends/")
@@ -3037,7 +3037,7 @@ export def "social-friends-add request-issue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3062,7 +3062,7 @@ export def "social-friends-remove delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3086,7 +3086,7 @@ export def "social-friends-requests get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<incomingRequests: list<record>, outgoingRequests: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Social/Friends/Requests/")
@@ -3110,7 +3110,7 @@ export def "social-friends-requests-accept request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3135,7 +3135,7 @@ export def "social-friends-requests-decline request" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3160,7 +3160,7 @@ export def "social-friends-requests-remove delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3186,7 +3186,7 @@ export def "social-platform-friends get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<currentPage: int, hasMore: bool, itemsPerPage: int, platformFriends: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($friend_platform | is-empty) { error make --unspanned { msg: "path parameter 'friendPlatform' must be non-empty" } }
@@ -3213,7 +3213,7 @@ export def "tokens-partner-apply-missing-offers create-without-claim" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_application_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerApplicationId' must be non-empty" } }
@@ -3238,7 +3238,7 @@ export def "tokens-partner-claim-offer create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tokens/Partner/ClaimOffer/")
@@ -3261,7 +3261,7 @@ export def "tokens-partner-force-drops-repair create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: bool, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tokens/Partner/ForceDropsRepair/")
@@ -3286,7 +3286,7 @@ export def "tokens-partner-history get-offer-sku" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<AllOffersApplied: bool, ClaimDate: string, LocalizedDescription: string, LocalizedName: string, SkuIdentifier: string, SkuOffers: list, TransactionId: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($partner_application_id | is-empty) { error make --unspanned { msg: "path parameter 'partnerApplicationId' must be non-empty" } }
@@ -3313,7 +3313,7 @@ export def "tokens-partner-history-application get-reward" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<PartnerOffers: list<record>, TwitchDrops: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($target_bnet_membership_id | is-empty) { error make --unspanned { msg: "path parameter 'targetBnetMembershipId' must be non-empty" } }
@@ -3338,7 +3338,7 @@ export def "tokens-rewards-bungie-rewards get-list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Tokens/Rewards/BungieRewards/")
@@ -3363,7 +3363,7 @@ export def "tokens-rewards-get-rewards-for-platform-user get-bungie" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3389,7 +3389,7 @@ export def "tokens-rewards-get-rewards-for-user get-bungie" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3413,7 +3413,7 @@ export def "trending-categories get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<categories: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/Trending/Categories/")
@@ -3438,7 +3438,7 @@ export def "trending-categories get-category" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, query: record<currentPage: int, itemsPerPage: int, requestContinuationToken: string>, replacementContinuationToken: string, results: list<record>, totalResults: int, useTotalResults: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($category_id | is-empty) { error make --unspanned { msg: "path parameter 'categoryId' must be non-empty" } }
@@ -3465,7 +3465,7 @@ export def "trending-details get-entry" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<creation: record<author: string, authorMembershipId: int, body: string, media: string, postId: int, title: string, upvotes: int>, destinyActivity: record<activityHash: int, status: record>, destinyItem: record<itemHash: int>, destinyRitual: record<dateEnd: string, dateStart: string, eventContent: record, icon: string, image: string, milestoneDetails: record, subtitle: string, title: string>, entityType: int, identifier: string, news: record<article: record>, support: record<article: record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($trending_entry_type | is-empty) { error make --unspanned { msg: "path parameter 'trendingEntryType' must be non-empty" } }
@@ -3490,7 +3490,7 @@ export def "user-get-available-themes get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<userThemeDescription: string, userThemeId: int, userThemeName: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/User/GetAvailableThemes/")
@@ -3514,7 +3514,7 @@ export def "user-get-bungie-net-user-by-id get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<about: string, blizzardDisplayName: string, cachedBungieGlobalDisplayName: string, cachedBungieGlobalDisplayNameCode: int, context: record<globalIgnoreEndDate: string, ignoreStatus: record, isFollowing: bool>, displayName: string, egsDisplayName: string, fbDisplayName: string, firstAccess: string, isDeleted: bool, lastBanReportId: int, lastUpdate: string, legacyPortalUID: int, locale: string, localeInheritDefault: bool, membershipId: int, normalizedName: string, profileBanExpire: string, profilePicture: int, profilePicturePath: string, profilePictureWidePath: string, profileTheme: int, profileThemeName: string, psnDisplayName: string, showActivity: bool, showGroupMessaging: bool, stadiaDisplayName: string, statusDate: string, statusText: string, steamDisplayName: string, successMessageFlags: int, twitchDisplayName: string, uniqueName: string, userTitle: int, userTitleDisplay: string, xboxDisplayName: string>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3539,7 +3539,7 @@ export def "user-get-credential-types-for-target-account get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: table<credentialAsString: string, credentialDisplayName: string, credentialType: int, isPublic: bool>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3565,7 +3565,7 @@ export def "user-get-membership-from-hard-linked-credential get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<CrossSaveOverriddenMembershipId: int, CrossSaveOverriddenType: int, membershipId: int, membershipType: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($cr_type | is-empty) { error make --unspanned { msg: "path parameter 'crType' must be non-empty" } }
@@ -3592,7 +3592,7 @@ export def "user-get-memberships-by-id get-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<bungieNetUser: record<about: string, blizzardDisplayName: string, cachedBungieGlobalDisplayName: string, cachedBungieGlobalDisplayNameCode: int, context: record, displayName: string, egsDisplayName: string, fbDisplayName: string, firstAccess: string, isDeleted: bool, lastBanReportId: int, lastUpdate: string, legacyPortalUID: int, locale: string, localeInheritDefault: bool, membershipId: int, normalizedName: string, profileBanExpire: string, profilePicture: int, profilePicturePath: string, profilePictureWidePath: string, profileTheme: int, profileThemeName: string, psnDisplayName: string, showActivity: bool, showGroupMessaging: bool, stadiaDisplayName: string, statusDate: string, statusText: string, steamDisplayName: string, successMessageFlags: int, twitchDisplayName: string, uniqueName: string, userTitle: int, userTitleDisplay: string, xboxDisplayName: string>, destinyMemberships: list<record>, primaryMembershipId: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3617,7 +3617,7 @@ export def "user-get-memberships-for-current-user get-data" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<bungieNetUser: record<about: string, blizzardDisplayName: string, cachedBungieGlobalDisplayName: string, cachedBungieGlobalDisplayNameCode: int, context: record, displayName: string, egsDisplayName: string, fbDisplayName: string, firstAccess: string, isDeleted: bool, lastBanReportId: int, lastUpdate: string, legacyPortalUID: int, locale: string, localeInheritDefault: bool, membershipId: int, normalizedName: string, profileBanExpire: string, profilePicture: int, profilePicturePath: string, profilePictureWidePath: string, profileTheme: int, profileThemeName: string, psnDisplayName: string, showActivity: bool, showGroupMessaging: bool, stadiaDisplayName: string, statusDate: string, statusText: string, steamDisplayName: string, successMessageFlags: int, twitchDisplayName: string, uniqueName: string, userTitle: int, userTitleDisplay: string, xboxDisplayName: string>, destinyMemberships: list<record>, primaryMembershipId: int>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/User/GetMembershipsForCurrentUser/")
@@ -3641,7 +3641,7 @@ export def "user-get-sanitized-platform-display-names get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -3666,7 +3666,7 @@ export def "user-search-global-name create-by" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, page: int, searchResults: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($page | is-empty) { error make --unspanned { msg: "path parameter 'page' must be non-empty" } }
@@ -3692,7 +3692,7 @@ export def "user-search-prefix list-by-global-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record<hasMore: bool, page: int, searchResults: list<record>>, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($display_name_prefix | is-empty) { error make --unspanned { msg: "path parameter 'displayNamePrefix' must be non-empty" } }
@@ -3717,7 +3717,7 @@ export def "user-system-overrides get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<DetailedErrorTrace: string, ErrorCode: int, ErrorStatus: string, Message: string, MessageData: record, Response: record, ThrottleSeconds: int> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/UserSystemOverrides/")

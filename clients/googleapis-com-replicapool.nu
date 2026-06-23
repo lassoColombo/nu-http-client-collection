@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -143,8 +153,8 @@ export def "zones-pools list" [
   project_name: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -160,8 +170,8 @@ export def "zones-pools list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --max-results: int # Maximum count of results to be returned. Acceptable values are 0 to 100, inclusive. (Default: 50) (default: 500)
   --page-token: string # Set this to the nextPageToken value returned by a previous list request to obtain the next page of results from the previous list request.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<nextPageToken: string, resources: table<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: list, initialNumReplicas: int, labels: list, name: string, numReplicas: int, resourceViews: list, selfLink: string, targetPool: string, targetPools: list, template: record, type: string>> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -183,8 +193,8 @@ export def "zones-pools create" [
   project_name: string
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -213,9 +223,9 @@ export def "zones-pools create" [
   --target-pools: list<string> # A list of target pools to update with the replicas that are managed by this pool. If specified, the replicas in this replica pool will be added to the specified target pools for load balancing purposes. The replica pool must live in the same region as the specified target pools. These values must be the target pool resource names, and not fully qualified URLs.
   --template: record # The template used for creating replicas in the pool. — shape: {action?: record, healthChecks?: list, version?: string, vmParams?: record}
   --type: string # Deprecated! Do not set.
-]: any -> any {
+]: any -> record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -237,8 +247,8 @@ export def "zones-pools get" [
   zone: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -252,8 +262,8 @@ export def "zones-pools get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -274,8 +284,8 @@ export def "zones-pools delete" [
   zone: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -292,7 +302,7 @@ export def "zones-pools delete" [
   --abandon-instances: list<string> # If there are instances you would like to keep, you can specify them here. These instances won't be deleted, but the associated replica objects will be removed.
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -315,8 +325,8 @@ export def "zones-pools-replicas list" [
   zone: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -332,8 +342,8 @@ export def "zones-pools-replicas list" [
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --max-results: int # Maximum count of results to be returned. Acceptable values are 0 to 100, inclusive. (Default: 50) (default: 500)
   --page-token: string # Set this to the nextPageToken value returned by a previous list request to obtain the next page of results from the previous list request.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<nextPageToken: string, resources: table<name: string, selfLink: string, status: record>> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -355,8 +365,8 @@ export def "zones-pools-replicas get" [
   pool_name: string
   replica_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -370,8 +380,8 @@ export def "zones-pools-replicas get" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -394,8 +404,8 @@ export def "zones-pools-replicas delete" [
   pool_name: string
   replica_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -410,9 +420,9 @@ export def "zones-pools-replicas delete" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --abandon-instance: oneof<nothing, bool> # Whether the instance resource represented by this replica should be deleted or abandoned. If abandoned, the replica will be deleted but the virtual machine instance will remain. By default, this is set to false and the instance will be deleted along with the replica.
-]: any -> any {
+]: any -> record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -437,8 +447,8 @@ export def "zones-pools-replicas-restart restart" [
   pool_name: string
   replica_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -452,8 +462,8 @@ export def "zones-pools-replicas-restart restart" [
   --pretty-print: oneof<nothing, bool> # Returns response with indentations and line breaks. (default: true)
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<name: string, selfLink: string, status: record<details: string, state: string, templateVersion: string, vmLink: string, vmStartTime: string>> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -475,8 +485,8 @@ export def "zones-pools-resize resize" [
   zone: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -491,8 +501,8 @@ export def "zones-pools-resize resize" [
   --quota-user: string # An opaque string that represents a user for quota purposes. Must not exceed 40 characters.
   --user-ip: string # Deprecated. Please use quotaUser instead.
   --num-replicas: int # The desired number of replicas to resize to. If this number is larger than the existing number of replicas, new replicas will be added. If the number is smaller, then existing replicas will be deleted.
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> record<autoRestart: bool, baseInstanceName: string, currentNumReplicas: int, description: string, healthChecks: table<checkIntervalSec: int, description: string, healthyThreshold: int, host: string, name: string, path: string, port: int, timeoutSec: int, unhealthyThreshold: int>, initialNumReplicas: int, labels: table<key: string, value: string>, name: string, numReplicas: int, resourceViews: list<string>, selfLink: string, targetPool: string, targetPools: list<string>, template: record<action: record<commands: list, envVariables: list, timeoutMilliSeconds: int>, healthChecks: list<record>, version: string, vmParams: record<baseInstanceName: string, canIpForward: bool, description: string, disksToAttach: list, disksToCreate: list, machineType: string, metadata: record, networkInterfaces: list, onHostMaintenance: string, serviceAccounts: list, tags: record>>, type: string> {
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }
@@ -516,8 +526,8 @@ export def "zones-pools-update-template update" [
   zone: string
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -537,7 +547,7 @@ export def "zones-pools-update-template update" [
   --vm-params: record # Parameters for creating a Compute Engine Instance resource. Most fields are identical to the corresponding Compute Engine resource. — shape: {baseInstanceName?: string, canIpForward?: bool, description?: string, disksToAttach?: list, disksToCreate?: list, machineType?: string, metadata?: record, networkInterfaces?: list, onHostMaintenance?: string, serviceAccounts?: list, tags?: record}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o REPLICA_POOL_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o REPLICA_POOL_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($project_name | is-empty) { error make --unspanned { msg: "path parameter 'projectName' must be non-empty" } }
   if ($zone | is-empty) { error make --unspanned { msg: "path parameter 'zone' must be non-empty" } }

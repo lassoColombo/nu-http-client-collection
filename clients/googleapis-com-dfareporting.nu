@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -185,8 +195,8 @@ export def "reports-files get" [
   report_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -205,7 +215,7 @@ export def "reports-files get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, etag: string, fileName: string, format: string, id: string, kind: string, lastModifiedTime: string, reportId: string, status: string, urls: record<apiUrl: string, browserUrl: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
@@ -222,8 +232,8 @@ export def "reports-files get" [
 # operationId: dfareporting.userProfiles.list
 export def "userprofiles list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -242,7 +252,7 @@ export def "userprofiles list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<etag: string, items: table<accountId: string, accountName: string, etag: string, kind: string, profileId: string, subAccountId: string, subAccountName: string, userName: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/userprofiles" $qp)
@@ -258,8 +268,8 @@ export def "userprofiles list" [
 export def "userprofiles get" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -278,7 +288,7 @@ export def "userprofiles get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, accountName: string, etag: string, kind: string, profileId: string, subAccountId: string, subAccountName: string, userName: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -296,8 +306,8 @@ export def "userprofiles-account-active-ad-summaries get" [
   profile_id: string
   summary_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -316,7 +326,7 @@ export def "userprofiles-account-active-ad-summaries get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, activeAds: string, activeAdsLimitTier: string, availableAds: string, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($summary_account_id | is-empty) { error make --unspanned { msg: "path parameter 'summaryAccountId' must be non-empty" } }
@@ -334,8 +344,8 @@ export def "userprofiles-account-active-ad-summaries get" [
 export def "userprofiles-account-permission-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -354,7 +364,7 @@ export def "userprofiles-account-permission-groups list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountPermissionGroups: table<id: string, kind: string, name: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -372,8 +382,8 @@ export def "userprofiles-account-permission-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -392,7 +402,7 @@ export def "userprofiles-account-permission-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -410,8 +420,8 @@ export def "userprofiles-account-permission-groups get" [
 export def "userprofiles-account-permissions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -430,7 +440,7 @@ export def "userprofiles-account-permissions list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountPermissions: table<accountProfiles: list, id: string, kind: string, level: string, name: string, permissionGroupId: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -448,8 +458,8 @@ export def "userprofiles-account-permissions get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -468,7 +478,7 @@ export def "userprofiles-account-permissions get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountProfiles: list<string>, id: string, kind: string, level: string, name: string, permissionGroupId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -486,8 +496,8 @@ export def "userprofiles-account-permissions get" [
 export def "userprofiles-account-user-profiles list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -515,7 +525,7 @@ export def "userprofiles-account-user-profiles list" [
   --subaccount-id: string # Select only user profiles with the specified subaccount ID.
   --user-role-id: string # Select only user profiles with the specified user role ID.
 ]: nothing -> record<accountUserProfiles: table<accountId: string, active: bool, advertiserFilter: record, campaignFilter: record, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record, userRoleId: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar") (serialize-qp "userRoleId" $user_role_id "scalar")] | flatten | str join "&"
@@ -536,8 +546,8 @@ export def "userprofiles-account-user-profiles list" [
 export def "userprofiles-account-user-profiles update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -574,7 +584,7 @@ export def "userprofiles-account-user-profiles update-by-profile-id" [
   --user-role-id: string # User role ID of the user profile. This is a required field. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -597,8 +607,8 @@ export def "userprofiles-account-user-profiles update-by-profile-id" [
 export def "userprofiles-account-user-profiles create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -634,7 +644,7 @@ export def "userprofiles-account-user-profiles create" [
   --user-role-id: string # User role ID of the user profile. This is a required field. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -657,8 +667,8 @@ export def "userprofiles-account-user-profiles create" [
 export def "userprofiles-account-user-profiles update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -694,7 +704,7 @@ export def "userprofiles-account-user-profiles update-by-profile-id-1" [
   --user-role-id: string # User role ID of the user profile. This is a required field. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -714,8 +724,8 @@ export def "userprofiles-account-user-profiles get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -734,7 +744,7 @@ export def "userprofiles-account-user-profiles get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, active: bool, advertiserFilter: record<kind: string, objectIds: list<string>, status: string>, campaignFilter: record<kind: string, objectIds: list<string>, status: string>, comments: string, email: string, id: string, kind: string, locale: string, name: string, siteFilter: record<kind: string, objectIds: list<string>, status: string>, subaccountId: string, traffickerType: string, userAccessType: string, userRoleFilter: record<kind: string, objectIds: list<string>, status: string>, userRoleId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -752,8 +762,8 @@ export def "userprofiles-account-user-profiles get" [
 export def "userprofiles-accounts list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -779,7 +789,7 @@ export def "userprofiles-accounts list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<accounts: table<accountPermissionIds: list, accountProfile: string, active: bool, activeAdsLimitTier: string, activeViewOptOut: bool, availablePermissionIds: list, countryId: string, currencyId: string, defaultCreativeSizeId: string, description: string, id: string, kind: string, locale: string, maximumImageSize: string, name: string, nielsenOcrEnabled: bool, reportsConfiguration: record, shareReportsWithTwitter: bool, teaserSizeLimit: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -797,8 +807,8 @@ export def "userprofiles-accounts list" [
 export def "userprofiles-accounts update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -838,7 +848,7 @@ export def "userprofiles-accounts update-by-profile-id" [
   --teaser-size-limit: string # File size limit in kilobytes of Rich Media teaser creatives. Acceptable values are 1 to 10240, inclusive. (format: int64)
 ]: any -> record<accountPermissionIds: list<string>, accountProfile: string, active: bool, activeAdsLimitTier: string, activeViewOptOut: bool, availablePermissionIds: list<string>, countryId: string, currencyId: string, defaultCreativeSizeId: string, description: string, id: string, kind: string, locale: string, maximumImageSize: string, name: string, nielsenOcrEnabled: bool, reportsConfiguration: record<exposureToConversionEnabled: bool, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, reportGenerationTimeZoneId: string>, shareReportsWithTwitter: bool, teaserSizeLimit: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -858,8 +868,8 @@ export def "userprofiles-accounts update-by-profile-id" [
 export def "userprofiles-accounts update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -898,7 +908,7 @@ export def "userprofiles-accounts update-by-profile-id-1" [
   --teaser-size-limit: string # File size limit in kilobytes of Rich Media teaser creatives. Acceptable values are 1 to 10240, inclusive. (format: int64)
 ]: any -> record<accountPermissionIds: list<string>, accountProfile: string, active: bool, activeAdsLimitTier: string, activeViewOptOut: bool, availablePermissionIds: list<string>, countryId: string, currencyId: string, defaultCreativeSizeId: string, description: string, id: string, kind: string, locale: string, maximumImageSize: string, name: string, nielsenOcrEnabled: bool, reportsConfiguration: record<exposureToConversionEnabled: bool, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, reportGenerationTimeZoneId: string>, shareReportsWithTwitter: bool, teaserSizeLimit: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -918,8 +928,8 @@ export def "userprofiles-accounts get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -938,7 +948,7 @@ export def "userprofiles-accounts get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountPermissionIds: list<string>, accountProfile: string, active: bool, activeAdsLimitTier: string, activeViewOptOut: bool, availablePermissionIds: list<string>, countryId: string, currencyId: string, defaultCreativeSizeId: string, description: string, id: string, kind: string, locale: string, maximumImageSize: string, name: string, nielsenOcrEnabled: bool, reportsConfiguration: record<exposureToConversionEnabled: bool, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, reportGenerationTimeZoneId: string>, shareReportsWithTwitter: bool, teaserSizeLimit: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -956,8 +966,8 @@ export def "userprofiles-accounts get" [
 export def "userprofiles-ads list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -999,7 +1009,7 @@ export def "userprofiles-ads list" [
   --ssl-required: oneof<nothing, bool> # Select only ads that require SSL.
   --type: list<string> # Select only ads with these types.
 ]: nothing -> record<ads: table<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, audienceSegmentId: string, campaignId: string, campaignIdDimensionValue: record, clickThroughUrl: record, clickThroughUrlSuffixProperties: record, comments: string, compatibility: string, createInfo: record, creativeGroupAssignments: list, creativeRotation: record, dayPartTargeting: record, defaultClickThroughEventTagProperties: record, deliverySchedule: record, dynamicClickTracker: bool, endTime: string, eventTagOverrides: list, geoTargeting: record, id: string, idDimensionValue: record, keyValueTargetingExpression: record, kind: string, languageTargeting: record, lastModifiedInfo: record, name: string, placementAssignments: list, remarketingListExpression: record, size: record, sslCompliant: bool, sslRequired: bool, startTime: string, subaccountId: string, targetingTemplateId: string, technologyTargeting: record, type: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "audienceSegmentIds" $audience_segment_ids "multi") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "compatibility" $compatibility "scalar") (serialize-qp "creativeIds" $creative_ids "multi") (serialize-qp "creativeOptimizationConfigurationIds" $creative_optimization_configuration_ids "multi") (serialize-qp "dynamicClickTracker" $dynamic_click_tracker "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "landingPageIds" $landing_page_ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "overriddenEventTagId" $overridden_event_tag_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placementIds" $placement_ids "multi") (serialize-qp "remarketingListIds" $remarketing_list_ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "sslCompliant" $ssl_compliant "scalar") (serialize-qp "sslRequired" $ssl_required "scalar") (serialize-qp "type" $type "multi")] | flatten | str join "&"
@@ -1036,8 +1046,8 @@ export def "userprofiles-ads list" [
 export def "userprofiles-ads update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1097,7 +1107,7 @@ export def "userprofiles-ads update-by-profile-id" [
   --type: string@type-completer # Type of ad. This is a required field on insertion. Note that default ads ( AD_SERVING_DEFAULT_AD) cannot be created directly (see Creative resource).
 ]: any -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentId: string, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, clickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, defaultLandingPage: bool, landingPageId: string>, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comments: string, compatibility: string, createInfo: record<time: string>, creativeGroupAssignments: table<creativeGroupId: string, creativeGroupNumber: string>, creativeRotation: record<creativeAssignments: list<record>, creativeOptimizationConfigurationId: string, type: string, weightCalculationStrategy: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, deliverySchedule: record<frequencyCap: record<duration: string, impressions: string>, hardCutoff: bool, impressionRatio: string, priority: string>, dynamicClickTracker: bool, endTime: string, eventTagOverrides: table<enabled: bool, id: string>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, lastModifiedInfo: record<time: string>, name: string, placementAssignments: table<active: bool, placementId: string, placementIdDimensionValue: record, sslRequired: bool>, remarketingListExpression: record<expression: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslCompliant: bool, sslRequired: bool, startTime: string, subaccountId: string, targetingTemplateId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -1136,8 +1146,8 @@ export def "userprofiles-ads update-by-profile-id" [
 export def "userprofiles-ads create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1196,7 +1206,7 @@ export def "userprofiles-ads create" [
   --type: string@type-completer # Type of ad. This is a required field on insertion. Note that default ads ( AD_SERVING_DEFAULT_AD) cannot be created directly (see Creative resource).
 ]: any -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentId: string, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, clickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, defaultLandingPage: bool, landingPageId: string>, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comments: string, compatibility: string, createInfo: record<time: string>, creativeGroupAssignments: table<creativeGroupId: string, creativeGroupNumber: string>, creativeRotation: record<creativeAssignments: list<record>, creativeOptimizationConfigurationId: string, type: string, weightCalculationStrategy: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, deliverySchedule: record<frequencyCap: record<duration: string, impressions: string>, hardCutoff: bool, impressionRatio: string, priority: string>, dynamicClickTracker: bool, endTime: string, eventTagOverrides: table<enabled: bool, id: string>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, lastModifiedInfo: record<time: string>, name: string, placementAssignments: table<active: bool, placementId: string, placementIdDimensionValue: record, sslRequired: bool>, remarketingListExpression: record<expression: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslCompliant: bool, sslRequired: bool, startTime: string, subaccountId: string, targetingTemplateId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1235,8 +1245,8 @@ export def "userprofiles-ads create" [
 export def "userprofiles-ads update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1295,7 +1305,7 @@ export def "userprofiles-ads update-by-profile-id-1" [
   --type: string@type-completer # Type of ad. This is a required field on insertion. Note that default ads ( AD_SERVING_DEFAULT_AD) cannot be created directly (see Creative resource).
 ]: any -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentId: string, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, clickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, defaultLandingPage: bool, landingPageId: string>, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comments: string, compatibility: string, createInfo: record<time: string>, creativeGroupAssignments: table<creativeGroupId: string, creativeGroupNumber: string>, creativeRotation: record<creativeAssignments: list<record>, creativeOptimizationConfigurationId: string, type: string, weightCalculationStrategy: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, deliverySchedule: record<frequencyCap: record<duration: string, impressions: string>, hardCutoff: bool, impressionRatio: string, priority: string>, dynamicClickTracker: bool, endTime: string, eventTagOverrides: table<enabled: bool, id: string>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, lastModifiedInfo: record<time: string>, name: string, placementAssignments: table<active: bool, placementId: string, placementIdDimensionValue: record, sslRequired: bool>, remarketingListExpression: record<expression: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslCompliant: bool, sslRequired: bool, startTime: string, subaccountId: string, targetingTemplateId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1315,8 +1325,8 @@ export def "userprofiles-ads get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1335,7 +1345,7 @@ export def "userprofiles-ads get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentId: string, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, clickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, defaultLandingPage: bool, landingPageId: string>, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comments: string, compatibility: string, createInfo: record<time: string>, creativeGroupAssignments: table<creativeGroupId: string, creativeGroupNumber: string>, creativeRotation: record<creativeAssignments: list<record>, creativeOptimizationConfigurationId: string, type: string, weightCalculationStrategy: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, deliverySchedule: record<frequencyCap: record<duration: string, impressions: string>, hardCutoff: bool, impressionRatio: string, priority: string>, dynamicClickTracker: bool, endTime: string, eventTagOverrides: table<enabled: bool, id: string>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, lastModifiedInfo: record<time: string>, name: string, placementAssignments: table<active: bool, placementId: string, placementIdDimensionValue: record, sslRequired: bool>, remarketingListExpression: record<expression: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslCompliant: bool, sslRequired: bool, startTime: string, subaccountId: string, targetingTemplateId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1353,8 +1363,8 @@ export def "userprofiles-ads get" [
 export def "userprofiles-advertiser-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1379,7 +1389,7 @@ export def "userprofiles-advertiser-groups list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<advertiserGroups: table<accountId: string, id: string, kind: string, name: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -1396,8 +1406,8 @@ export def "userprofiles-advertiser-groups list" [
 export def "userprofiles-advertiser-groups update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1422,7 +1432,7 @@ export def "userprofiles-advertiser-groups update-by-profile-id" [
   --name: string # Name of this advertiser group. This is a required field and must be less than 256 characters long and unique among advertiser groups of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -1441,8 +1451,8 @@ export def "userprofiles-advertiser-groups update-by-profile-id" [
 export def "userprofiles-advertiser-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1466,7 +1476,7 @@ export def "userprofiles-advertiser-groups create" [
   --name: string # Name of this advertiser group. This is a required field and must be less than 256 characters long and unique among advertiser groups of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1485,8 +1495,8 @@ export def "userprofiles-advertiser-groups create" [
 export def "userprofiles-advertiser-groups update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1510,7 +1520,7 @@ export def "userprofiles-advertiser-groups update-by-profile-id-1" [
   --name: string # Name of this advertiser group. This is a required field and must be less than 256 characters long and unique among advertiser groups of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1530,8 +1540,8 @@ export def "userprofiles-advertiser-groups delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1550,7 +1560,7 @@ export def "userprofiles-advertiser-groups delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1569,8 +1579,8 @@ export def "userprofiles-advertiser-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1589,7 +1599,7 @@ export def "userprofiles-advertiser-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1607,8 +1617,8 @@ export def "userprofiles-advertiser-groups get" [
 export def "userprofiles-advertiser-landing-pages list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1637,7 +1647,7 @@ export def "userprofiles-advertiser-landing-pages list" [
   --sort-order: string@sort-order-completer # Order of sorted results.
   --subaccount-id: string # Select only landing pages that belong to this subaccount.
 ]: nothing -> record<kind: string, landingPages: table<advertiserId: string, archived: bool, deepLinks: list, id: string, kind: string, name: string, url: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
@@ -1655,8 +1665,8 @@ export def "userprofiles-advertiser-landing-pages list" [
 export def "userprofiles-advertiser-landing-pages update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1684,7 +1694,7 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id" [
   --url: string # URL of this landing page. This is a required field.
 ]: any -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -1704,8 +1714,8 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id" [
 export def "userprofiles-advertiser-landing-pages create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1732,7 +1742,7 @@ export def "userprofiles-advertiser-landing-pages create" [
   --url: string # URL of this landing page. This is a required field.
 ]: any -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1752,8 +1762,8 @@ export def "userprofiles-advertiser-landing-pages create" [
 export def "userprofiles-advertiser-landing-pages update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1780,7 +1790,7 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id-1" [
   --url: string # URL of this landing page. This is a required field.
 ]: any -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -1800,8 +1810,8 @@ export def "userprofiles-advertiser-landing-pages get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1820,7 +1830,7 @@ export def "userprofiles-advertiser-landing-pages get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<advertiserId: string, archived: bool, deepLinks: table<appUrl: string, fallbackUrl: string, kind: string, mobileApp: record, remarketingListIds: list>, id: string, kind: string, name: string, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1838,8 +1848,8 @@ export def "userprofiles-advertiser-landing-pages get" [
 export def "userprofiles-advertisers list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1870,7 +1880,7 @@ export def "userprofiles-advertisers list" [
   --status: string@status-completer # Select only advertisers with the specified status.
   --subaccount-id: string # Select only advertisers with these subaccount IDs.
 ]: nothing -> record<advertisers: table<accountId: string, advertiserGroupId: string, clickThroughUrlSuffix: string, defaultClickThroughEventTagId: string, defaultEmail: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record, id: string, idDimensionValue: record, kind: string, name: string, originalFloodlightConfigurationId: string, status: string, subaccountId: string, suspended: bool>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserGroupIds" $advertiser_group_ids "multi") (serialize-qp "floodlightConfigurationIds" $floodlight_configuration_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "includeAdvertisersWithoutGroupsOnly" $include_advertisers_without_groups_only "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "onlyParent" $only_parent "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
@@ -1889,8 +1899,8 @@ export def "userprofiles-advertisers list" [
 export def "userprofiles-advertisers update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1926,7 +1936,7 @@ export def "userprofiles-advertisers update-by-profile-id" [
   --suspended: oneof<nothing, bool> # Suspension status of this advertiser.
 ]: any -> record<accountId: string, advertiserGroupId: string, clickThroughUrlSuffix: string, defaultClickThroughEventTagId: string, defaultEmail: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, originalFloodlightConfigurationId: string, status: string, subaccountId: string, suspended: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -1947,8 +1957,8 @@ export def "userprofiles-advertisers update-by-profile-id" [
 export def "userprofiles-advertisers create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1983,7 +1993,7 @@ export def "userprofiles-advertisers create" [
   --suspended: oneof<nothing, bool> # Suspension status of this advertiser.
 ]: any -> record<accountId: string, advertiserGroupId: string, clickThroughUrlSuffix: string, defaultClickThroughEventTagId: string, defaultEmail: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, originalFloodlightConfigurationId: string, status: string, subaccountId: string, suspended: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2004,8 +2014,8 @@ export def "userprofiles-advertisers create" [
 export def "userprofiles-advertisers update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2040,7 +2050,7 @@ export def "userprofiles-advertisers update-by-profile-id-1" [
   --suspended: oneof<nothing, bool> # Suspension status of this advertiser.
 ]: any -> record<accountId: string, advertiserGroupId: string, clickThroughUrlSuffix: string, defaultClickThroughEventTagId: string, defaultEmail: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, originalFloodlightConfigurationId: string, status: string, subaccountId: string, suspended: bool> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2060,8 +2070,8 @@ export def "userprofiles-advertisers get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2080,7 +2090,7 @@ export def "userprofiles-advertisers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserGroupId: string, clickThroughUrlSuffix: string, defaultClickThroughEventTagId: string, defaultEmail: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, originalFloodlightConfigurationId: string, status: string, subaccountId: string, suspended: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2098,8 +2108,8 @@ export def "userprofiles-advertisers get" [
 export def "userprofiles-browsers list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2118,7 +2128,7 @@ export def "userprofiles-browsers list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<browsers: table<browserVersionId: string, dartId: string, kind: string, majorVersion: string, minorVersion: string, name: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2135,8 +2145,8 @@ export def "userprofiles-browsers list" [
 export def "userprofiles-campaigns list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2168,7 +2178,7 @@ export def "userprofiles-campaigns list" [
   --sort-order: string@sort-order-completer # Order of sorted results.
   --subaccount-id: string # Select only campaigns that belong to this subaccount.
 ]: nothing -> record<campaigns: table<accountId: string, adBlockingConfiguration: record, additionalCreativeOptimizationConfigurations: list, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, audienceSegmentGroups: list, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record, comment: string, createInfo: record, creativeGroupIds: list, creativeOptimizationConfiguration: record, defaultClickThroughEventTagProperties: record, defaultLandingPageId: string, endDate: string, eventTagOverrides: list, externalId: string, id: string, idDimensionValue: record, kind: string, lastModifiedInfo: record, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserGroupIds" $advertiser_group_ids "multi") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "atLeastOneOptimizationActivity" $at_least_one_optimization_activity "scalar") (serialize-qp "excludedIds" $excluded_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "overriddenEventTagId" $overridden_event_tag_id "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
@@ -2196,8 +2206,8 @@ export def "userprofiles-campaigns list" [
 export def "userprofiles-campaigns update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2246,7 +2256,7 @@ export def "userprofiles-campaigns update-by-profile-id" [
   --trafficker-emails: list<string> # Campaign trafficker contact emails.
 ]: any -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -2276,8 +2286,8 @@ export def "userprofiles-campaigns update-by-profile-id" [
 export def "userprofiles-campaigns create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2325,7 +2335,7 @@ export def "userprofiles-campaigns create" [
   --trafficker-emails: list<string> # Campaign trafficker contact emails.
 ]: any -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2355,8 +2365,8 @@ export def "userprofiles-campaigns create" [
 export def "userprofiles-campaigns update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2404,7 +2414,7 @@ export def "userprofiles-campaigns update-by-profile-id-1" [
   --trafficker-emails: list<string> # Campaign trafficker contact emails.
 ]: any -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2424,8 +2434,8 @@ export def "userprofiles-campaigns-campaign-creative-associations list" [
   profile_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2447,7 +2457,7 @@ export def "userprofiles-campaigns-campaign-creative-associations list" [
   --page-token: string # Value of the nextPageToken from the previous result page.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<campaignCreativeAssociations: table<creativeId: string, kind: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -2466,8 +2476,8 @@ export def "userprofiles-campaigns-campaign-creative-associations create" [
   profile_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2489,7 +2499,7 @@ export def "userprofiles-campaigns-campaign-creative-associations create" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#campaignCreativeAssociation".
 ]: any -> record<creativeId: string, kind: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($campaign_id | is-empty) { error make --unspanned { msg: "path parameter 'campaignId' must be non-empty" } }
@@ -2510,8 +2520,8 @@ export def "userprofiles-campaigns get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2530,7 +2540,7 @@ export def "userprofiles-campaigns get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, adBlockingConfiguration: record<clickThroughUrl: string, creativeBundleId: string, enabled: bool, overrideClickThroughUrl: bool>, additionalCreativeOptimizationConfigurations: table<id: string, name: string, optimizationActivitys: list, optimizationModel: string>, advertiserGroupId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, audienceSegmentGroups: table<audienceSegments: list, id: string, name: string>, billingInvoiceCode: string, clickThroughUrlSuffixProperties: record<clickThroughUrlSuffix: string, overrideInheritedSuffix: bool>, comment: string, createInfo: record<time: string>, creativeGroupIds: list<string>, creativeOptimizationConfiguration: record<id: string, name: string, optimizationActivitys: list<record>, optimizationModel: string>, defaultClickThroughEventTagProperties: record<defaultClickThroughEventTagId: string, overrideInheritedEventTag: bool>, defaultLandingPageId: string, endDate: string, eventTagOverrides: table<enabled: bool, id: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, nielsenOcrEnabled: bool, startDate: string, subaccountId: string, traffickerEmails: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2548,8 +2558,8 @@ export def "userprofiles-campaigns get" [
 export def "userprofiles-change-logs list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2578,7 +2588,7 @@ export def "userprofiles-change-logs list" [
   --search-string: string # Select only change logs whose object ID, user name, old or new values match the search string.
   --user-profile-ids: list<string> # Select only change logs with these user profile IDs.
 ]: nothing -> record<changeLogs: table<accountId: string, action: string, changeTime: string, fieldName: string, id: string, kind: string, newValue: string, objectId: string, objectType: string, oldValue: string, subaccountId: string, transactionId: string, userProfileId: string, userProfileName: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "action" $action "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxChangeTime" $max_change_time "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "minChangeTime" $min_change_time "scalar") (serialize-qp "objectIds" $object_ids "multi") (serialize-qp "objectType" $object_type "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "userProfileIds" $user_profile_ids "multi")] | flatten | str join "&"
@@ -2596,8 +2606,8 @@ export def "userprofiles-change-logs get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2616,7 +2626,7 @@ export def "userprofiles-change-logs get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, action: string, changeTime: string, fieldName: string, id: string, kind: string, newValue: string, objectId: string, objectType: string, oldValue: string, subaccountId: string, transactionId: string, userProfileId: string, userProfileName: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2634,8 +2644,8 @@ export def "userprofiles-change-logs get" [
 export def "userprofiles-cities list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2658,7 +2668,7 @@ export def "userprofiles-cities list" [
   --name-prefix: string # Select only cities with names starting with this prefix.
   --region-dart-ids: list<string> # Select only cities from these regions.
 ]: nothing -> record<cities: table<countryCode: string, countryDartId: string, dartId: string, kind: string, metroCode: string, metroDmaId: string, name: string, regionCode: string, regionDartId: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "countryDartIds" $country_dart_ids "multi") (serialize-qp "dartIds" $dart_ids "multi") (serialize-qp "namePrefix" $name_prefix "scalar") (serialize-qp "regionDartIds" $region_dart_ids "multi")] | flatten | str join "&"
@@ -2675,8 +2685,8 @@ export def "userprofiles-cities list" [
 export def "userprofiles-connection-types list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2695,7 +2705,7 @@ export def "userprofiles-connection-types list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<connectionTypes: table<id: string, kind: string, name: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2713,8 +2723,8 @@ export def "userprofiles-connection-types get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2733,7 +2743,7 @@ export def "userprofiles-connection-types get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2751,8 +2761,8 @@ export def "userprofiles-connection-types get" [
 export def "userprofiles-content-categories list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2777,7 +2787,7 @@ export def "userprofiles-content-categories list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<contentCategories: table<accountId: string, id: string, kind: string, name: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -2794,8 +2804,8 @@ export def "userprofiles-content-categories list" [
 export def "userprofiles-content-categories update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2820,7 +2830,7 @@ export def "userprofiles-content-categories update-by-profile-id" [
   --name: string # Name of this content category. This is a required field and must be less than 256 characters long and unique among content categories of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -2839,8 +2849,8 @@ export def "userprofiles-content-categories update-by-profile-id" [
 export def "userprofiles-content-categories create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2864,7 +2874,7 @@ export def "userprofiles-content-categories create" [
   --name: string # Name of this content category. This is a required field and must be less than 256 characters long and unique among content categories of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2883,8 +2893,8 @@ export def "userprofiles-content-categories create" [
 export def "userprofiles-content-categories update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2908,7 +2918,7 @@ export def "userprofiles-content-categories update-by-profile-id-1" [
   --name: string # Name of this content category. This is a required field and must be less than 256 characters long and unique among content categories of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -2928,8 +2938,8 @@ export def "userprofiles-content-categories delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2948,7 +2958,7 @@ export def "userprofiles-content-categories delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2967,8 +2977,8 @@ export def "userprofiles-content-categories get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -2987,7 +2997,7 @@ export def "userprofiles-content-categories get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3007,8 +3017,8 @@ export def "userprofiles-content-categories get" [
 export def "userprofiles-conversions-batchinsert create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3031,7 +3041,7 @@ export def "userprofiles-conversions-batchinsert create" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#conversionsBatchInsertRequest".
 ]: any -> record<hasFailures: bool, kind: string, status: table<conversion: record, errors: list, kind: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3052,8 +3062,8 @@ export def "userprofiles-conversions-batchinsert create" [
 export def "userprofiles-conversions-batchupdate create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3076,7 +3086,7 @@ export def "userprofiles-conversions-batchupdate create" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#conversionsBatchUpdateRequest".
 ]: any -> record<hasFailures: bool, kind: string, status: table<conversion: record, errors: list, kind: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3095,8 +3105,8 @@ export def "userprofiles-conversions-batchupdate create" [
 export def "userprofiles-countries list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3115,7 +3125,7 @@ export def "userprofiles-countries list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<countries: table<countryCode: string, dartId: string, kind: string, name: string, sslEnabled: bool>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3133,8 +3143,8 @@ export def "userprofiles-countries get" [
   profile_id: string
   dart_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3153,7 +3163,7 @@ export def "userprofiles-countries get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<countryCode: string, dartId: string, kind: string, name: string, sslEnabled: bool> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($dart_id | is-empty) { error make --unspanned { msg: "path parameter 'dartId' must be non-empty" } }
@@ -3172,8 +3182,8 @@ export def "userprofiles-creative-assets-creative-assets create" [
   profile_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3194,7 +3204,7 @@ export def "userprofiles-creative-assets-creative-assets create" [
   --body: any
 ]: any -> record<assetIdentifier: record<name: string, type: string>, clickTags: table<clickThroughUrl: record, eventName: string, name: string>, counterCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, detectedFeatures: list<string>, exitCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, richMedia: bool, timerCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, warnedValidationRules: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($advertiser_id | is-empty) { error make --unspanned { msg: "path parameter 'advertiserId' must be non-empty" } }
@@ -3214,8 +3224,8 @@ export def "userprofiles-creative-assets-creative-assets create" [
 export def "userprofiles-creative-fields list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3241,7 +3251,7 @@ export def "userprofiles-creative-fields list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<creativeFields: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, id: string, kind: string, name: string, subaccountId: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -3259,8 +3269,8 @@ export def "userprofiles-creative-fields list" [
 export def "userprofiles-creative-fields update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3288,7 +3298,7 @@ export def "userprofiles-creative-fields update-by-profile-id" [
   --subaccount-id: string # Subaccount ID of this creative field. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, kind: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -3308,8 +3318,8 @@ export def "userprofiles-creative-fields update-by-profile-id" [
 export def "userprofiles-creative-fields create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3336,7 +3346,7 @@ export def "userprofiles-creative-fields create" [
   --subaccount-id: string # Subaccount ID of this creative field. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, kind: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3356,8 +3366,8 @@ export def "userprofiles-creative-fields create" [
 export def "userprofiles-creative-fields update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3384,7 +3394,7 @@ export def "userprofiles-creative-fields update-by-profile-id-1" [
   --subaccount-id: string # Subaccount ID of this creative field. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, kind: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3404,8 +3414,8 @@ export def "userprofiles-creative-fields-creative-field-values list" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3430,7 +3440,7 @@ export def "userprofiles-creative-fields-creative-field-values list" [
   --sort-field: string@sort-field-completer-1 # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<creativeFieldValues: table<id: string, kind: string, value: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
@@ -3449,8 +3459,8 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3474,7 +3484,7 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
   --value: string # Value of this creative field value. It needs to be less than 256 characters in length and unique per creative field.
 ]: any -> record<id: string, kind: string, value: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
@@ -3495,8 +3505,8 @@ export def "userprofiles-creative-fields-creative-field-values create" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3519,7 +3529,7 @@ export def "userprofiles-creative-fields-creative-field-values create" [
   --value: string # Value of this creative field value. It needs to be less than 256 characters in length and unique per creative field.
 ]: any -> record<id: string, kind: string, value: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
@@ -3540,8 +3550,8 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3564,7 +3574,7 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
   --value: string # Value of this creative field value. It needs to be less than 256 characters in length and unique per creative field.
 ]: any -> record<id: string, kind: string, value: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
@@ -3586,8 +3596,8 @@ export def "userprofiles-creative-fields-creative-field-values delete" [
   creative_field_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3606,7 +3616,7 @@ export def "userprofiles-creative-fields-creative-field-values delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
@@ -3627,8 +3637,8 @@ export def "userprofiles-creative-fields-creative-field-values get" [
   creative_field_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3647,7 +3657,7 @@ export def "userprofiles-creative-fields-creative-field-values get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, kind: string, value: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($creative_field_id | is-empty) { error make --unspanned { msg: "path parameter 'creativeFieldId' must be non-empty" } }
@@ -3667,8 +3677,8 @@ export def "userprofiles-creative-fields delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3687,7 +3697,7 @@ export def "userprofiles-creative-fields delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3706,8 +3716,8 @@ export def "userprofiles-creative-fields get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3726,7 +3736,7 @@ export def "userprofiles-creative-fields get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, kind: string, name: string, subaccountId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3744,8 +3754,8 @@ export def "userprofiles-creative-fields get" [
 export def "userprofiles-creative-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3772,7 +3782,7 @@ export def "userprofiles-creative-groups list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<creativeGroups: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, groupNumber: int, id: string, kind: string, name: string, subaccountId: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "groupNumber" $group_number "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -3790,8 +3800,8 @@ export def "userprofiles-creative-groups list" [
 export def "userprofiles-creative-groups update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3820,7 +3830,7 @@ export def "userprofiles-creative-groups update-by-profile-id" [
   --subaccount-id: string # Subaccount ID of this creative group. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, groupNumber: int, id: string, kind: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -3840,8 +3850,8 @@ export def "userprofiles-creative-groups update-by-profile-id" [
 export def "userprofiles-creative-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3869,7 +3879,7 @@ export def "userprofiles-creative-groups create" [
   --subaccount-id: string # Subaccount ID of this creative group. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, groupNumber: int, id: string, kind: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3889,8 +3899,8 @@ export def "userprofiles-creative-groups create" [
 export def "userprofiles-creative-groups update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3918,7 +3928,7 @@ export def "userprofiles-creative-groups update-by-profile-id-1" [
   --subaccount-id: string # Subaccount ID of this creative group. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, groupNumber: int, id: string, kind: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -3938,8 +3948,8 @@ export def "userprofiles-creative-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -3958,7 +3968,7 @@ export def "userprofiles-creative-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, groupNumber: int, id: string, kind: string, name: string, subaccountId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3976,8 +3986,8 @@ export def "userprofiles-creative-groups get" [
 export def "userprofiles-creatives list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4012,7 +4022,7 @@ export def "userprofiles-creatives list" [
   --studio-creative-id: string # Select only creatives corresponding to this Studio creative ID.
   --types: list<string> # Select only creatives with these creative types.
 ]: nothing -> record<creatives: table<accountId: string, active: bool, adParameters: string, adTagKeys: list, additionalSizes: list, advertiserId: string, allowScriptAccess: bool, archived: bool, artworkType: string, authoringSource: string, authoringTool: string, autoAdvanceImages: bool, backgroundColor: string, backupImageClickThroughUrl: record, backupImageFeatures: list, backupImageReportingLabel: string, backupImageTargetWindow: record, clickTags: list, commercialId: string, companionCreatives: list, compatibility: list, convertFlashToHtml5: bool, counterCustomEvents: list, creativeAssetSelection: record, creativeAssets: list, creativeFieldAssignments: list, customKeyValues: list, dynamicAssetSelection: bool, exitCustomEvents: list, fsCommand: record, htmlCode: string, htmlCodeLocked: bool, id: string, idDimensionValue: record, kind: string, lastModifiedInfo: record, latestTraffickedCreativeId: string, mediaDescription: string, mediaDuration: float, name: string, obaIcon: record, overrideCss: string, progressOffset: record, redirectUrl: string, renderingId: string, renderingIdDimensionValue: record, requiredFlashPluginVersion: string, requiredFlashVersion: int, size: record, skipOffset: record, skippable: bool, sslCompliant: bool, sslOverride: bool, studioAdvertiserId: string, studioCreativeId: string, studioTraffickedCreativeId: string, subaccountId: string, thirdPartyBackupImageImpressionsUrl: string, thirdPartyRichMediaImpressionsUrl: string, thirdPartyUrls: list, timerCustomEvents: list, totalFileSize: string, type: string, universalAdId: record, version: int>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "companionCreativeIds" $companion_creative_ids "multi") (serialize-qp "creativeFieldIds" $creative_field_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "renderingIds" $rendering_ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "studioCreativeId" $studio_creative_id "scalar") (serialize-qp "types" $types "multi")] | flatten | str join "&"
@@ -4049,8 +4059,8 @@ export def "userprofiles-creatives list" [
 export def "userprofiles-creatives update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4136,7 +4146,7 @@ export def "userprofiles-creatives update-by-profile-id" [
   --version: int # The version number helps you keep track of multiple versions of your creative in your reports. The version number will always be auto-generated during insert operations to start at 1. For tracking creatives the version cannot be incremented and will always remain at 1. For all other creative types the version can be incremented only by 1 during update operations. In addition, the version will be automatically incremented by 1 when undergoing Rich Media creative merging. Applicable to all creative types. (format: int32)
 ]: any -> record<accountId: string, active: bool, adParameters: string, adTagKeys: list<string>, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, allowScriptAccess: bool, archived: bool, artworkType: string, authoringSource: string, authoringTool: string, autoAdvanceImages: bool, backgroundColor: string, backupImageClickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, landingPageId: string>, backupImageFeatures: list<string>, backupImageReportingLabel: string, backupImageTargetWindow: record<customHtml: string, targetWindowOption: string>, clickTags: table<clickThroughUrl: record, eventName: string, name: string>, commercialId: string, companionCreatives: list<string>, compatibility: list<string>, convertFlashToHtml5: bool, counterCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, creativeAssetSelection: record<defaultAssetId: string, rules: list<record>>, creativeAssets: table<actionScript3: bool, active: bool, additionalSizes: list, alignment: string, artworkType: string, assetIdentifier: record, audioBitRate: int, audioSampleRate: int, backupImageExit: record, bitRate: int, childAssetType: string, collapsedSize: record, companionCreativeIds: list, customStartTimeValue: int, detectedFeatures: list, displayType: string, duration: int, durationType: string, expandedDimension: record, fileSize: string, flashVersion: int, frameRate: float, hideFlashObjects: bool, hideSelectionBoxes: bool, horizontallyLocked: bool, id: string, idDimensionValue: record, mediaDuration: float, mimeType: string, offset: record, orientation: string, originalBackup: bool, politeLoad: bool, position: record, positionLeftUnit: string, positionTopUnit: string, progressiveServingUrl: string, pushdown: bool, pushdownDuration: float, role: string, size: record, sslCompliant: bool, startTimeType: string, streamingServingUrl: string, transparency: bool, verticallyLocked: bool, windowMode: string, zIndex: int, zipFilename: string, zipFilesize: string>, creativeFieldAssignments: table<creativeFieldId: string, creativeFieldValueId: string>, customKeyValues: list<string>, dynamicAssetSelection: bool, exitCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, fsCommand: record<left: int, positionOption: string, top: int, windowHeight: int, windowWidth: int>, htmlCode: string, htmlCodeLocked: bool, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, latestTraffickedCreativeId: string, mediaDescription: string, mediaDuration: float, name: string, obaIcon: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record<height: int, iab: bool, id: string, kind: string, width: int>, xPosition: string, yPosition: string>, overrideCss: string, progressOffset: record<offsetPercentage: int, offsetSeconds: int>, redirectUrl: string, renderingId: string, renderingIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, requiredFlashPluginVersion: string, requiredFlashVersion: int, size: record<height: int, iab: bool, id: string, kind: string, width: int>, skipOffset: record<offsetPercentage: int, offsetSeconds: int>, skippable: bool, sslCompliant: bool, sslOverride: bool, studioAdvertiserId: string, studioCreativeId: string, studioTraffickedCreativeId: string, subaccountId: string, thirdPartyBackupImageImpressionsUrl: string, thirdPartyRichMediaImpressionsUrl: string, thirdPartyUrls: table<thirdPartyUrlType: string, url: string>, timerCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, totalFileSize: string, type: string, universalAdId: record<registry: string, value: string>, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -4175,8 +4185,8 @@ export def "userprofiles-creatives update-by-profile-id" [
 export def "userprofiles-creatives create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4261,7 +4271,7 @@ export def "userprofiles-creatives create" [
   --version: int # The version number helps you keep track of multiple versions of your creative in your reports. The version number will always be auto-generated during insert operations to start at 1. For tracking creatives the version cannot be incremented and will always remain at 1. For all other creative types the version can be incremented only by 1 during update operations. In addition, the version will be automatically incremented by 1 when undergoing Rich Media creative merging. Applicable to all creative types. (format: int32)
 ]: any -> record<accountId: string, active: bool, adParameters: string, adTagKeys: list<string>, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, allowScriptAccess: bool, archived: bool, artworkType: string, authoringSource: string, authoringTool: string, autoAdvanceImages: bool, backgroundColor: string, backupImageClickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, landingPageId: string>, backupImageFeatures: list<string>, backupImageReportingLabel: string, backupImageTargetWindow: record<customHtml: string, targetWindowOption: string>, clickTags: table<clickThroughUrl: record, eventName: string, name: string>, commercialId: string, companionCreatives: list<string>, compatibility: list<string>, convertFlashToHtml5: bool, counterCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, creativeAssetSelection: record<defaultAssetId: string, rules: list<record>>, creativeAssets: table<actionScript3: bool, active: bool, additionalSizes: list, alignment: string, artworkType: string, assetIdentifier: record, audioBitRate: int, audioSampleRate: int, backupImageExit: record, bitRate: int, childAssetType: string, collapsedSize: record, companionCreativeIds: list, customStartTimeValue: int, detectedFeatures: list, displayType: string, duration: int, durationType: string, expandedDimension: record, fileSize: string, flashVersion: int, frameRate: float, hideFlashObjects: bool, hideSelectionBoxes: bool, horizontallyLocked: bool, id: string, idDimensionValue: record, mediaDuration: float, mimeType: string, offset: record, orientation: string, originalBackup: bool, politeLoad: bool, position: record, positionLeftUnit: string, positionTopUnit: string, progressiveServingUrl: string, pushdown: bool, pushdownDuration: float, role: string, size: record, sslCompliant: bool, startTimeType: string, streamingServingUrl: string, transparency: bool, verticallyLocked: bool, windowMode: string, zIndex: int, zipFilename: string, zipFilesize: string>, creativeFieldAssignments: table<creativeFieldId: string, creativeFieldValueId: string>, customKeyValues: list<string>, dynamicAssetSelection: bool, exitCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, fsCommand: record<left: int, positionOption: string, top: int, windowHeight: int, windowWidth: int>, htmlCode: string, htmlCodeLocked: bool, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, latestTraffickedCreativeId: string, mediaDescription: string, mediaDuration: float, name: string, obaIcon: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record<height: int, iab: bool, id: string, kind: string, width: int>, xPosition: string, yPosition: string>, overrideCss: string, progressOffset: record<offsetPercentage: int, offsetSeconds: int>, redirectUrl: string, renderingId: string, renderingIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, requiredFlashPluginVersion: string, requiredFlashVersion: int, size: record<height: int, iab: bool, id: string, kind: string, width: int>, skipOffset: record<offsetPercentage: int, offsetSeconds: int>, skippable: bool, sslCompliant: bool, sslOverride: bool, studioAdvertiserId: string, studioCreativeId: string, studioTraffickedCreativeId: string, subaccountId: string, thirdPartyBackupImageImpressionsUrl: string, thirdPartyRichMediaImpressionsUrl: string, thirdPartyUrls: table<thirdPartyUrlType: string, url: string>, timerCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, totalFileSize: string, type: string, universalAdId: record<registry: string, value: string>, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4300,8 +4310,8 @@ export def "userprofiles-creatives create" [
 export def "userprofiles-creatives update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4386,7 +4396,7 @@ export def "userprofiles-creatives update-by-profile-id-1" [
   --version: int # The version number helps you keep track of multiple versions of your creative in your reports. The version number will always be auto-generated during insert operations to start at 1. For tracking creatives the version cannot be incremented and will always remain at 1. For all other creative types the version can be incremented only by 1 during update operations. In addition, the version will be automatically incremented by 1 when undergoing Rich Media creative merging. Applicable to all creative types. (format: int32)
 ]: any -> record<accountId: string, active: bool, adParameters: string, adTagKeys: list<string>, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, allowScriptAccess: bool, archived: bool, artworkType: string, authoringSource: string, authoringTool: string, autoAdvanceImages: bool, backgroundColor: string, backupImageClickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, landingPageId: string>, backupImageFeatures: list<string>, backupImageReportingLabel: string, backupImageTargetWindow: record<customHtml: string, targetWindowOption: string>, clickTags: table<clickThroughUrl: record, eventName: string, name: string>, commercialId: string, companionCreatives: list<string>, compatibility: list<string>, convertFlashToHtml5: bool, counterCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, creativeAssetSelection: record<defaultAssetId: string, rules: list<record>>, creativeAssets: table<actionScript3: bool, active: bool, additionalSizes: list, alignment: string, artworkType: string, assetIdentifier: record, audioBitRate: int, audioSampleRate: int, backupImageExit: record, bitRate: int, childAssetType: string, collapsedSize: record, companionCreativeIds: list, customStartTimeValue: int, detectedFeatures: list, displayType: string, duration: int, durationType: string, expandedDimension: record, fileSize: string, flashVersion: int, frameRate: float, hideFlashObjects: bool, hideSelectionBoxes: bool, horizontallyLocked: bool, id: string, idDimensionValue: record, mediaDuration: float, mimeType: string, offset: record, orientation: string, originalBackup: bool, politeLoad: bool, position: record, positionLeftUnit: string, positionTopUnit: string, progressiveServingUrl: string, pushdown: bool, pushdownDuration: float, role: string, size: record, sslCompliant: bool, startTimeType: string, streamingServingUrl: string, transparency: bool, verticallyLocked: bool, windowMode: string, zIndex: int, zipFilename: string, zipFilesize: string>, creativeFieldAssignments: table<creativeFieldId: string, creativeFieldValueId: string>, customKeyValues: list<string>, dynamicAssetSelection: bool, exitCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, fsCommand: record<left: int, positionOption: string, top: int, windowHeight: int, windowWidth: int>, htmlCode: string, htmlCodeLocked: bool, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, latestTraffickedCreativeId: string, mediaDescription: string, mediaDuration: float, name: string, obaIcon: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record<height: int, iab: bool, id: string, kind: string, width: int>, xPosition: string, yPosition: string>, overrideCss: string, progressOffset: record<offsetPercentage: int, offsetSeconds: int>, redirectUrl: string, renderingId: string, renderingIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, requiredFlashPluginVersion: string, requiredFlashVersion: int, size: record<height: int, iab: bool, id: string, kind: string, width: int>, skipOffset: record<offsetPercentage: int, offsetSeconds: int>, skippable: bool, sslCompliant: bool, sslOverride: bool, studioAdvertiserId: string, studioCreativeId: string, studioTraffickedCreativeId: string, subaccountId: string, thirdPartyBackupImageImpressionsUrl: string, thirdPartyRichMediaImpressionsUrl: string, thirdPartyUrls: table<thirdPartyUrlType: string, url: string>, timerCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, totalFileSize: string, type: string, universalAdId: record<registry: string, value: string>, version: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4406,8 +4416,8 @@ export def "userprofiles-creatives get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4426,7 +4436,7 @@ export def "userprofiles-creatives get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, active: bool, adParameters: string, adTagKeys: list<string>, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, allowScriptAccess: bool, archived: bool, artworkType: string, authoringSource: string, authoringTool: string, autoAdvanceImages: bool, backgroundColor: string, backupImageClickThroughUrl: record<computedClickThroughUrl: string, customClickThroughUrl: string, landingPageId: string>, backupImageFeatures: list<string>, backupImageReportingLabel: string, backupImageTargetWindow: record<customHtml: string, targetWindowOption: string>, clickTags: table<clickThroughUrl: record, eventName: string, name: string>, commercialId: string, companionCreatives: list<string>, compatibility: list<string>, convertFlashToHtml5: bool, counterCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, creativeAssetSelection: record<defaultAssetId: string, rules: list<record>>, creativeAssets: table<actionScript3: bool, active: bool, additionalSizes: list, alignment: string, artworkType: string, assetIdentifier: record, audioBitRate: int, audioSampleRate: int, backupImageExit: record, bitRate: int, childAssetType: string, collapsedSize: record, companionCreativeIds: list, customStartTimeValue: int, detectedFeatures: list, displayType: string, duration: int, durationType: string, expandedDimension: record, fileSize: string, flashVersion: int, frameRate: float, hideFlashObjects: bool, hideSelectionBoxes: bool, horizontallyLocked: bool, id: string, idDimensionValue: record, mediaDuration: float, mimeType: string, offset: record, orientation: string, originalBackup: bool, politeLoad: bool, position: record, positionLeftUnit: string, positionTopUnit: string, progressiveServingUrl: string, pushdown: bool, pushdownDuration: float, role: string, size: record, sslCompliant: bool, startTimeType: string, streamingServingUrl: string, transparency: bool, verticallyLocked: bool, windowMode: string, zIndex: int, zipFilename: string, zipFilesize: string>, creativeFieldAssignments: table<creativeFieldId: string, creativeFieldValueId: string>, customKeyValues: list<string>, dynamicAssetSelection: bool, exitCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, fsCommand: record<left: int, positionOption: string, top: int, windowHeight: int, windowWidth: int>, htmlCode: string, htmlCodeLocked: bool, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, latestTraffickedCreativeId: string, mediaDescription: string, mediaDuration: float, name: string, obaIcon: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record<height: int, iab: bool, id: string, kind: string, width: int>, xPosition: string, yPosition: string>, overrideCss: string, progressOffset: record<offsetPercentage: int, offsetSeconds: int>, redirectUrl: string, renderingId: string, renderingIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, requiredFlashPluginVersion: string, requiredFlashVersion: int, size: record<height: int, iab: bool, id: string, kind: string, width: int>, skipOffset: record<offsetPercentage: int, offsetSeconds: int>, skippable: bool, sslCompliant: bool, sslOverride: bool, studioAdvertiserId: string, studioCreativeId: string, studioTraffickedCreativeId: string, subaccountId: string, thirdPartyBackupImageImpressionsUrl: string, thirdPartyRichMediaImpressionsUrl: string, thirdPartyUrls: table<thirdPartyUrlType: string, url: string>, timerCustomEvents: table<advertiserCustomEventId: string, advertiserCustomEventName: string, advertiserCustomEventType: string, artworkLabel: string, artworkType: string, exitClickThroughUrl: record, id: string, popupWindowProperties: record, targetType: string, videoReportingId: string>, totalFileSize: string, type: string, universalAdId: record<registry: string, value: string>, version: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4445,8 +4455,8 @@ export def "userprofiles-creatives get" [
 export def "userprofiles-custom-events-batchinsert create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4468,7 +4478,7 @@ export def "userprofiles-custom-events-batchinsert create" [
   --kind: string # Identifies what kind of resource this is. Value: the fixed string "dfareporting#customEventsBatchInsertRequest".
 ]: any -> record<hasFailures: bool, kind: string, status: table<customEvent: record, errors: list, kind: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4488,8 +4498,8 @@ export def "userprofiles-custom-events-batchinsert create" [
 export def "userprofiles-dimensionvalues-query list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4516,7 +4526,7 @@ export def "userprofiles-dimensionvalues-query list" [
   --start-date: string # format: date
 ]: any -> record<etag: string, items: table<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, nextPageToken: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar")] | flatten | str join "&"
@@ -4535,8 +4545,8 @@ export def "userprofiles-dimensionvalues-query list" [
 export def "userprofiles-directory-sites list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4566,7 +4576,7 @@ export def "userprofiles-directory-sites list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<directorySites: table<id: string, idDimensionValue: record, inpageTagFormats: list, interstitialTagFormats: list, kind: string, name: string, settings: record, url: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acceptsInStreamVideoPlacements" $accepts_in_stream_video_placements "scalar") (serialize-qp "acceptsInterstitialPlacements" $accepts_interstitial_placements "scalar") (serialize-qp "acceptsPublisherPaidPlacements" $accepts_publisher_paid_placements "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "dfpNetworkCode" $dfp_network_code "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -4585,8 +4595,8 @@ export def "userprofiles-directory-sites list" [
 export def "userprofiles-directory-sites create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4614,7 +4624,7 @@ export def "userprofiles-directory-sites create" [
   --url: string # URL of this directory site.
 ]: any -> record<id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inpageTagFormats: list<string>, interstitialTagFormats: list<string>, kind: string, name: string, settings: record<activeViewOptOut: bool, dfpSettings: record<dfpNetworkCode: string, dfpNetworkName: string, programmaticPlacementAccepted: bool, pubPaidPlacementAccepted: bool, publisherPortalOnly: bool>, instreamVideoPlacementAccepted: bool, interstitialPlacementAccepted: bool>, url: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4634,8 +4644,8 @@ export def "userprofiles-directory-sites get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4654,7 +4664,7 @@ export def "userprofiles-directory-sites get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inpageTagFormats: list<string>, interstitialTagFormats: list<string>, kind: string, name: string, settings: record<activeViewOptOut: bool, dfpSettings: record<dfpNetworkCode: string, dfpNetworkName: string, programmaticPlacementAccepted: bool, pubPaidPlacementAccepted: bool, publisherPortalOnly: bool>, instreamVideoPlacementAccepted: bool, interstitialPlacementAccepted: bool>, url: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -4672,8 +4682,8 @@ export def "userprofiles-directory-sites get" [
 export def "userprofiles-dynamic-targeting-keys list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4696,7 +4706,7 @@ export def "userprofiles-dynamic-targeting-keys list" [
   --object-id: string # Select only dynamic targeting keys with this object ID.
   --object-type: string@object-type-completer-1 # Select only dynamic targeting keys with this object type.
 ]: nothing -> record<dynamicTargetingKeys: table<kind: string, name: string, objectId: string, objectType: string>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "names" $names "multi") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "objectType" $object_type "scalar")] | flatten | str join "&"
@@ -4713,8 +4723,8 @@ export def "userprofiles-dynamic-targeting-keys list" [
 export def "userprofiles-dynamic-targeting-keys create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4738,7 +4748,7 @@ export def "userprofiles-dynamic-targeting-keys create" [
   --object-type: string@object-type-completer-1 # Type of the object of this dynamic targeting key. This is a required field.
 ]: any -> record<kind: string, name: string, objectId: string, objectType: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4758,8 +4768,8 @@ export def "userprofiles-dynamic-targeting-keys delete" [
   profile_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4780,7 +4790,7 @@ export def "userprofiles-dynamic-targeting-keys delete" [
   --name: string # Name of this dynamic targeting key. This is a required field. Must be less than 256 characters long and cannot contain commas. All characters are converted to lowercase.
   --object-type: string@object-type-completer-1 # Type of the object of this dynamic targeting key. This is a required field.
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($object_id | is-empty) { error make --unspanned { msg: "path parameter 'objectId' must be non-empty" } }
@@ -4798,8 +4808,8 @@ export def "userprofiles-dynamic-targeting-keys delete" [
 export def "userprofiles-event-tags list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4828,7 +4838,7 @@ export def "userprofiles-event-tags list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<eventTags: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, campaignId: string, campaignIdDimensionValue: record, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "adId" $ad_id "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "definitionsOnly" $definitions_only "scalar") (serialize-qp "enabled" $enabled "scalar") (serialize-qp "eventTagTypes" $event_tag_types "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -4847,8 +4857,8 @@ export def "userprofiles-event-tags list" [
 export def "userprofiles-event-tags update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4887,7 +4897,7 @@ export def "userprofiles-event-tags update-by-profile-id" [
   --url-escape-levels: int # Number of times the landing page URL should be URL-escaped before being appended to the click-through event tag URL. Only applies to click-through event tags as specified by the event tag type. (format: int32)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -4908,8 +4918,8 @@ export def "userprofiles-event-tags update-by-profile-id" [
 export def "userprofiles-event-tags create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -4947,7 +4957,7 @@ export def "userprofiles-event-tags create" [
   --url-escape-levels: int # Number of times the landing page URL should be URL-escaped before being appended to the click-through event tag URL. Only applies to click-through event tags as specified by the event tag type. (format: int32)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -4968,8 +4978,8 @@ export def "userprofiles-event-tags create" [
 export def "userprofiles-event-tags update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5007,7 +5017,7 @@ export def "userprofiles-event-tags update-by-profile-id-1" [
   --url-escape-levels: int # Number of times the landing page URL should be URL-escaped before being appended to the click-through event tag URL. Only applies to click-through event tags as specified by the event tag type. (format: int32)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5027,8 +5037,8 @@ export def "userprofiles-event-tags delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5047,7 +5057,7 @@ export def "userprofiles-event-tags delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5066,8 +5076,8 @@ export def "userprofiles-event-tags get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5086,7 +5096,7 @@ export def "userprofiles-event-tags get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, enabledByDefault: bool, excludeFromAdxRequests: bool, id: string, kind: string, name: string, siteFilterType: string, siteIds: list<string>, sslCompliant: bool, status: string, subaccountId: string, type: string, url: string, urlEscapeLevels: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5104,8 +5114,8 @@ export def "userprofiles-event-tags get" [
 export def "userprofiles-files list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5129,7 +5139,7 @@ export def "userprofiles-files list" [
   --sort-field: string@sort-field-completer-2 # The field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<etag: string, items: table<dateRange: record, etag: string, fileName: string, format: string, id: string, kind: string, lastModifiedTime: string, reportId: string, status: string, urls: record>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -5146,8 +5156,8 @@ export def "userprofiles-files list" [
 export def "userprofiles-floodlight-activities list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5179,7 +5189,7 @@ export def "userprofiles-floodlight-activities list" [
   --sort-order: string@sort-order-completer # Order of sorted results.
   --tag-string: string # Select only floodlight activities with the specified tag string.
 ]: nothing -> record<floodlightActivities: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: list, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record, floodlightTagType: string, id: string, idDimensionValue: record, kind: string, name: string, notes: string, publisherTags: list, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "floodlightActivityGroupIds" $floodlight_activity_group_ids "multi") (serialize-qp "floodlightActivityGroupName" $floodlight_activity_group_name "scalar") (serialize-qp "floodlightActivityGroupTagString" $floodlight_activity_group_tag_string "scalar") (serialize-qp "floodlightActivityGroupType" $floodlight_activity_group_type "scalar") (serialize-qp "floodlightConfigurationId" $floodlight_configuration_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "tagString" $tag_string "scalar")] | flatten | str join "&"
@@ -5201,8 +5211,8 @@ export def "userprofiles-floodlight-activities list" [
 export def "userprofiles-floodlight-activities update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5252,7 +5262,7 @@ export def "userprofiles-floodlight-activities update-by-profile-id" [
   --user-defined-variable-types: list<string> # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -5276,8 +5286,8 @@ export def "userprofiles-floodlight-activities update-by-profile-id" [
 export def "userprofiles-floodlight-activities create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5326,7 +5336,7 @@ export def "userprofiles-floodlight-activities create" [
   --user-defined-variable-types: list<string> # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5350,8 +5360,8 @@ export def "userprofiles-floodlight-activities create" [
 export def "userprofiles-floodlight-activities update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5400,7 +5410,7 @@ export def "userprofiles-floodlight-activities update-by-profile-id-1" [
   --user-defined-variable-types: list<string> # List of the user-defined variables used by this conversion tag. These map to the "u[1-100]=" in the tags. Each of these can have a user defined type. Acceptable values are U1 to U100, inclusive.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5419,8 +5429,8 @@ export def "userprofiles-floodlight-activities update-by-profile-id-1" [
 export def "userprofiles-floodlight-activities-generatetag create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5440,7 +5450,7 @@ export def "userprofiles-floodlight-activities-generatetag create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --floodlight-activity-id: string # Floodlight activity ID for which we want to generate a tag.
 ]: nothing -> record<floodlightActivityTag: string, globalSiteTagGlobalSnippet: string, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "floodlightActivityId" $floodlight_activity_id "scalar")] | flatten | str join "&"
@@ -5458,8 +5468,8 @@ export def "userprofiles-floodlight-activities delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5478,7 +5488,7 @@ export def "userprofiles-floodlight-activities delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5497,8 +5507,8 @@ export def "userprofiles-floodlight-activities get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5517,7 +5527,7 @@ export def "userprofiles-floodlight-activities get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, attributionEnabled: bool, cacheBustingType: string, countingMethod: string, defaultTags: table<id: string, name: string, tag: string>, expectedUrl: string, floodlightActivityGroupId: string, floodlightActivityGroupName: string, floodlightActivityGroupTagString: string, floodlightActivityGroupType: string, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightTagType: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, notes: string, publisherTags: table<clickThrough: bool, directorySiteId: string, dynamicTag: record, siteId: string, siteIdDimensionValue: record, viewThrough: bool>, secure: bool, sslCompliant: bool, sslRequired: bool, status: string, subaccountId: string, tagFormat: string, tagString: string, userDefinedVariableTypes: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5535,8 +5545,8 @@ export def "userprofiles-floodlight-activities get" [
 export def "userprofiles-floodlight-activity-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5564,7 +5574,7 @@ export def "userprofiles-floodlight-activity-groups list" [
   --sort-order: string@sort-order-completer # Order of sorted results.
   --type: string@type-completer-3 # Select only floodlight activity groups with the specified floodlight activity group type.
 ]: nothing -> record<floodlightActivityGroups: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record, id: string, idDimensionValue: record, kind: string, name: string, subaccountId: string, tagString: string, type: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "floodlightConfigurationId" $floodlight_configuration_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -5584,8 +5594,8 @@ export def "userprofiles-floodlight-activity-groups list" [
 export def "userprofiles-floodlight-activity-groups update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5618,7 +5628,7 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id" [
   --type: string@type-completer-3 # Type of the floodlight activity group. This is a required field that is read-only after insertion.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, subaccountId: string, tagString: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -5640,8 +5650,8 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id" [
 export def "userprofiles-floodlight-activity-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5673,7 +5683,7 @@ export def "userprofiles-floodlight-activity-groups create" [
   --type: string@type-completer-3 # Type of the floodlight activity group. This is a required field that is read-only after insertion.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, subaccountId: string, tagString: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5695,8 +5705,8 @@ export def "userprofiles-floodlight-activity-groups create" [
 export def "userprofiles-floodlight-activity-groups update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5728,7 +5738,7 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id-1" [
   --type: string@type-completer-3 # Type of the floodlight activity group. This is a required field that is read-only after insertion.
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, subaccountId: string, tagString: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5748,8 +5758,8 @@ export def "userprofiles-floodlight-activity-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5768,7 +5778,7 @@ export def "userprofiles-floodlight-activity-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, floodlightConfigurationId: string, floodlightConfigurationIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, name: string, subaccountId: string, tagString: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5786,8 +5796,8 @@ export def "userprofiles-floodlight-activity-groups get" [
 export def "userprofiles-floodlight-configurations list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5807,7 +5817,7 @@ export def "userprofiles-floodlight-configurations list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ids: list<string> # Set of IDs of floodlight configurations to retrieve. Required field; otherwise an empty list will be returned.
 ]: nothing -> record<floodlightConfigurations: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, analyticsDataSharingEnabled: bool, customViewabilityMetric: record, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record, naturalSearchConversionAttributionOption: string, omnitureSettings: record, subaccountId: string, tagSettings: record, thirdPartyAuthenticationTokens: list, userDefinedVariableConfigurations: list>, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -5832,8 +5842,8 @@ export def "userprofiles-floodlight-configurations list" [
 export def "userprofiles-floodlight-configurations update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5872,7 +5882,7 @@ export def "userprofiles-floodlight-configurations update-by-profile-id" [
   --user-defined-variable-configurations: list # List of user defined variables enabled for this configuration. — item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, analyticsDataSharingEnabled: bool, customViewabilityMetric: record<configuration: record<audible: bool, timeMillis: int, timePercent: int, viewabilityPercent: int>, id: string, name: string>, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, naturalSearchConversionAttributionOption: string, omnitureSettings: record<omnitureCostDataEnabled: bool, omnitureIntegrationEnabled: bool>, subaccountId: string, tagSettings: record<dynamicTagEnabled: bool, imageTagEnabled: bool>, thirdPartyAuthenticationTokens: table<name: string, value: string>, userDefinedVariableConfigurations: table<dataType: string, reportName: string, variableType: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -5899,8 +5909,8 @@ export def "userprofiles-floodlight-configurations update-by-profile-id" [
 export def "userprofiles-floodlight-configurations update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5938,7 +5948,7 @@ export def "userprofiles-floodlight-configurations update-by-profile-id-1" [
   --user-defined-variable-configurations: list # List of user defined variables enabled for this configuration. — item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, analyticsDataSharingEnabled: bool, customViewabilityMetric: record<configuration: record<audible: bool, timeMillis: int, timePercent: int, viewabilityPercent: int>, id: string, name: string>, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, naturalSearchConversionAttributionOption: string, omnitureSettings: record<omnitureCostDataEnabled: bool, omnitureIntegrationEnabled: bool>, subaccountId: string, tagSettings: record<dynamicTagEnabled: bool, imageTagEnabled: bool>, thirdPartyAuthenticationTokens: table<name: string, value: string>, userDefinedVariableConfigurations: table<dataType: string, reportName: string, variableType: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -5958,8 +5968,8 @@ export def "userprofiles-floodlight-configurations get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -5978,7 +5988,7 @@ export def "userprofiles-floodlight-configurations get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, analyticsDataSharingEnabled: bool, customViewabilityMetric: record<configuration: record<audible: bool, timeMillis: int, timePercent: int, viewabilityPercent: int>, id: string, name: string>, exposureToConversionEnabled: bool, firstDayOfWeek: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, inAppAttributionTrackingEnabled: bool, kind: string, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, naturalSearchConversionAttributionOption: string, omnitureSettings: record<omnitureCostDataEnabled: bool, omnitureIntegrationEnabled: bool>, subaccountId: string, tagSettings: record<dynamicTagEnabled: bool, imageTagEnabled: bool>, thirdPartyAuthenticationTokens: table<name: string, value: string>, userDefinedVariableConfigurations: table<dataType: string, reportName: string, variableType: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5996,8 +6006,8 @@ export def "userprofiles-floodlight-configurations get" [
 export def "userprofiles-languages list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6016,7 +6026,7 @@ export def "userprofiles-languages list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, languages: table<id: string, kind: string, languageCode: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6033,8 +6043,8 @@ export def "userprofiles-languages list" [
 export def "userprofiles-metros list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6053,7 +6063,7 @@ export def "userprofiles-metros list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, metros: table<countryCode: string, countryDartId: string, dartId: string, dmaId: string, kind: string, metroCode: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6070,8 +6080,8 @@ export def "userprofiles-metros list" [
 export def "userprofiles-mobile-apps list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6095,7 +6105,7 @@ export def "userprofiles-mobile-apps list" [
   --page-token: string # Value of the nextPageToken from the previous result page.
   --search-string: string # Allows searching for objects by name or ID. Wildcards (*) are allowed. For example, "app*2015" will return objects with names like "app Jan 2018", "app Jan 2018", or simply "app 2018". Most of the searches also add wildcards implicitly at the start and the end of the search string. For example, a search string of "app" will match objects with name "my app", "app 2018", or simply "app".
 ]: nothing -> record<kind: string, mobileApps: table<directory: string, id: string, kind: string, publisherName: string, title: string>, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "directories" $directories "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar")] | flatten | str join "&"
@@ -6113,8 +6123,8 @@ export def "userprofiles-mobile-apps get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6133,7 +6143,7 @@ export def "userprofiles-mobile-apps get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<directory: string, id: string, kind: string, publisherName: string, title: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6151,8 +6161,8 @@ export def "userprofiles-mobile-apps get" [
 export def "userprofiles-mobile-carriers list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6171,7 +6181,7 @@ export def "userprofiles-mobile-carriers list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, mobileCarriers: table<countryCode: string, countryDartId: string, id: string, kind: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6189,8 +6199,8 @@ export def "userprofiles-mobile-carriers get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6209,7 +6219,7 @@ export def "userprofiles-mobile-carriers get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<countryCode: string, countryDartId: string, id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6227,8 +6237,8 @@ export def "userprofiles-mobile-carriers get" [
 export def "userprofiles-operating-system-versions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6247,7 +6257,7 @@ export def "userprofiles-operating-system-versions list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, operatingSystemVersions: table<id: string, kind: string, majorVersion: string, minorVersion: string, name: string, operatingSystem: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6265,8 +6275,8 @@ export def "userprofiles-operating-system-versions get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6285,7 +6295,7 @@ export def "userprofiles-operating-system-versions get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, kind: string, majorVersion: string, minorVersion: string, name: string, operatingSystem: record<dartId: string, desktop: bool, kind: string, mobile: bool, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6303,8 +6313,8 @@ export def "userprofiles-operating-system-versions get" [
 export def "userprofiles-operating-systems list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6323,7 +6333,7 @@ export def "userprofiles-operating-systems list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, operatingSystems: table<dartId: string, desktop: bool, kind: string, mobile: bool, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6341,8 +6351,8 @@ export def "userprofiles-operating-systems get" [
   profile_id: string
   dart_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6361,7 +6371,7 @@ export def "userprofiles-operating-systems get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<dartId: string, desktop: bool, kind: string, mobile: bool, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($dart_id | is-empty) { error make --unspanned { msg: "path parameter 'dartId' must be non-empty" } }
@@ -6379,8 +6389,8 @@ export def "userprofiles-operating-systems get" [
 export def "userprofiles-placement-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6418,7 +6428,7 @@ export def "userprofiles-placement-groups list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, placementGroups: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, campaignId: string, campaignIdDimensionValue: record, childPlacementIds: list, comment: string, contentCategoryId: string, createInfo: record, directorySiteId: string, directorySiteIdDimensionValue: record, externalId: string, id: string, idDimensionValue: record, kind: string, lastModifiedInfo: record, name: string, placementGroupType: string, placementStrategyId: string, pricingSchedule: record, primaryPlacementId: string, primaryPlacementIdDimensionValue: record, siteId: string, siteIdDimensionValue: record, subaccountId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "contentCategoryIds" $content_category_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxEndDate" $max_end_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maxStartDate" $max_start_date "scalar") (serialize-qp "minEndDate" $min_end_date "scalar") (serialize-qp "minStartDate" $min_start_date "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "placementGroupType" $placement_group_type "scalar") (serialize-qp "placementStrategyIds" $placement_strategy_ids "multi") (serialize-qp "pricingTypes" $pricing_types "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteIds" $site_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -6444,8 +6454,8 @@ export def "userprofiles-placement-groups list" [
 export def "userprofiles-placement-groups update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6492,7 +6502,7 @@ export def "userprofiles-placement-groups update-by-profile-id" [
   --subaccount-id: string # Subaccount ID of this placement group. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, childPlacementIds: list<string>, comment: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, placementGroupType: string, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primaryPlacementId: string, primaryPlacementIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -6520,8 +6530,8 @@ export def "userprofiles-placement-groups update-by-profile-id" [
 export def "userprofiles-placement-groups create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6567,7 +6577,7 @@ export def "userprofiles-placement-groups create" [
   --subaccount-id: string # Subaccount ID of this placement group. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, childPlacementIds: list<string>, comment: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, placementGroupType: string, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primaryPlacementId: string, primaryPlacementIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6595,8 +6605,8 @@ export def "userprofiles-placement-groups create" [
 export def "userprofiles-placement-groups update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6642,7 +6652,7 @@ export def "userprofiles-placement-groups update-by-profile-id-1" [
   --subaccount-id: string # Subaccount ID of this placement group. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, childPlacementIds: list<string>, comment: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, placementGroupType: string, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primaryPlacementId: string, primaryPlacementIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6662,8 +6672,8 @@ export def "userprofiles-placement-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6682,7 +6692,7 @@ export def "userprofiles-placement-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, childPlacementIds: list<string>, comment: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, kind: string, lastModifiedInfo: record<time: string>, name: string, placementGroupType: string, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primaryPlacementId: string, primaryPlacementIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, subaccountId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6700,8 +6710,8 @@ export def "userprofiles-placement-groups get" [
 export def "userprofiles-placement-strategies list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6726,7 +6736,7 @@ export def "userprofiles-placement-strategies list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, placementStrategies: table<accountId: string, id: string, kind: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -6743,8 +6753,8 @@ export def "userprofiles-placement-strategies list" [
 export def "userprofiles-placement-strategies update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6769,7 +6779,7 @@ export def "userprofiles-placement-strategies update-by-profile-id" [
   --name: string # Name of this placement strategy. This is a required field. It must be less than 256 characters long and unique among placement strategies of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -6788,8 +6798,8 @@ export def "userprofiles-placement-strategies update-by-profile-id" [
 export def "userprofiles-placement-strategies create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6813,7 +6823,7 @@ export def "userprofiles-placement-strategies create" [
   --name: string # Name of this placement strategy. This is a required field. It must be less than 256 characters long and unique among placement strategies of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6832,8 +6842,8 @@ export def "userprofiles-placement-strategies create" [
 export def "userprofiles-placement-strategies update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6857,7 +6867,7 @@ export def "userprofiles-placement-strategies update-by-profile-id-1" [
   --name: string # Name of this placement strategy. This is a required field. It must be less than 256 characters long and unique among placement strategies of the same account.
 ]: any -> record<accountId: string, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -6877,8 +6887,8 @@ export def "userprofiles-placement-strategies delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6897,7 +6907,7 @@ export def "userprofiles-placement-strategies delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6916,8 +6926,8 @@ export def "userprofiles-placement-strategies get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6936,7 +6946,7 @@ export def "userprofiles-placement-strategies get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6954,8 +6964,8 @@ export def "userprofiles-placement-strategies get" [
 export def "userprofiles-placements list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -6996,7 +7006,7 @@ export def "userprofiles-placements list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, placements: table<accountId: string, adBlockingOptOut: bool, additionalSizes: list, advertiserId: string, advertiserIdDimensionValue: record, archived: bool, campaignId: string, campaignIdDimensionValue: record, comment: string, compatibility: string, contentCategoryId: string, createInfo: record, directorySiteId: string, directorySiteIdDimensionValue: record, externalId: string, id: string, idDimensionValue: record, keyName: string, kind: string, lastModifiedInfo: record, lookbackConfiguration: record, name: string, paymentApproved: bool, paymentSource: string, placementGroupId: string, placementGroupIdDimensionValue: record, placementStrategyId: string, pricingSchedule: record, primary: bool, publisherUpdateInfo: record, siteId: string, siteIdDimensionValue: record, size: record, sslRequired: bool, status: string, subaccountId: string, tagFormats: list, tagSetting: record, videoActiveViewOptOut: bool, videoSettings: record, vpaidAdapterChoice: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "archived" $archived "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "compatibilities" $compatibilities "multi") (serialize-qp "contentCategoryIds" $content_category_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "groupIds" $group_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxEndDate" $max_end_date "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "maxStartDate" $max_start_date "scalar") (serialize-qp "minEndDate" $min_end_date "scalar") (serialize-qp "minStartDate" $min_start_date "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "paymentSource" $payment_source "scalar") (serialize-qp "placementStrategyIds" $placement_strategy_ids "multi") (serialize-qp "pricingTypes" $pricing_types "multi") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "siteIds" $site_ids "multi") (serialize-qp "sizeIds" $size_ids "multi") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -7028,8 +7038,8 @@ export def "userprofiles-placements list" [
 export def "userprofiles-placements update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7091,7 +7101,7 @@ export def "userprofiles-placements update-by-profile-id" [
   --vpaid-adapter-choice: string@vpaid-adapter-choice-completer # VPAID adapter setting for this placement. Controls which VPAID format the measurement adapter will use for in-stream video creatives assigned to this placement. *Note:* Flash is no longer supported. This field now defaults to HTML5 when the following values are provided: FLASH, BOTH.
 ]: any -> record<accountId: string, adBlockingOptOut: bool, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, comment: string, compatibility: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, lastModifiedInfo: record<time: string>, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, name: string, paymentApproved: bool, paymentSource: string, placementGroupId: string, placementGroupIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primary: bool, publisherUpdateInfo: record<time: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslRequired: bool, status: string, subaccountId: string, tagFormats: list<string>, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOut: bool, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>, vpaidAdapterChoice: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -7125,8 +7135,8 @@ export def "userprofiles-placements update-by-profile-id" [
 export def "userprofiles-placements create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7187,7 +7197,7 @@ export def "userprofiles-placements create" [
   --vpaid-adapter-choice: string@vpaid-adapter-choice-completer # VPAID adapter setting for this placement. Controls which VPAID format the measurement adapter will use for in-stream video creatives assigned to this placement. *Note:* Flash is no longer supported. This field now defaults to HTML5 when the following values are provided: FLASH, BOTH.
 ]: any -> record<accountId: string, adBlockingOptOut: bool, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, comment: string, compatibility: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, lastModifiedInfo: record<time: string>, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, name: string, paymentApproved: bool, paymentSource: string, placementGroupId: string, placementGroupIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primary: bool, publisherUpdateInfo: record<time: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslRequired: bool, status: string, subaccountId: string, tagFormats: list<string>, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOut: bool, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>, vpaidAdapterChoice: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7221,8 +7231,8 @@ export def "userprofiles-placements create" [
 export def "userprofiles-placements update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7283,7 +7293,7 @@ export def "userprofiles-placements update-by-profile-id-1" [
   --vpaid-adapter-choice: string@vpaid-adapter-choice-completer # VPAID adapter setting for this placement. Controls which VPAID format the measurement adapter will use for in-stream video creatives assigned to this placement. *Note:* Flash is no longer supported. This field now defaults to HTML5 when the following values are provided: FLASH, BOTH.
 ]: any -> record<accountId: string, adBlockingOptOut: bool, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, comment: string, compatibility: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, lastModifiedInfo: record<time: string>, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, name: string, paymentApproved: bool, paymentSource: string, placementGroupId: string, placementGroupIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primary: bool, publisherUpdateInfo: record<time: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslRequired: bool, status: string, subaccountId: string, tagFormats: list<string>, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOut: bool, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>, vpaidAdapterChoice: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7302,8 +7312,8 @@ export def "userprofiles-placements update-by-profile-id-1" [
 export def "userprofiles-placements-generatetags create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7325,7 +7335,7 @@ export def "userprofiles-placements-generatetags create" [
   --placement-ids: list<string> # Generate tags for these placements.
   --tag-formats: list<string> # Tag formats to generate for these placements. *Note:* PLACEMENT_TAG_STANDARD can only be generated for 1x1 placements.
 ]: nothing -> record<kind: string, placementTags: table<placementId: string, tagDatas: list>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "campaignId" $campaign_id "scalar") (serialize-qp "placementIds" $placement_ids "multi") (serialize-qp "tagFormats" $tag_formats "multi")] | flatten | str join "&"
@@ -7343,8 +7353,8 @@ export def "userprofiles-placements get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7363,7 +7373,7 @@ export def "userprofiles-placements get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, adBlockingOptOut: bool, additionalSizes: table<height: int, iab: bool, id: string, kind: string, width: int>, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, archived: bool, campaignId: string, campaignIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, comment: string, compatibility: string, contentCategoryId: string, createInfo: record<time: string>, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, externalId: string, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, lastModifiedInfo: record<time: string>, lookbackConfiguration: record<clickDuration: int, postImpressionActivitiesDuration: int>, name: string, paymentApproved: bool, paymentSource: string, placementGroupId: string, placementGroupIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, placementStrategyId: string, pricingSchedule: record<capCostOption: string, endDate: string, flighted: bool, floodlightActivityId: string, pricingPeriods: list<record>, pricingType: string, startDate: string, testingStartDate: string>, primary: bool, publisherUpdateInfo: record<time: string>, siteId: string, siteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, size: record<height: int, iab: bool, id: string, kind: string, width: int>, sslRequired: bool, status: string, subaccountId: string, tagFormats: list<string>, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOut: bool, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>, vpaidAdapterChoice: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7381,8 +7391,8 @@ export def "userprofiles-placements get" [
 export def "userprofiles-platform-types list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7401,7 +7411,7 @@ export def "userprofiles-platform-types list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, platformTypes: table<id: string, kind: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7419,8 +7429,8 @@ export def "userprofiles-platform-types get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7439,7 +7449,7 @@ export def "userprofiles-platform-types get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7457,8 +7467,8 @@ export def "userprofiles-platform-types get" [
 export def "userprofiles-postal-codes list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7477,7 +7487,7 @@ export def "userprofiles-postal-codes list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, postalCodes: table<code: string, countryCode: string, countryDartId: string, id: string, kind: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7495,8 +7505,8 @@ export def "userprofiles-postal-codes get" [
   profile_id: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7515,7 +7525,7 @@ export def "userprofiles-postal-codes get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<code: string, countryCode: string, countryDartId: string, id: string, kind: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -7533,8 +7543,8 @@ export def "userprofiles-postal-codes get" [
 export def "userprofiles-projects list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7560,7 +7570,7 @@ export def "userprofiles-projects list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, projects: table<accountId: string, advertiserId: string, audienceAgeGroup: string, audienceGender: string, budget: string, clientBillingCode: string, clientName: string, endDate: string, id: string, kind: string, lastModifiedInfo: record, name: string, overview: string, startDate: string, subaccountId: string, targetClicks: string, targetConversions: string, targetCpaNanos: string, targetCpcNanos: string, targetCpmActiveViewNanos: string, targetCpmNanos: string, targetImpressions: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserIds" $advertiser_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -7578,8 +7588,8 @@ export def "userprofiles-projects get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7598,7 +7608,7 @@ export def "userprofiles-projects get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, audienceAgeGroup: string, audienceGender: string, budget: string, clientBillingCode: string, clientName: string, endDate: string, id: string, kind: string, lastModifiedInfo: record<time: string>, name: string, overview: string, startDate: string, subaccountId: string, targetClicks: string, targetConversions: string, targetCpaNanos: string, targetCpcNanos: string, targetCpmActiveViewNanos: string, targetCpmNanos: string, targetImpressions: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7617,8 +7627,8 @@ export def "userprofiles-projects-inventory-items list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7646,7 +7656,7 @@ export def "userprofiles-projects-inventory-items list" [
   --sort-order: string@sort-order-completer # Order of sorted results.
   --type: string@type-completer-4 # Select only inventory items with this type.
 ]: nothing -> record<inventoryItems: table<accountId: string, adSlots: list, advertiserId: string, contentCategoryId: string, estimatedClickThroughRate: string, estimatedConversionRate: string, id: string, inPlan: bool, kind: string, lastModifiedInfo: record, name: string, negotiationChannelId: string, orderId: string, placementStrategyId: string, pricing: record, projectId: string, rfpId: string, siteId: string, subaccountId: string, type: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -7666,8 +7676,8 @@ export def "userprofiles-projects-inventory-items get" [
   project_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7686,7 +7696,7 @@ export def "userprofiles-projects-inventory-items get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, adSlots: table<comment: string, compatibility: string, height: string, linkedPlacementId: string, name: string, paymentSourceType: string, primary: bool, width: string>, advertiserId: string, contentCategoryId: string, estimatedClickThroughRate: string, estimatedConversionRate: string, id: string, inPlan: bool, kind: string, lastModifiedInfo: record<time: string>, name: string, negotiationChannelId: string, orderId: string, placementStrategyId: string, pricing: record<capCostType: string, endDate: string, flights: list<record>, groupType: string, pricingType: string, startDate: string>, projectId: string, rfpId: string, siteId: string, subaccountId: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -7706,8 +7716,8 @@ export def "userprofiles-projects-order-documents list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7735,7 +7745,7 @@ export def "userprofiles-projects-order-documents list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, orderDocuments: table<accountId: string, advertiserId: string, amendedOrderDocumentId: string, approvedByUserProfileIds: list, cancelled: bool, createdInfo: record, effectiveDate: string, id: string, kind: string, lastSentRecipients: list, lastSentTime: string, orderId: string, projectId: string, signed: bool, subaccountId: string, title: string, type: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -7755,8 +7765,8 @@ export def "userprofiles-projects-order-documents get" [
   project_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7775,7 +7785,7 @@ export def "userprofiles-projects-order-documents get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, amendedOrderDocumentId: string, approvedByUserProfileIds: list<string>, cancelled: bool, createdInfo: record<time: string>, effectiveDate: string, id: string, kind: string, lastSentRecipients: list<string>, lastSentTime: string, orderId: string, projectId: string, signed: bool, subaccountId: string, title: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -7795,8 +7805,8 @@ export def "userprofiles-projects-orders list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7822,7 +7832,7 @@ export def "userprofiles-projects-orders list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, orders: table<accountId: string, advertiserId: string, approverUserProfileIds: list, buyerInvoiceId: string, buyerOrganizationName: string, comments: string, contacts: list, id: string, kind: string, lastModifiedInfo: record, name: string, notes: string, planningTermId: string, projectId: string, sellerOrderId: string, sellerOrganizationName: string, siteId: list, siteNames: list, subaccountId: string, termsAndConditions: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -7842,8 +7852,8 @@ export def "userprofiles-projects-orders get" [
   project_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7862,7 +7872,7 @@ export def "userprofiles-projects-orders get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, approverUserProfileIds: list<string>, buyerInvoiceId: string, buyerOrganizationName: string, comments: string, contacts: table<contactInfo: string, contactName: string, contactTitle: string, contactType: string, signatureUserProfileId: string>, id: string, kind: string, lastModifiedInfo: record<time: string>, name: string, notes: string, planningTermId: string, projectId: string, sellerOrderId: string, sellerOrganizationName: string, siteId: list<string>, siteNames: list<string>, subaccountId: string, termsAndConditions: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($project_id | is-empty) { error make --unspanned { msg: "path parameter 'projectId' must be non-empty" } }
@@ -7881,8 +7891,8 @@ export def "userprofiles-projects-orders get" [
 export def "userprofiles-regions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7901,7 +7911,7 @@ export def "userprofiles-regions list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, regions: table<countryCode: string, countryDartId: string, dartId: string, kind: string, name: string, regionCode: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -7918,8 +7928,8 @@ export def "userprofiles-regions list" [
 export def "userprofiles-remarketing-list-shares update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7944,7 +7954,7 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id" [
   --shared-advertiser-ids: list<string> # Advertisers that the remarketing list is shared with.
 ]: any -> record<kind: string, remarketingListId: string, sharedAccountIds: list<string>, sharedAdvertiserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -7963,8 +7973,8 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id" [
 export def "userprofiles-remarketing-list-shares update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -7988,7 +7998,7 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id-1" [
   --shared-advertiser-ids: list<string> # Advertisers that the remarketing list is shared with.
 ]: any -> record<kind: string, remarketingListId: string, sharedAccountIds: list<string>, sharedAdvertiserIds: list<string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -8008,8 +8018,8 @@ export def "userprofiles-remarketing-list-shares get" [
   profile_id: string
   remarketing_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8028,7 +8038,7 @@ export def "userprofiles-remarketing-list-shares get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, remarketingListId: string, sharedAccountIds: list<string>, sharedAdvertiserIds: list<string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($remarketing_list_id | is-empty) { error make --unspanned { msg: "path parameter 'remarketingListId' must be non-empty" } }
@@ -8046,8 +8056,8 @@ export def "userprofiles-remarketing-list-shares get" [
 export def "userprofiles-remarketing-lists list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8074,7 +8084,7 @@ export def "userprofiles-remarketing-lists list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, remarketingLists: table<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record, description: string, id: string, kind: string, lifeSpan: string, listPopulationRule: record, listSize: string, listSource: string, name: string, subaccountId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "floodlightActivityId" $floodlight_activity_id "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -8093,8 +8103,8 @@ export def "userprofiles-remarketing-lists list" [
 export def "userprofiles-remarketing-lists update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8128,7 +8138,7 @@ export def "userprofiles-remarketing-lists update-by-profile-id" [
   --subaccount-id: string # Subaccount ID of this remarketing list. This is a read-only, auto-generated field that is only returned in GET requests. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, description: string, id: string, kind: string, lifeSpan: string, listPopulationRule: record<floodlightActivityId: string, floodlightActivityName: string, listPopulationClauses: list<record>>, listSize: string, listSource: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -8149,8 +8159,8 @@ export def "userprofiles-remarketing-lists update-by-profile-id" [
 export def "userprofiles-remarketing-lists create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8183,7 +8193,7 @@ export def "userprofiles-remarketing-lists create" [
   --subaccount-id: string # Subaccount ID of this remarketing list. This is a read-only, auto-generated field that is only returned in GET requests. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, description: string, id: string, kind: string, lifeSpan: string, listPopulationRule: record<floodlightActivityId: string, floodlightActivityName: string, listPopulationClauses: list<record>>, listSize: string, listSource: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -8204,8 +8214,8 @@ export def "userprofiles-remarketing-lists create" [
 export def "userprofiles-remarketing-lists update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8238,7 +8248,7 @@ export def "userprofiles-remarketing-lists update-by-profile-id-1" [
   --subaccount-id: string # Subaccount ID of this remarketing list. This is a read-only, auto-generated field that is only returned in GET requests. (format: int64)
 ]: any -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, description: string, id: string, kind: string, lifeSpan: string, listPopulationRule: record<floodlightActivityId: string, floodlightActivityName: string, listPopulationClauses: list<record>>, listSize: string, listSource: string, name: string, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -8258,8 +8268,8 @@ export def "userprofiles-remarketing-lists get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8278,7 +8288,7 @@ export def "userprofiles-remarketing-lists get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, description: string, id: string, kind: string, lifeSpan: string, listPopulationRule: record<floodlightActivityId: string, floodlightActivityName: string, listPopulationClauses: list<record>>, listSize: string, listSource: string, name: string, subaccountId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8296,8 +8306,8 @@ export def "userprofiles-remarketing-lists get" [
 export def "userprofiles-reports list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8321,7 +8331,7 @@ export def "userprofiles-reports list" [
   --sort-field: string@sort-field-completer-3 # The field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<etag: string, items: table<accountId: string, criteria: record, crossDimensionReachCriteria: record, delivery: record, etag: string, fileName: string, floodlightCriteria: record, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record, pathCriteria: record, pathToConversionCriteria: record, reachCriteria: record, schedule: record, subAccountId: string, type: string>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "scope" $scope "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -8347,8 +8357,8 @@ export def "userprofiles-reports list" [
 export def "userprofiles-reports create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8388,7 +8398,7 @@ export def "userprofiles-reports create" [
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -8416,8 +8426,8 @@ export def "userprofiles-reports create" [
 export def "userprofiles-reports-compatiblefields-query list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8457,7 +8467,7 @@ export def "userprofiles-reports-compatiblefields-query list" [
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<crossDimensionReachReportCompatibleFields: record<breakdown: list<record>, dimensionFilters: list<record>, kind: string, metrics: list<record>, overlapMetrics: list<record>>, floodlightReportCompatibleFields: record<dimensionFilters: list<record>, dimensions: list<record>, kind: string, metrics: list<record>>, kind: string, pathAttributionReportCompatibleFields: record<channelGroupings: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pathFilters: list<record>>, pathReportCompatibleFields: record<channelGroupings: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pathFilters: list<record>>, pathToConversionReportCompatibleFields: record<conversionDimensions: list<record>, customFloodlightVariables: list<record>, kind: string, metrics: list<record>, perInteractionDimensions: list<record>>, reachReportCompatibleFields: record<dimensionFilters: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pivotedActivityMetrics: list<record>, reachByFrequencyMetrics: list<record>>, reportCompatibleFields: record<dimensionFilters: list<record>, dimensions: list<record>, kind: string, metrics: list<record>, pivotedActivityMetrics: list<record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -8477,8 +8487,8 @@ export def "userprofiles-reports delete" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8497,7 +8507,7 @@ export def "userprofiles-reports delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8516,8 +8526,8 @@ export def "userprofiles-reports get" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8536,7 +8546,7 @@ export def "userprofiles-reports get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8564,8 +8574,8 @@ export def "userprofiles-reports update-by-profile-id-report-id" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8605,7 +8615,7 @@ export def "userprofiles-reports update-by-profile-id-report-id" [
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8635,8 +8645,8 @@ export def "userprofiles-reports update-by-profile-id-report-id-1" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8676,7 +8686,7 @@ export def "userprofiles-reports update-by-profile-id-report-id-1" [
   --type: string@type-completer-5 # The type of the report.
 ]: any -> record<accountId: string, criteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, metricNames: list<string>>, crossDimensionReachCriteria: record<breakdown: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimension: string, dimensionFilters: list<record>, metricNames: list<string>, overlapMetricNames: list<string>, pivoted: bool>, delivery: record<emailOwner: bool, emailOwnerDeliveryType: string, message: string, recipients: list<record>>, etag: string, fileName: string, floodlightCriteria: record<customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, reportProperties: record<includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool>>, format: string, id: string, kind: string, lastModifiedTime: string, name: string, ownerProfileId: string, pathAttributionCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathCriteria: record<activityFilters: list<record>, customChannelGrouping: record<fallbackName: string, kind: string, name: string, rules: list>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensions: list<record>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, pathFilters: list<record>>, pathToConversionCriteria: record<activityFilters: list<record>, conversionDimensions: list<record>, customFloodlightVariables: list<record>, customRichMediaEvents: list<record>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, floodlightConfigId: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, metricNames: list<string>, perInteractionDimensions: list<record>, reportProperties: record<clicksLookbackWindow: int, impressionsLookbackWindow: int, includeAttributedIPConversions: bool, includeUnattributedCookieConversions: bool, includeUnattributedIPConversions: bool, maximumClickInteractions: int, maximumImpressionInteractions: int, maximumInteractionGap: int, pivotOnInteractionPath: bool>>, reachCriteria: record<activities: record<filters: list, kind: string, metricNames: list>, customRichMediaEvents: record<filteredEventIds: list, kind: string>, dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, dimensionFilters: list<record>, dimensions: list<record>, enableAllDimensionCombinations: bool, metricNames: list<string>, reachByFrequencyMetricNames: list<string>>, schedule: record<active: bool, every: int, expirationDate: string, repeats: string, repeatsOnWeekDays: list<string>, runsOnDayOfMonth: string, startDate: string>, subAccountId: string, type: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8697,8 +8707,8 @@ export def "userprofiles-reports-files list" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8721,7 +8731,7 @@ export def "userprofiles-reports-files list" [
   --sort-field: string@sort-field-completer-2 # The field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<etag: string, items: table<dateRange: record, etag: string, fileName: string, format: string, id: string, kind: string, lastModifiedTime: string, reportId: string, status: string, urls: record>, kind: string, nextPageToken: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8741,8 +8751,8 @@ export def "userprofiles-reports-files get" [
   report_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8761,7 +8771,7 @@ export def "userprofiles-reports-files get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, etag: string, fileName: string, format: string, id: string, kind: string, lastModifiedTime: string, reportId: string, status: string, urls: record<apiUrl: string, browserUrl: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8781,8 +8791,8 @@ export def "userprofiles-reports-run create" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8802,7 +8812,7 @@ export def "userprofiles-reports-run create" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --synchronous: oneof<nothing, bool> # If set and true, tries to run the report synchronously.
 ]: nothing -> record<dateRange: record<endDate: string, kind: string, relativeDateRange: string, startDate: string>, etag: string, fileName: string, format: string, id: string, kind: string, lastModifiedTime: string, reportId: string, status: string, urls: record<apiUrl: string, browserUrl: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($report_id | is-empty) { error make --unspanned { msg: "path parameter 'reportId' must be non-empty" } }
@@ -8820,8 +8830,8 @@ export def "userprofiles-reports-run create" [
 export def "userprofiles-sites list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8855,7 +8865,7 @@ export def "userprofiles-sites list" [
   --subaccount-id: string # Select only sites with this subaccount ID.
   --unmapped-site: oneof<nothing, bool> # Select only sites that have not been mapped to a directory site.
 ]: nothing -> record<kind: string, nextPageToken: string, sites: table<accountId: string, approved: bool, directorySiteId: string, directorySiteIdDimensionValue: record, id: string, idDimensionValue: record, keyName: string, kind: string, name: string, siteContacts: list, siteSettings: record, subaccountId: string, videoSettings: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "acceptsInStreamVideoPlacements" $accepts_in_stream_video_placements "scalar") (serialize-qp "acceptsInterstitialPlacements" $accepts_interstitial_placements "scalar") (serialize-qp "acceptsPublisherPaidPlacements" $accepts_publisher_paid_placements "scalar") (serialize-qp "adWordsSite" $ad_words_site "scalar") (serialize-qp "approved" $approved "scalar") (serialize-qp "campaignIds" $campaign_ids "multi") (serialize-qp "directorySiteIds" $directory_site_ids "multi") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar") (serialize-qp "unmappedSite" $unmapped_site "scalar")] | flatten | str join "&"
@@ -8877,8 +8887,8 @@ export def "userprofiles-sites list" [
 export def "userprofiles-sites update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8912,7 +8922,7 @@ export def "userprofiles-sites update-by-profile-id" [
   --video-settings: record # Video Settings — shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
 ]: any -> record<accountId: string, approved: bool, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, name: string, siteContacts: table<address: string, contactType: string, email: string, firstName: string, id: string, lastName: string, phone: string, title: string>, siteSettings: record<activeViewOptOut: bool, adBlockingOptOut: bool, disableNewCookie: bool, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOutTemplate: bool, vpaidAdapterChoiceTemplate: string>, subaccountId: string, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -8936,8 +8946,8 @@ export def "userprofiles-sites update-by-profile-id" [
 export def "userprofiles-sites create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -8970,7 +8980,7 @@ export def "userprofiles-sites create" [
   --video-settings: record # Video Settings — shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
 ]: any -> record<accountId: string, approved: bool, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, name: string, siteContacts: table<address: string, contactType: string, email: string, firstName: string, id: string, lastName: string, phone: string, title: string>, siteSettings: record<activeViewOptOut: bool, adBlockingOptOut: bool, disableNewCookie: bool, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOutTemplate: bool, vpaidAdapterChoiceTemplate: string>, subaccountId: string, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -8994,8 +9004,8 @@ export def "userprofiles-sites create" [
 export def "userprofiles-sites update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9028,7 +9038,7 @@ export def "userprofiles-sites update-by-profile-id-1" [
   --video-settings: record # Video Settings — shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
 ]: any -> record<accountId: string, approved: bool, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, name: string, siteContacts: table<address: string, contactType: string, email: string, firstName: string, id: string, lastName: string, phone: string, title: string>, siteSettings: record<activeViewOptOut: bool, adBlockingOptOut: bool, disableNewCookie: bool, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOutTemplate: bool, vpaidAdapterChoiceTemplate: string>, subaccountId: string, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9048,8 +9058,8 @@ export def "userprofiles-sites get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9068,7 +9078,7 @@ export def "userprofiles-sites get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, approved: bool, directorySiteId: string, directorySiteIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, id: string, idDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, keyName: string, kind: string, name: string, siteContacts: table<address: string, contactType: string, email: string, firstName: string, id: string, lastName: string, phone: string, title: string>, siteSettings: record<activeViewOptOut: bool, adBlockingOptOut: bool, disableNewCookie: bool, tagSetting: record<additionalKeyValues: string, includeClickThroughUrls: bool, includeClickTracking: bool, keywordOption: string>, videoActiveViewOptOutTemplate: bool, vpaidAdapterChoiceTemplate: string>, subaccountId: string, videoSettings: record<companionSettings: record<companionsDisabled: bool, enabledSizes: list, imageOnly: bool, kind: string>, kind: string, obaEnabled: bool, obaSettings: record<iconClickThroughUrl: string, iconClickTrackingUrl: string, iconViewTrackingUrl: string, program: string, resourceUrl: string, size: record, xPosition: string, yPosition: string>, orientation: string, skippableSettings: record<kind: string, progressOffset: record, skipOffset: record, skippable: bool>, transcodeSettings: record<enabledVideoFormats: list, kind: string>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9086,8 +9096,8 @@ export def "userprofiles-sites get" [
 export def "userprofiles-sizes list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9110,7 +9120,7 @@ export def "userprofiles-sizes list" [
   --ids: list<string> # Select only sizes with these IDs.
   --width: int # Select only sizes with this width.
 ]: nothing -> record<kind: string, sizes: table<height: int, iab: bool, id: string, kind: string, width: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "iabStandard" $iab_standard "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "width" $width "scalar")] | flatten | str join "&"
@@ -9127,8 +9137,8 @@ export def "userprofiles-sizes list" [
 export def "userprofiles-sizes create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9153,7 +9163,7 @@ export def "userprofiles-sizes create" [
   --width: int # Width of this size. Acceptable values are 0 to 32767, inclusive. (format: int32)
 ]: any -> record<height: int, iab: bool, id: string, kind: string, width: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9173,8 +9183,8 @@ export def "userprofiles-sizes get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9193,7 +9203,7 @@ export def "userprofiles-sizes get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<height: int, iab: bool, id: string, kind: string, width: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9211,8 +9221,8 @@ export def "userprofiles-sizes get" [
 export def "userprofiles-subaccounts list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9237,7 +9247,7 @@ export def "userprofiles-subaccounts list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, subaccounts: table<accountId: string, availablePermissionIds: list, id: string, kind: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -9254,8 +9264,8 @@ export def "userprofiles-subaccounts list" [
 export def "userprofiles-subaccounts update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9281,7 +9291,7 @@ export def "userprofiles-subaccounts update-by-profile-id" [
   --name: string # Name of this subaccount. This is a required field. Must be less than 128 characters long and be unique among subaccounts of the same account.
 ]: any -> record<accountId: string, availablePermissionIds: list<string>, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -9300,8 +9310,8 @@ export def "userprofiles-subaccounts update-by-profile-id" [
 export def "userprofiles-subaccounts create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9326,7 +9336,7 @@ export def "userprofiles-subaccounts create" [
   --name: string # Name of this subaccount. This is a required field. Must be less than 128 characters long and be unique among subaccounts of the same account.
 ]: any -> record<accountId: string, availablePermissionIds: list<string>, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9345,8 +9355,8 @@ export def "userprofiles-subaccounts create" [
 export def "userprofiles-subaccounts update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9371,7 +9381,7 @@ export def "userprofiles-subaccounts update-by-profile-id-1" [
   --name: string # Name of this subaccount. This is a required field. Must be less than 128 characters long and be unique among subaccounts of the same account.
 ]: any -> record<accountId: string, availablePermissionIds: list<string>, id: string, kind: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9391,8 +9401,8 @@ export def "userprofiles-subaccounts get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9411,7 +9421,7 @@ export def "userprofiles-subaccounts get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, availablePermissionIds: list<string>, id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9429,8 +9439,8 @@ export def "userprofiles-subaccounts get" [
 export def "userprofiles-targetable-remarketing-lists list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9456,7 +9466,7 @@ export def "userprofiles-targetable-remarketing-lists list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, targetableRemarketingLists: table<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record, description: string, id: string, kind: string, lifeSpan: string, listSize: string, listSource: string, name: string, subaccountId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -9474,8 +9484,8 @@ export def "userprofiles-targetable-remarketing-lists get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9494,7 +9504,7 @@ export def "userprofiles-targetable-remarketing-lists get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, active: bool, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, description: string, id: string, kind: string, lifeSpan: string, listSize: string, listSource: string, name: string, subaccountId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9512,8 +9522,8 @@ export def "userprofiles-targetable-remarketing-lists get" [
 export def "userprofiles-targeting-templates list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9539,7 +9549,7 @@ export def "userprofiles-targeting-templates list" [
   --sort-field: string@sort-field-completer # Field by which to sort the list.
   --sort-order: string@sort-order-completer # Order of sorted results.
 ]: nothing -> record<kind: string, nextPageToken: string, targetingTemplates: table<accountId: string, advertiserId: string, advertiserIdDimensionValue: record, dayPartTargeting: record, geoTargeting: record, id: string, keyValueTargetingExpression: record, kind: string, languageTargeting: record, listTargetingExpression: record, name: string, subaccountId: string, technologyTargeting: record>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "advertiserId" $advertiser_id "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar")] | flatten | str join "&"
@@ -9563,8 +9573,8 @@ export def "userprofiles-targeting-templates list" [
 export def "userprofiles-targeting-templates update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9598,7 +9608,7 @@ export def "userprofiles-targeting-templates update-by-profile-id" [
   --technology-targeting: record # Technology Targeting. — shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, listTargetingExpression: record<expression: string>, name: string, subaccountId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -9624,8 +9634,8 @@ export def "userprofiles-targeting-templates update-by-profile-id" [
 export def "userprofiles-targeting-templates create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9658,7 +9668,7 @@ export def "userprofiles-targeting-templates create" [
   --technology-targeting: record # Technology Targeting. — shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, listTargetingExpression: record<expression: string>, name: string, subaccountId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9684,8 +9694,8 @@ export def "userprofiles-targeting-templates create" [
 export def "userprofiles-targeting-templates update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9718,7 +9728,7 @@ export def "userprofiles-targeting-templates update-by-profile-id-1" [
   --technology-targeting: record # Technology Targeting. — shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
 ]: any -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, listTargetingExpression: record<expression: string>, name: string, subaccountId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9738,8 +9748,8 @@ export def "userprofiles-targeting-templates get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9758,7 +9768,7 @@ export def "userprofiles-targeting-templates get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, advertiserId: string, advertiserIdDimensionValue: record<dimensionName: string, etag: string, id: string, kind: string, matchType: string, value: string>, dayPartTargeting: record<daysOfWeek: list<string>, hoursOfDay: list<int>, userLocalTime: bool>, geoTargeting: record<cities: list<record>, countries: list<record>, excludeCountries: bool, metros: list<record>, postalCodes: list<record>, regions: list<record>>, id: string, keyValueTargetingExpression: record<expression: string>, kind: string, languageTargeting: record<languages: list<record>>, listTargetingExpression: record<expression: string>, name: string, subaccountId: string, technologyTargeting: record<browsers: list<record>, connectionTypes: list<record>, mobileCarriers: list<record>, operatingSystemVersions: list<record>, operatingSystems: list<record>, platformTypes: list<record>>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9776,8 +9786,8 @@ export def "userprofiles-targeting-templates get" [
 export def "userprofiles-user-role-permission-groups list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9796,7 +9806,7 @@ export def "userprofiles-user-role-permission-groups list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, userRolePermissionGroups: table<id: string, kind: string, name: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -9814,8 +9824,8 @@ export def "userprofiles-user-role-permission-groups get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9834,7 +9844,7 @@ export def "userprofiles-user-role-permission-groups get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<id: string, kind: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9852,8 +9862,8 @@ export def "userprofiles-user-role-permission-groups get" [
 export def "userprofiles-user-role-permissions list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9873,7 +9883,7 @@ export def "userprofiles-user-role-permissions list" [
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
   --ids: list<string> # Select only user role permissions with these IDs.
 ]: nothing -> record<kind: string, userRolePermissions: table<availability: string, id: string, kind: string, name: string, permissionGroupId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "ids" $ids "multi")] | flatten | str join "&"
@@ -9891,8 +9901,8 @@ export def "userprofiles-user-role-permissions get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9911,7 +9921,7 @@ export def "userprofiles-user-role-permissions get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<availability: string, id: string, kind: string, name: string, permissionGroupId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9929,8 +9939,8 @@ export def "userprofiles-user-role-permissions get" [
 export def "userprofiles-user-roles list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -9957,7 +9967,7 @@ export def "userprofiles-user-roles list" [
   --sort-order: string@sort-order-completer # Order of sorted results.
   --subaccount-id: string # Select only user roles that belong to this subaccount.
 ]: nothing -> record<kind: string, nextPageToken: string, userRoles: table<accountId: string, defaultUserRole: bool, id: string, kind: string, name: string, parentUserRoleId: string, permissions: list, subaccountId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "accountUserRoleOnly" $account_user_role_only "scalar") (serialize-qp "ids" $ids "multi") (serialize-qp "maxResults" $max_results "scalar") (serialize-qp "pageToken" $page_token "scalar") (serialize-qp "searchString" $search_string "scalar") (serialize-qp "sortField" $sort_field "scalar") (serialize-qp "sortOrder" $sort_order "scalar") (serialize-qp "subaccountId" $subaccount_id "scalar")] | flatten | str join "&"
@@ -9975,8 +9985,8 @@ export def "userprofiles-user-roles list" [
 export def "userprofiles-user-roles update-by-profile-id" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10005,7 +10015,7 @@ export def "userprofiles-user-roles update-by-profile-id" [
   --subaccount-id: string # Subaccount ID of this user role. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, defaultUserRole: bool, id: string, kind: string, name: string, parentUserRoleId: string, permissions: table<availability: string, id: string, kind: string, name: string, permissionGroupId: string>, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "id" $id "scalar")] | flatten | str join "&"
@@ -10025,8 +10035,8 @@ export def "userprofiles-user-roles update-by-profile-id" [
 export def "userprofiles-user-roles create" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10054,7 +10064,7 @@ export def "userprofiles-user-roles create" [
   --subaccount-id: string # Subaccount ID of this user role. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, defaultUserRole: bool, id: string, kind: string, name: string, parentUserRoleId: string, permissions: table<availability: string, id: string, kind: string, name: string, permissionGroupId: string>, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -10074,8 +10084,8 @@ export def "userprofiles-user-roles create" [
 export def "userprofiles-user-roles update-by-profile-id-1" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10103,7 +10113,7 @@ export def "userprofiles-user-roles update-by-profile-id-1" [
   --subaccount-id: string # Subaccount ID of this user role. This is a read-only field that can be left blank. (format: int64)
 ]: any -> record<accountId: string, defaultUserRole: bool, id: string, kind: string, name: string, parentUserRoleId: string, permissions: table<availability: string, id: string, kind: string, name: string, permissionGroupId: string>, subaccountId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -10123,8 +10133,8 @@ export def "userprofiles-user-roles delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10143,7 +10153,7 @@ export def "userprofiles-user-roles delete" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10162,8 +10172,8 @@ export def "userprofiles-user-roles get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10182,7 +10192,7 @@ export def "userprofiles-user-roles get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<accountId: string, defaultUserRole: bool, id: string, kind: string, name: string, parentUserRoleId: string, permissions: table<availability: string, id: string, kind: string, name: string, permissionGroupId: string>, subaccountId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10200,8 +10210,8 @@ export def "userprofiles-user-roles get" [
 export def "userprofiles-video-formats list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10220,7 +10230,7 @@ export def "userprofiles-video-formats list" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<kind: string, videoFormats: table<fileType: string, id: int, kind: string, resolution: record, targetBitRate: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar")] | flatten | str join "&"
@@ -10238,8 +10248,8 @@ export def "userprofiles-video-formats get" [
   profile_id: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -10258,7 +10268,7 @@ export def "userprofiles-video-formats get" [
   --upload-protocol: string # Upload protocol for media (e.g. "raw", "multipart").
   --upload-type: string # Legacy upload protocol for media (e.g. "media", "multipart").
 ]: nothing -> record<fileType: string, id: int, kind: string, resolution: record<height: int, iab: bool, id: string, kind: string, width: int>, targetBitRate: int> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o CAMPAIGN_MANAGER_360_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   if ($profile_id | is-empty) { error make --unspanned { msg: "path parameter 'profileId' must be non-empty" } }
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

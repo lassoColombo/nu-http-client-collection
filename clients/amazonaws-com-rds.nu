@@ -464,7 +464,7 @@ export def "api get-create-source-identifier-to-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -500,7 +500,7 @@ export def "api create-source-identifier-to-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -617,7 +617,7 @@ export def "api get-apply-pending-maintenance-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: record, PendingMaintenanceActionDetails: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceIdentifier" $resource_identifier "scalar") (serialize-qp "ApplyAction" $apply_action "scalar") (serialize-qp "OptInType" $opt_in_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -653,7 +653,7 @@ export def "api create-apply-pending-maintenance-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ResourcePendingMaintenanceActions: record<ResourceIdentifier: record, PendingMaintenanceActionDetails: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -696,7 +696,7 @@ export def "api get-authorize-db-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSecurityGroup: record<OwnerId: record, DBSecurityGroupName: record, DBSecurityGroupDescription: record, VpcId: record, EC2SecurityGroups: record, IPRanges: record, DBSecurityGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSecurityGroupName" $db_security_group_name "scalar") (serialize-qp "CIDRIP" $cidrip "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupId" $ec2_security_group_id "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -732,7 +732,7 @@ export def "api create-authorize-db-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSecurityGroup: record<OwnerId: record, DBSecurityGroupName: record, DBSecurityGroupDescription: record, VpcId: record, EC2SecurityGroups: record, IPRanges: record, DBSecurityGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -774,7 +774,7 @@ export def "api get-backtrack-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterIdentifier: record, BacktrackIdentifier: record, BacktrackTo: record, BacktrackedFrom: record, BacktrackRequestCreationTime: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "BacktrackTo" $backtrack_to "scalar") (serialize-qp "Force" $force "scalar") (serialize-qp "UseEarliestTimeOnPointInTimeUnavailable" $use_earliest_time_on_point_in_time_unavailable "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -810,7 +810,7 @@ export def "api create-backtrack-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterIdentifier: record, BacktrackIdentifier: record, BacktrackTo: record, BacktrackedFrom: record, BacktrackRequestCreationTime: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -849,7 +849,7 @@ export def "api get-cancel-export-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ExportTaskIdentifier: record, SourceArn: record, ExportOnly: record, SnapshotTime: record, TaskStartTime: record, TaskEndTime: record, S3Bucket: record, S3Prefix: record, IamRoleArn: record, KmsKeyId: record, Status: record, PercentProgress: record, TotalExtractedDataInGB: record, FailureCause: record, WarningMessage: record, SourceType: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ExportTaskIdentifier" $export_task_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -885,7 +885,7 @@ export def "api create-cancel-export-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ExportTaskIdentifier: record, SourceArn: record, ExportOnly: record, SnapshotTime: record, TaskStartTime: record, TaskEndTime: record, S3Bucket: record, S3Prefix: record, IamRoleArn: record, KmsKeyId: record, Status: record, PercentProgress: record, TotalExtractedDataInGB: record, FailureCause: record, WarningMessage: record, SourceType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -927,7 +927,7 @@ export def "api get-copy-db-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBClusterParameterGroupIdentifier" $source_db_cluster_parameter_group_identifier "scalar") (serialize-qp "TargetDBClusterParameterGroupIdentifier" $target_db_cluster_parameter_group_identifier "scalar") (serialize-qp "TargetDBClusterParameterGroupDescription" $target_db_cluster_parameter_group_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -963,7 +963,7 @@ export def "api create-copy-db-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1008,7 +1008,7 @@ export def "api get-copy-db-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, EngineMode: record, AllocatedStorage: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record, IAMDatabaseAuthenticationEnabled: record, TagList: list<record>, DBSystemId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBClusterSnapshotIdentifier" $source_db_cluster_snapshot_identifier "scalar") (serialize-qp "TargetDBClusterSnapshotIdentifier" $target_db_cluster_snapshot_identifier "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "CopyTags" $copy_tags "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "SourceRegion" $source_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1044,7 +1044,7 @@ export def "api create-copy-db-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, EngineMode: record, AllocatedStorage: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record, IAMDatabaseAuthenticationEnabled: record, TagList: list<record>, DBSystemId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1086,7 +1086,7 @@ export def "api get-copy-db-parameter-group-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBParameterGroup: record<DBParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBParameterGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBParameterGroupIdentifier" $source_db_parameter_group_identifier "scalar") (serialize-qp "TargetDBParameterGroupIdentifier" $target_db_parameter_group_identifier "scalar") (serialize-qp "TargetDBParameterGroupDescription" $target_db_parameter_group_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1122,7 +1122,7 @@ export def "api create-copy-db-parameter-group-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBParameterGroup: record<DBParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBParameterGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1170,7 +1170,7 @@ export def "api get-copy-db-snapshot-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBSnapshotIdentifier" $source_db_snapshot_identifier "scalar") (serialize-qp "TargetDBSnapshotIdentifier" $target_db_snapshot_identifier "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "CopyTags" $copy_tags "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "TargetCustomAvailabilityZone" $target_custom_availability_zone "scalar") (serialize-qp "CopyOptionGroup" $copy_option_group "scalar") (serialize-qp "SourceRegion" $source_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1206,7 +1206,7 @@ export def "api create-copy-db-snapshot-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1248,7 +1248,7 @@ export def "api get-copy-option-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OptionGroup: record<OptionGroupName: record, OptionGroupDescription: record, EngineName: record, MajorEngineVersion: record, Options: record, AllowsVpcAndNonVpcInstanceMemberships: record, VpcId: record, OptionGroupArn: record, SourceOptionGroup: record, SourceAccountId: record, CopyTimestamp: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceOptionGroupIdentifier" $source_option_group_identifier "scalar") (serialize-qp "TargetOptionGroupIdentifier" $target_option_group_identifier "scalar") (serialize-qp "TargetOptionGroupDescription" $target_option_group_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1284,7 +1284,7 @@ export def "api create-copy-option-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OptionGroup: record<OptionGroupName: record, OptionGroupDescription: record, EngineName: record, MajorEngineVersion: record, Options: record, AllowsVpcAndNonVpcInstanceMemberships: record, VpcId: record, OptionGroupArn: record, SourceOptionGroup: record, SourceAccountId: record, CopyTimestamp: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1328,7 +1328,7 @@ export def "api get-create-blue-green-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<BlueGreenDeployment: record<BlueGreenDeploymentIdentifier: record, BlueGreenDeploymentName: record, Source: record, Target: record, SwitchoverDetails: record, Tasks: record, Status: record, StatusDetails: record, CreateTime: record, DeleteTime: record, TagList: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "BlueGreenDeploymentName" $blue_green_deployment_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "TargetEngineVersion" $target_engine_version "scalar") (serialize-qp "TargetDBParameterGroupName" $target_db_parameter_group_name "scalar") (serialize-qp "TargetDBClusterParameterGroupName" $target_db_cluster_parameter_group_name "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1364,7 +1364,7 @@ export def "api create-blue-green-deployment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<BlueGreenDeployment: record<BlueGreenDeploymentIdentifier: record, BlueGreenDeploymentName: record, Source: record, Target: record, SwitchoverDetails: record, Tasks: record, Status: record, StatusDetails: record, CreateTime: record, DeleteTime: record, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1411,7 +1411,7 @@ export def "api get-create-custom-db-engine-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Engine: record, EngineVersion: record, DBParameterGroupFamily: record, DBEngineDescription: record, DBEngineVersionDescription: record, DefaultCharacterSet: record<CharacterSetName: record, CharacterSetDescription: record>, Image: record<ImageId: record, Status: record>, DBEngineMediaType: record, SupportedCharacterSets: record, SupportedNcharCharacterSets: record, ValidUpgradeTarget: record, SupportedTimezones: record, ExportableLogTypes: record, SupportsLogExportsToCloudwatchLogs: record, SupportsReadReplica: record, SupportedEngineModes: record, SupportedFeatureNames: record, Status: record, SupportsParallelQuery: record, SupportsGlobalDatabases: record, MajorEngineVersion: record, DatabaseInstallationFilesS3BucketName: record, DatabaseInstallationFilesS3Prefix: record, DBEngineVersionArn: record, KMSKeyId: record, CreateTime: record, TagList: table<Key: record, Value: record>, SupportsBabelfish: record, CustomDBEngineVersionManifest: record, SupportsCertificateRotationWithoutRestart: record, SupportedCACertificateIdentifiers: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DatabaseInstallationFilesS3BucketName" $database_installation_files_s3_bucket_name "scalar") (serialize-qp "DatabaseInstallationFilesS3Prefix" $database_installation_files_s3_prefix "scalar") (serialize-qp "ImageId" $image_id "scalar") (serialize-qp "KMSKeyId" $kms_key_id "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Manifest" $manifest "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1447,7 +1447,7 @@ export def "api create-custom-db-engine-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Engine: record, EngineVersion: record, DBParameterGroupFamily: record, DBEngineDescription: record, DBEngineVersionDescription: record, DefaultCharacterSet: record<CharacterSetName: record, CharacterSetDescription: record>, Image: record<ImageId: record, Status: record>, DBEngineMediaType: record, SupportedCharacterSets: record, SupportedNcharCharacterSets: record, ValidUpgradeTarget: record, SupportedTimezones: record, ExportableLogTypes: record, SupportsLogExportsToCloudwatchLogs: record, SupportsReadReplica: record, SupportedEngineModes: record, SupportedFeatureNames: record, Status: record, SupportsParallelQuery: record, SupportsGlobalDatabases: record, MajorEngineVersion: record, DatabaseInstallationFilesS3BucketName: record, DatabaseInstallationFilesS3Prefix: record, DBEngineVersionArn: record, KMSKeyId: record, CreateTime: record, TagList: table<Key: record, Value: record>, SupportsBabelfish: record, CustomDBEngineVersionManifest: record, SupportsCertificateRotationWithoutRestart: record, SupportedCACertificateIdentifiers: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1535,7 +1535,7 @@ export def "api get-create-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "CharacterSetName" $character_set_name "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "MasterUsername" $master_username "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "ReplicationSourceIdentifier" $replication_source_identifier "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "BacktrackWindow" $backtrack_window "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "EngineMode" $engine_mode "scalar") (serialize-qp "ScalingConfiguration" $scaling_configuration "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "EnableHttpEndpoint" $enable_http_endpoint "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "EnableGlobalWriteForwarding" $enable_global_write_forwarding "scalar") (serialize-qp "DBClusterInstanceClass" $db_cluster_instance_class "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "MonitoringInterval" $monitoring_interval "scalar") (serialize-qp "MonitoringRoleArn" $monitoring_role_arn "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "PerformanceInsightsRetentionPeriod" $performance_insights_retention_period "scalar") (serialize-qp "ServerlessV2ScalingConfiguration" $serverless_v2_scaling_configuration "multi") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "DBSystemId" $db_system_id "scalar") (serialize-qp "ManageMasterUserPassword" $manage_master_user_password "scalar") (serialize-qp "MasterUserSecretKmsKeyId" $master_user_secret_kms_key_id "scalar") (serialize-qp "SourceRegion" $source_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1571,7 +1571,7 @@ export def "api create-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1615,7 +1615,7 @@ export def "api get-create-db-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterEndpointIdentifier: record, DBClusterIdentifier: record, DBClusterEndpointResourceIdentifier: record, Endpoint: record, Status: record, EndpointType: record, CustomEndpointType: record, StaticMembers: record, ExcludedMembers: record, DBClusterEndpointArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterEndpointIdentifier" $db_cluster_endpoint_identifier "scalar") (serialize-qp "EndpointType" $endpoint_type "scalar") (serialize-qp "StaticMembers" $static_members "multi") (serialize-qp "ExcludedMembers" $excluded_members "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1651,7 +1651,7 @@ export def "api create-db-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterEndpointIdentifier: record, DBClusterIdentifier: record, DBClusterEndpointResourceIdentifier: record, Endpoint: record, Status: record, EndpointType: record, CustomEndpointType: record, StaticMembers: record, ExcludedMembers: record, DBClusterEndpointArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1693,7 +1693,7 @@ export def "api get-create-db-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1729,7 +1729,7 @@ export def "api create-db-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterParameterGroup: record<DBClusterParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBClusterParameterGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1770,7 +1770,7 @@ export def "api get-create-db-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, EngineMode: record, AllocatedStorage: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record, IAMDatabaseAuthenticationEnabled: record, TagList: list<record>, DBSystemId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1806,7 +1806,7 @@ export def "api create-db-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, EngineMode: record, AllocatedStorage: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record, IAMDatabaseAuthenticationEnabled: record, TagList: list<record>, DBSystemId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1899,7 +1899,7 @@ export def "api get-create-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBName" $db_name "scalar") (serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "MasterUsername" $master_username "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "DBSecurityGroups" $db_security_groups "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "CharacterSetName" $character_set_name "scalar") (serialize-qp "NcharCharacterSetName" $nchar_character_set_name "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "TdeCredentialArn" $tde_credential_arn "scalar") (serialize-qp "TdeCredentialPassword" $tde_credential_password "scalar") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "MonitoringInterval" $monitoring_interval "scalar") (serialize-qp "MonitoringRoleArn" $monitoring_role_arn "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "PromotionTier" $promotion_tier "scalar") (serialize-qp "Timezone" $timezone "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "PerformanceInsightsRetentionPeriod" $performance_insights_retention_period "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "ProcessorFeatures" $processor_features "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "MaxAllocatedStorage" $max_allocated_storage "scalar") (serialize-qp "EnableCustomerOwnedIp" $enable_customer_owned_ip "scalar") (serialize-qp "CustomIamInstanceProfile" $custom_iam_instance_profile "scalar") (serialize-qp "BackupTarget" $backup_target "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "StorageThroughput" $storage_throughput "scalar") (serialize-qp "ManageMasterUserPassword" $manage_master_user_password "scalar") (serialize-qp "MasterUserSecretKmsKeyId" $master_user_secret_kms_key_id "scalar") (serialize-qp "CACertificateIdentifier" $ca_certificate_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1935,7 +1935,7 @@ export def "api create-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2012,7 +2012,7 @@ export def "api get-create-db-instance-replica" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "SourceDBInstanceIdentifier" $source_db_instance_identifier "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "MonitoringInterval" $monitoring_interval "scalar") (serialize-qp "MonitoringRoleArn" $monitoring_role_arn "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "PerformanceInsightsRetentionPeriod" $performance_insights_retention_period "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "ProcessorFeatures" $processor_features "multi") (serialize-qp "UseDefaultProcessorFeatures" $use_default_processor_features "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "ReplicaMode" $replica_mode "scalar") (serialize-qp "MaxAllocatedStorage" $max_allocated_storage "scalar") (serialize-qp "CustomIamInstanceProfile" $custom_iam_instance_profile "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "StorageThroughput" $storage_throughput "scalar") (serialize-qp "EnableCustomerOwnedIp" $enable_customer_owned_ip "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "SourceDBClusterIdentifier" $source_db_cluster_identifier "scalar") (serialize-qp "SourceRegion" $source_region "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2048,7 +2048,7 @@ export def "api create-db-instance-get-replica" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2090,7 +2090,7 @@ export def "api get-create-db-parameter-group-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBParameterGroup: record<DBParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBParameterGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2126,7 +2126,7 @@ export def "api create-db-parameter-group-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBParameterGroup: record<DBParameterGroupName: record, DBParameterGroupFamily: record, Description: record, DBParameterGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2174,7 +2174,7 @@ export def "api get-create-db-proxy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxy: record<DBProxyName: record, DBProxyArn: record, Status: record, EngineFamily: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Auth: record, RoleArn: record, Endpoint: record, RequireTLS: record, IdleClientTimeout: record, DebugLogging: record, CreatedDate: record, UpdatedDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "EngineFamily" $engine_family "scalar") (serialize-qp "Auth" $qp_auth "multi") (serialize-qp "RoleArn" $role_arn "scalar") (serialize-qp "VpcSubnetIds" $vpc_subnet_ids "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "RequireTLS" $require_tls "scalar") (serialize-qp "IdleClientTimeout" $idle_client_timeout "scalar") (serialize-qp "DebugLogging" $debug_logging "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2210,7 +2210,7 @@ export def "api create-db-proxy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxy: record<DBProxyName: record, DBProxyArn: record, Status: record, EngineFamily: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Auth: record, RoleArn: record, Endpoint: record, RequireTLS: record, IdleClientTimeout: record, DebugLogging: record, CreatedDate: record, UpdatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2254,7 +2254,7 @@ export def "api get-create-db-proxy-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxyEndpoint: record<DBProxyEndpointName: record, DBProxyEndpointArn: record, DBProxyName: record, Status: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Endpoint: record, CreatedDate: record, TargetRole: record, IsDefault: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "DBProxyEndpointName" $db_proxy_endpoint_name "scalar") (serialize-qp "VpcSubnetIds" $vpc_subnet_ids "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "TargetRole" $target_role "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2290,7 +2290,7 @@ export def "api create-db-proxy-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxyEndpoint: record<DBProxyEndpointName: record, DBProxyEndpointArn: record, DBProxyName: record, Status: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Endpoint: record, CreatedDate: record, TargetRole: record, IsDefault: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2331,7 +2331,7 @@ export def "api get-create-db-security-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSecurityGroup: record<OwnerId: record, DBSecurityGroupName: record, DBSecurityGroupDescription: record, VpcId: record, EC2SecurityGroups: record, IPRanges: record, DBSecurityGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSecurityGroupName" $db_security_group_name "scalar") (serialize-qp "DBSecurityGroupDescription" $db_security_group_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2367,7 +2367,7 @@ export def "api create-db-security-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSecurityGroup: record<OwnerId: record, DBSecurityGroupName: record, DBSecurityGroupDescription: record, VpcId: record, EC2SecurityGroups: record, IPRanges: record, DBSecurityGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2408,7 +2408,7 @@ export def "api get-create-db-snapshot-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2444,7 +2444,7 @@ export def "api create-db-snapshot-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2486,7 +2486,7 @@ export def "api get-create-db-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "DBSubnetGroupDescription" $db_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2522,7 +2522,7 @@ export def "api create-db-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2567,7 +2567,7 @@ export def "api get-create-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SnsTopicArn" $sns_topic_arn "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "SourceIds" $source_ids "multi") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2603,7 +2603,7 @@ export def "api create-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2648,7 +2648,7 @@ export def "api get-create-global" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "SourceDBClusterIdentifier" $source_db_cluster_identifier "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2684,7 +2684,7 @@ export def "api create-global" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2727,7 +2727,7 @@ export def "api get-create-option-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OptionGroup: record<OptionGroupName: record, OptionGroupDescription: record, EngineName: record, MajorEngineVersion: record, Options: record, AllowsVpcAndNonVpcInstanceMemberships: record, VpcId: record, OptionGroupArn: record, SourceOptionGroup: record, SourceAccountId: record, CopyTimestamp: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "EngineName" $engine_name "scalar") (serialize-qp "MajorEngineVersion" $major_engine_version "scalar") (serialize-qp "OptionGroupDescription" $option_group_description "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2763,7 +2763,7 @@ export def "api create-option-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OptionGroup: record<OptionGroupName: record, OptionGroupDescription: record, EngineName: record, MajorEngineVersion: record, Options: record, AllowsVpcAndNonVpcInstanceMemberships: record, VpcId: record, OptionGroupArn: record, SourceOptionGroup: record, SourceAccountId: record, CopyTimestamp: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2803,7 +2803,7 @@ export def "api get-delete-blue-green-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<BlueGreenDeployment: record<BlueGreenDeploymentIdentifier: record, BlueGreenDeploymentName: record, Source: record, Target: record, SwitchoverDetails: record, Tasks: record, Status: record, StatusDetails: record, CreateTime: record, DeleteTime: record, TagList: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "BlueGreenDeploymentIdentifier" $blue_green_deployment_identifier "scalar") (serialize-qp "DeleteTarget" $delete_target "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2839,7 +2839,7 @@ export def "api create-delete-blue-green-deployment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<BlueGreenDeployment: record<BlueGreenDeploymentIdentifier: record, BlueGreenDeploymentName: record, Source: record, Target: record, SwitchoverDetails: record, Tasks: record, Status: record, StatusDetails: record, CreateTime: record, DeleteTime: record, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2879,7 +2879,7 @@ export def "api get-delete-custom-db-engine-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Engine: record, EngineVersion: record, DBParameterGroupFamily: record, DBEngineDescription: record, DBEngineVersionDescription: record, DefaultCharacterSet: record<CharacterSetName: record, CharacterSetDescription: record>, Image: record<ImageId: record, Status: record>, DBEngineMediaType: record, SupportedCharacterSets: record, SupportedNcharCharacterSets: record, ValidUpgradeTarget: record, SupportedTimezones: record, ExportableLogTypes: record, SupportsLogExportsToCloudwatchLogs: record, SupportsReadReplica: record, SupportedEngineModes: record, SupportedFeatureNames: record, Status: record, SupportsParallelQuery: record, SupportsGlobalDatabases: record, MajorEngineVersion: record, DatabaseInstallationFilesS3BucketName: record, DatabaseInstallationFilesS3Prefix: record, DBEngineVersionArn: record, KMSKeyId: record, CreateTime: record, TagList: table<Key: record, Value: record>, SupportsBabelfish: record, CustomDBEngineVersionManifest: record, SupportsCertificateRotationWithoutRestart: record, SupportedCACertificateIdentifiers: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2915,7 +2915,7 @@ export def "api create-delete-custom-db-engine-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Engine: record, EngineVersion: record, DBParameterGroupFamily: record, DBEngineDescription: record, DBEngineVersionDescription: record, DefaultCharacterSet: record<CharacterSetName: record, CharacterSetDescription: record>, Image: record<ImageId: record, Status: record>, DBEngineMediaType: record, SupportedCharacterSets: record, SupportedNcharCharacterSets: record, ValidUpgradeTarget: record, SupportedTimezones: record, ExportableLogTypes: record, SupportsLogExportsToCloudwatchLogs: record, SupportsReadReplica: record, SupportedEngineModes: record, SupportedFeatureNames: record, Status: record, SupportsParallelQuery: record, SupportsGlobalDatabases: record, MajorEngineVersion: record, DatabaseInstallationFilesS3BucketName: record, DatabaseInstallationFilesS3Prefix: record, DBEngineVersionArn: record, KMSKeyId: record, CreateTime: record, TagList: table<Key: record, Value: record>, SupportsBabelfish: record, CustomDBEngineVersionManifest: record, SupportsCertificateRotationWithoutRestart: record, SupportedCACertificateIdentifiers: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2956,7 +2956,7 @@ export def "api get-delete-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "SkipFinalSnapshot" $skip_final_snapshot "scalar") (serialize-qp "FinalDBSnapshotIdentifier" $final_db_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2992,7 +2992,7 @@ export def "api create-delete-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3031,7 +3031,7 @@ export def "api get-delete-db-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterEndpointIdentifier: record, DBClusterIdentifier: record, DBClusterEndpointResourceIdentifier: record, Endpoint: record, Status: record, EndpointType: record, CustomEndpointType: record, StaticMembers: record, ExcludedMembers: record, DBClusterEndpointArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterEndpointIdentifier" $db_cluster_endpoint_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3067,7 +3067,7 @@ export def "api create-delete-db-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterEndpointIdentifier: record, DBClusterIdentifier: record, DBClusterEndpointResourceIdentifier: record, Endpoint: record, Status: record, EndpointType: record, CustomEndpointType: record, StaticMembers: record, ExcludedMembers: record, DBClusterEndpointArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3181,7 +3181,7 @@ export def "api get-delete-db-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, EngineMode: record, AllocatedStorage: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record, IAMDatabaseAuthenticationEnabled: record, TagList: list<record>, DBSystemId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3217,7 +3217,7 @@ export def "api create-delete-db-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterSnapshot: record<AvailabilityZones: record, DBClusterSnapshotIdentifier: record, DBClusterIdentifier: record, SnapshotCreateTime: record, Engine: record, EngineMode: record, AllocatedStorage: record, Status: record, Port: record, VpcId: record, ClusterCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, PercentProgress: record, StorageEncrypted: record, KmsKeyId: record, DBClusterSnapshotArn: record, SourceDBClusterSnapshotArn: record, IAMDatabaseAuthenticationEnabled: record, TagList: list<record>, DBSystemId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3259,7 +3259,7 @@ export def "api get-delete-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "SkipFinalSnapshot" $skip_final_snapshot "scalar") (serialize-qp "FinalDBSnapshotIdentifier" $final_db_snapshot_identifier "scalar") (serialize-qp "DeleteAutomatedBackups" $delete_automated_backups "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3295,7 +3295,7 @@ export def "api create-delete-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3335,7 +3335,7 @@ export def "api get-delete-db-instance-automated-backup" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstanceAutomatedBackup: record<DBInstanceArn: record, DbiResourceId: record, Region: record, DBInstanceIdentifier: record, RestoreWindow: record<EarliestTime: record, LatestTime: record>, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, Engine: record, EngineVersion: record, LicenseModel: record, Iops: record, OptionGroupName: record, TdeCredentialArn: record, Encrypted: record, StorageType: record, KmsKeyId: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, BackupRetentionPeriod: record, DBInstanceAutomatedBackupsArn: record, DBInstanceAutomatedBackupsReplications: record, BackupTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DbiResourceId" $dbi_resource_id "scalar") (serialize-qp "DBInstanceAutomatedBackupsArn" $db_instance_automated_backups_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3371,7 +3371,7 @@ export def "api create-delete-db-instance-automated-backup" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstanceAutomatedBackup: record<DBInstanceArn: record, DbiResourceId: record, Region: record, DBInstanceIdentifier: record, RestoreWindow: record<EarliestTime: record, LatestTime: record>, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, Engine: record, EngineVersion: record, LicenseModel: record, Iops: record, OptionGroupName: record, TdeCredentialArn: record, Encrypted: record, StorageType: record, KmsKeyId: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, BackupRetentionPeriod: record, DBInstanceAutomatedBackupsArn: record, DBInstanceAutomatedBackupsReplications: record, BackupTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3485,7 +3485,7 @@ export def "api get-delete-db-proxy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxy: record<DBProxyName: record, DBProxyArn: record, Status: record, EngineFamily: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Auth: record, RoleArn: record, Endpoint: record, RequireTLS: record, IdleClientTimeout: record, DebugLogging: record, CreatedDate: record, UpdatedDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3521,7 +3521,7 @@ export def "api create-delete-db-proxy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxy: record<DBProxyName: record, DBProxyArn: record, Status: record, EngineFamily: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Auth: record, RoleArn: record, Endpoint: record, RequireTLS: record, IdleClientTimeout: record, DebugLogging: record, CreatedDate: record, UpdatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3560,7 +3560,7 @@ export def "api get-delete-db-proxy-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxyEndpoint: record<DBProxyEndpointName: record, DBProxyEndpointArn: record, DBProxyName: record, Status: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Endpoint: record, CreatedDate: record, TargetRole: record, IsDefault: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyEndpointName" $db_proxy_endpoint_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3596,7 +3596,7 @@ export def "api create-delete-db-proxy-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxyEndpoint: record<DBProxyEndpointName: record, DBProxyEndpointArn: record, DBProxyName: record, Status: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Endpoint: record, CreatedDate: record, TargetRole: record, IsDefault: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3710,7 +3710,7 @@ export def "api get-delete-db-snapshot-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3746,7 +3746,7 @@ export def "api create-delete-db-snapshot-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3860,7 +3860,7 @@ export def "api get-delete-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3896,7 +3896,7 @@ export def "api create-delete-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3935,7 +3935,7 @@ export def "api get-delete-global" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3971,7 +3971,7 @@ export def "api create-delete-global" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4088,7 +4088,7 @@ export def "api get-deregister-db-proxy-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "TargetGroupName" $target_group_name "scalar") (serialize-qp "DBInstanceIdentifiers" $db_instance_identifiers "multi") (serialize-qp "DBClusterIdentifiers" $db_cluster_identifiers "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4124,7 +4124,7 @@ export def "api create-deregister-db-proxy-targets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4162,7 +4162,7 @@ export def "api get-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<AccountQuotas: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4198,7 +4198,7 @@ export def "api create-get-account-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<AccountQuotas: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4240,7 +4240,7 @@ export def "api get-blue-green-deployments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<BlueGreenDeployments: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "BlueGreenDeploymentIdentifier" $blue_green_deployment_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4278,7 +4278,7 @@ export def "api create-get-blue-green-deployments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<BlueGreenDeployments: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4320,7 +4320,7 @@ export def "api get-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Certificates: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CertificateIdentifier" $certificate_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4358,7 +4358,7 @@ export def "api create-get-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Certificates: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4401,7 +4401,7 @@ export def "api get-db-backtracks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBClusterBacktracks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "BacktrackIdentifier" $backtrack_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4439,7 +4439,7 @@ export def "api create-get-db-backtracks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBClusterBacktracks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4482,7 +4482,7 @@ export def "api get-db-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBClusterEndpoints: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterEndpointIdentifier" $db_cluster_endpoint_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4520,7 +4520,7 @@ export def "api create-get-db-endpoints" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBClusterEndpoints: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4562,7 +4562,7 @@ export def "api get-db-parameter-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBClusterParameterGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4600,7 +4600,7 @@ export def "api create-get-db-parameter-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBClusterParameterGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4643,7 +4643,7 @@ export def "api get-db-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Parameters: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4681,7 +4681,7 @@ export def "api create-get-db-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Parameters: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4720,7 +4720,7 @@ export def "api get-db-snapshot-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4756,7 +4756,7 @@ export def "api create-get-db-snapshot-attributes" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4802,7 +4802,7 @@ export def "api get-db-snapshots" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBClusterSnapshots: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "SnapshotType" $snapshot_type "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "IncludeShared" $include_shared "scalar") (serialize-qp "IncludePublic" $include_public "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4840,7 +4840,7 @@ export def "api create-get-db-snapshots" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBClusterSnapshots: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4883,7 +4883,7 @@ export def "api get-db-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "IncludeShared" $include_shared "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -4921,7 +4921,7 @@ export def "api create-get-db-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBClusters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4969,7 +4969,7 @@ export def "api get-db-engine-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBEngineVersions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "DefaultOnly" $default_only "scalar") (serialize-qp "ListSupportedCharacterSets" $list_supported_character_sets "scalar") (serialize-qp "ListSupportedTimezones" $list_supported_timezones "scalar") (serialize-qp "IncludeAll" $include_all "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5007,7 +5007,7 @@ export def "api create-get-db-engine-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBEngineVersions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5051,7 +5051,7 @@ export def "api get-db-instance-automated-backups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBInstanceAutomatedBackups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DbiResourceId" $dbi_resource_id "scalar") (serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "DBInstanceAutomatedBackupsArn" $db_instance_automated_backups_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5089,7 +5089,7 @@ export def "api create-get-db-instance-automated-backups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBInstanceAutomatedBackups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5131,7 +5131,7 @@ export def "api get-db-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBInstances: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5169,7 +5169,7 @@ export def "api create-get-db-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBInstances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5214,7 +5214,7 @@ export def "api get-db-log-files" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DescribeDBLogFiles: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "FilenameContains" $filename_contains "scalar") (serialize-qp "FileLastWritten" $file_last_written "scalar") (serialize-qp "FileSize" $file_size "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5252,7 +5252,7 @@ export def "api create-get-db-log-files" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DescribeDBLogFiles: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5294,7 +5294,7 @@ export def "api get-db-parameter-groups-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBParameterGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5332,7 +5332,7 @@ export def "api create-get-db-parameter-groups-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBParameterGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5375,7 +5375,7 @@ export def "api get-db-parameters-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Parameters: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "Source" $qp_source "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5413,7 +5413,7 @@ export def "api create-get-db-parameters-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Parameters: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5455,7 +5455,7 @@ export def "api get-db-proxies" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxies: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5493,7 +5493,7 @@ export def "api create-get-db-proxies" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxies: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5536,7 +5536,7 @@ export def "api get-db-proxy-endpoints" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxyEndpoints: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "DBProxyEndpointName" $db_proxy_endpoint_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5574,7 +5574,7 @@ export def "api create-get-db-proxy-endpoints" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxyEndpoints: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5617,7 +5617,7 @@ export def "api get-db-proxy-target-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TargetGroups: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "TargetGroupName" $target_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5655,7 +5655,7 @@ export def "api create-get-db-proxy-target-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TargetGroups: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5698,7 +5698,7 @@ export def "api get-db-proxy-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Targets: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "TargetGroupName" $target_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5736,7 +5736,7 @@ export def "api create-get-db-proxy-targets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Targets: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5778,7 +5778,7 @@ export def "api get-db-security-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBSecurityGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSecurityGroupName" $db_security_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5816,7 +5816,7 @@ export def "api create-get-db-security-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBSecurityGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5855,7 +5855,7 @@ export def "api get-db-snapshot-attributes-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSnapshotAttributesResult: record<DBSnapshotIdentifier: record, DBSnapshotAttributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5891,7 +5891,7 @@ export def "api create-get-db-snapshot-attributes-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSnapshotAttributesResult: record<DBSnapshotIdentifier: record, DBSnapshotAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5938,7 +5938,7 @@ export def "api get-db-snapshots-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBSnapshots: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "SnapshotType" $snapshot_type "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "IncludeShared" $include_shared "scalar") (serialize-qp "IncludePublic" $include_public "scalar") (serialize-qp "DbiResourceId" $dbi_resource_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -5976,7 +5976,7 @@ export def "api create-get-db-snapshots-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBSnapshots: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6018,7 +6018,7 @@ export def "api get-db-subnet-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, DBSubnetGroups: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6056,7 +6056,7 @@ export def "api create-get-db-subnet-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, DBSubnetGroups: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6098,7 +6098,7 @@ export def "api get-engine-default-parameters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EngineDefaults: record<DBParameterGroupFamily: record, Marker: record, Parameters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6134,7 +6134,7 @@ export def "api create-get-engine-default-parameters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EngineDefaults: record<DBParameterGroupFamily: record, Marker: record, Parameters: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6176,7 +6176,7 @@ export def "api get-engine-default-parameters-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EngineDefaults: record<DBParameterGroupFamily: record, Marker: record, Parameters: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupFamily" $db_parameter_group_family "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6214,7 +6214,7 @@ export def "api create-get-engine-default-parameters-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EngineDefaults: record<DBParameterGroupFamily: record, Marker: record, Parameters: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6254,7 +6254,7 @@ export def "api get-event-categories" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventCategoriesMapList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceType" $source_type "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6290,7 +6290,7 @@ export def "api create-get-event-categories" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventCategoriesMapList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6332,7 +6332,7 @@ export def "api get-event-subscriptions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, EventSubscriptionsList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6370,7 +6370,7 @@ export def "api create-get-event-subscriptions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, EventSubscriptionsList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6417,7 +6417,7 @@ export def "api get-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, Events: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6455,7 +6455,7 @@ export def "api create-get-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, Events: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6499,7 +6499,7 @@ export def "api get-export-tasks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ExportTasks: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ExportTaskIdentifier" $export_task_identifier "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6537,7 +6537,7 @@ export def "api create-get-export-tasks" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ExportTasks: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6579,7 +6579,7 @@ export def "api get-global-clusters" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, GlobalClusters: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6617,7 +6617,7 @@ export def "api create-get-global-clusters" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, GlobalClusters: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6660,7 +6660,7 @@ export def "api get-option-group-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OptionGroupOptions: table<Name: record, Description: record, EngineName: record, MajorEngineVersion: record, MinimumRequiredMinorEngineVersion: record, PortRequired: record, DefaultPort: record, OptionsDependedOn: record, OptionsConflictsWith: record, Persistent: record, Permanent: record, RequiresAutoMinorEngineVersionUpgrade: record, VpcOnly: record, SupportsOptionVersionDowngrade: record, OptionGroupOptionSettings: record, OptionGroupOptionVersions: record, CopyableCrossAccount: record>, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EngineName" $engine_name "scalar") (serialize-qp "MajorEngineVersion" $major_engine_version "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6698,7 +6698,7 @@ export def "api create-get-option-group-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OptionGroupOptions: table<Name: record, Description: record, EngineName: record, MajorEngineVersion: record, MinimumRequiredMinorEngineVersion: record, PortRequired: record, DefaultPort: record, OptionsDependedOn: record, OptionsConflictsWith: record, Persistent: record, Permanent: record, RequiresAutoMinorEngineVersionUpgrade: record, VpcOnly: record, SupportsOptionVersionDowngrade: record, OptionGroupOptionSettings: record, OptionGroupOptionVersions: record, CopyableCrossAccount: record>, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6742,7 +6742,7 @@ export def "api get-option-groups" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OptionGroupsList: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "EngineName" $engine_name "scalar") (serialize-qp "MajorEngineVersion" $major_engine_version "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6780,7 +6780,7 @@ export def "api create-get-option-groups" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OptionGroupsList: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6827,7 +6827,7 @@ export def "api get-orderable-db-instance-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OrderableDBInstanceOptions: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "AvailabilityZoneGroup" $availability_zone_group "scalar") (serialize-qp "Vpc" $vpc "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6865,7 +6865,7 @@ export def "api create-get-orderable-db-instance-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OrderableDBInstanceOptions: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6907,7 +6907,7 @@ export def "api get-pending-maintenance-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PendingMaintenanceActions: record, Marker: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceIdentifier" $resource_identifier "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Marker" $marker "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -6945,7 +6945,7 @@ export def "api create-get-pending-maintenance-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PendingMaintenanceActions: record, Marker: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6994,7 +6994,7 @@ export def "api get-reserved-db-instances" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedDBInstances: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedDBInstanceId" $reserved_db_instance_id "scalar") (serialize-qp "ReservedDBInstancesOfferingId" $reserved_db_instances_offering_id "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "ProductDescription" $product_description "scalar") (serialize-qp "OfferingType" $offering_type "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "LeaseId" $lease_id "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7032,7 +7032,7 @@ export def "api create-get-reserved-db-instances" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedDBInstances: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7079,7 +7079,7 @@ export def "api get-reserved-db-instances-offerings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, ReservedDBInstancesOfferings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedDBInstancesOfferingId" $reserved_db_instances_offering_id "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Duration" $duration "scalar") (serialize-qp "ProductDescription" $product_description "scalar") (serialize-qp "OfferingType" $offering_type "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7117,7 +7117,7 @@ export def "api create-get-reserved-db-instances-offerings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, ReservedDBInstancesOfferings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7159,7 +7159,7 @@ export def "api get-source-regions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Marker: record, SourceRegions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "RegionName" $region_name "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7197,7 +7197,7 @@ export def "api create-get-source-regions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Marker: record, SourceRegions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7236,7 +7236,7 @@ export def "api get-valid-db-instance-modifications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ValidDBInstanceModificationsMessage: record<Storage: record, ValidProcessorFeatures: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7272,7 +7272,7 @@ export def "api create-get-valid-db-instance-modifications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ValidDBInstanceModificationsMessage: record<Storage: record, ValidProcessorFeatures: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7314,7 +7314,7 @@ export def "api get-download-db-log-file-portion" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<LogFileData: record, Marker: record, AdditionalDataPending: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "LogFileName" $log_file_name "scalar") (serialize-qp "Marker" $marker "scalar") (serialize-qp "NumberOfLines" $number_of_lines "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7352,7 +7352,7 @@ export def "api create-download-db-log-file-portion" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<LogFileData: record, Marker: record, AdditionalDataPending: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7392,7 +7392,7 @@ export def "api get-failover-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "TargetDBInstanceIdentifier" $target_db_instance_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7428,7 +7428,7 @@ export def "api create-failover-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7468,7 +7468,7 @@ export def "api get-failover-global" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "TargetDbClusterIdentifier" $target_db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7504,7 +7504,7 @@ export def "api create-failover-global" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7544,7 +7544,7 @@ export def "api get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<TagList: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceName" $resource_name "scalar") (serialize-qp "Filters" $filters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7580,7 +7580,7 @@ export def "api create-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<TagList: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7620,7 +7620,7 @@ export def "api get-modify-activity-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<KmsKeyId: record, KinesisStreamName: record, Status: record, Mode: record, EngineNativeAuditFieldsIncluded: record, PolicyStatus: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "AuditPolicyState" $audit_policy_state "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7656,7 +7656,7 @@ export def "api create-modify-activity-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<KmsKeyId: record, KinesisStreamName: record, Status: record, Mode: record, EngineNativeAuditFieldsIncluded: record, PolicyStatus: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7696,7 +7696,7 @@ export def "api get-modify-certificates" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Certificate: record<CertificateIdentifier: record, CertificateType: record, Thumbprint: record, ValidFrom: record, ValidTill: record, CertificateArn: record, CustomerOverride: record, CustomerOverrideValidTill: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CertificateIdentifier" $certificate_identifier "scalar") (serialize-qp "RemoveCustomerOverride" $remove_customer_override "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7732,7 +7732,7 @@ export def "api create-modify-certificates" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Certificate: record<CertificateIdentifier: record, CertificateType: record, Thumbprint: record, ValidFrom: record, ValidTill: record, CertificateArn: record, CustomerOverride: record, CustomerOverrideValidTill: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7774,7 +7774,7 @@ export def "api get-modify-db-capacity" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterIdentifier: record, PendingCapacity: record, CurrentCapacity: record, SecondsBeforeTimeout: record, TimeoutAction: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Capacity" $capacity "scalar") (serialize-qp "SecondsBeforeTimeout" $seconds_before_timeout "scalar") (serialize-qp "TimeoutAction" $timeout_action "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7810,7 +7810,7 @@ export def "api create-modify-get-db-capacity" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterIdentifier: record, PendingCapacity: record, CurrentCapacity: record, SecondsBeforeTimeout: record, TimeoutAction: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7852,7 +7852,7 @@ export def "api get-modify-custom-db-engine-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Engine: record, EngineVersion: record, DBParameterGroupFamily: record, DBEngineDescription: record, DBEngineVersionDescription: record, DefaultCharacterSet: record<CharacterSetName: record, CharacterSetDescription: record>, Image: record<ImageId: record, Status: record>, DBEngineMediaType: record, SupportedCharacterSets: record, SupportedNcharCharacterSets: record, ValidUpgradeTarget: record, SupportedTimezones: record, ExportableLogTypes: record, SupportsLogExportsToCloudwatchLogs: record, SupportsReadReplica: record, SupportedEngineModes: record, SupportedFeatureNames: record, Status: record, SupportsParallelQuery: record, SupportsGlobalDatabases: record, MajorEngineVersion: record, DatabaseInstallationFilesS3BucketName: record, DatabaseInstallationFilesS3Prefix: record, DBEngineVersionArn: record, KMSKeyId: record, CreateTime: record, TagList: table<Key: record, Value: record>, SupportsBabelfish: record, CustomDBEngineVersionManifest: record, SupportsCertificateRotationWithoutRestart: record, SupportedCACertificateIdentifiers: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -7888,7 +7888,7 @@ export def "api create-modify-custom-db-engine-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Engine: record, EngineVersion: record, DBParameterGroupFamily: record, DBEngineDescription: record, DBEngineVersionDescription: record, DefaultCharacterSet: record<CharacterSetName: record, CharacterSetDescription: record>, Image: record<ImageId: record, Status: record>, DBEngineMediaType: record, SupportedCharacterSets: record, SupportedNcharCharacterSets: record, ValidUpgradeTarget: record, SupportedTimezones: record, ExportableLogTypes: record, SupportsLogExportsToCloudwatchLogs: record, SupportsReadReplica: record, SupportedEngineModes: record, SupportedFeatureNames: record, Status: record, SupportsParallelQuery: record, SupportsGlobalDatabases: record, MajorEngineVersion: record, DatabaseInstallationFilesS3BucketName: record, DatabaseInstallationFilesS3Prefix: record, DBEngineVersionArn: record, KMSKeyId: record, CreateTime: record, TagList: table<Key: record, Value: record>, SupportsBabelfish: record, CustomDBEngineVersionManifest: record, SupportsCertificateRotationWithoutRestart: record, SupportedCACertificateIdentifiers: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7967,7 +7967,7 @@ export def "api get-modify-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "NewDBClusterIdentifier" $new_db_cluster_identifier "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Port" $port "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "BacktrackWindow" $backtrack_window "scalar") (serialize-qp "CloudwatchLogsExportConfiguration" $cloudwatch_logs_export_configuration "multi") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AllowMajorVersionUpgrade" $allow_major_version_upgrade "scalar") (serialize-qp "DBInstanceParameterGroupName" $db_instance_parameter_group_name "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "ScalingConfiguration" $scaling_configuration "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "EnableHttpEndpoint" $enable_http_endpoint "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "EnableGlobalWriteForwarding" $enable_global_write_forwarding "scalar") (serialize-qp "DBClusterInstanceClass" $db_cluster_instance_class "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "MonitoringInterval" $monitoring_interval "scalar") (serialize-qp "MonitoringRoleArn" $monitoring_role_arn "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "PerformanceInsightsRetentionPeriod" $performance_insights_retention_period "scalar") (serialize-qp "ServerlessV2ScalingConfiguration" $serverless_v2_scaling_configuration "multi") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "ManageMasterUserPassword" $manage_master_user_password "scalar") (serialize-qp "RotateMasterUserPassword" $rotate_master_user_password "scalar") (serialize-qp "MasterUserSecretKmsKeyId" $master_user_secret_kms_key_id "scalar") (serialize-qp "EngineMode" $engine_mode "scalar") (serialize-qp "AllowEngineModeChange" $allow_engine_mode_change "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8003,7 +8003,7 @@ export def "api create-modify-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8045,7 +8045,7 @@ export def "api get-modify-db-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterEndpointIdentifier: record, DBClusterIdentifier: record, DBClusterEndpointResourceIdentifier: record, Endpoint: record, Status: record, EndpointType: record, CustomEndpointType: record, StaticMembers: record, ExcludedMembers: record, DBClusterEndpointArn: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterEndpointIdentifier" $db_cluster_endpoint_identifier "scalar") (serialize-qp "EndpointType" $endpoint_type "scalar") (serialize-qp "StaticMembers" $static_members "multi") (serialize-qp "ExcludedMembers" $excluded_members "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8081,7 +8081,7 @@ export def "api create-modify-db-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterEndpointIdentifier: record, DBClusterIdentifier: record, DBClusterEndpointResourceIdentifier: record, Endpoint: record, Status: record, EndpointType: record, CustomEndpointType: record, StaticMembers: record, ExcludedMembers: record, DBClusterEndpointArn: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8121,7 +8121,7 @@ export def "api get-modify-db-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterParameterGroupName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8157,7 +8157,7 @@ export def "api create-modify-db-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterParameterGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8199,7 +8199,7 @@ export def "api get-modify-db-snapshot-attribute" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "AttributeName" $attribute_name "scalar") (serialize-qp "ValuesToAdd" $values_to_add "multi") (serialize-qp "ValuesToRemove" $values_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8235,7 +8235,7 @@ export def "api create-modify-db-snapshot-attribute" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterSnapshotAttributesResult: record<DBClusterSnapshotIdentifier: record, DBClusterSnapshotAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8325,7 +8325,7 @@ export def "api get-modify-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "DBSecurityGroups" $db_security_groups "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AllowMajorVersionUpgrade" $allow_major_version_upgrade "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "NewDBInstanceIdentifier" $new_db_instance_identifier "scalar") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "TdeCredentialArn" $tde_credential_arn "scalar") (serialize-qp "TdeCredentialPassword" $tde_credential_password "scalar") (serialize-qp "CACertificateIdentifier" $ca_certificate_identifier "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "MonitoringInterval" $monitoring_interval "scalar") (serialize-qp "DBPortNumber" $db_port_number "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "MonitoringRoleArn" $monitoring_role_arn "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "PromotionTier" $promotion_tier "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "PerformanceInsightsRetentionPeriod" $performance_insights_retention_period "scalar") (serialize-qp "CloudwatchLogsExportConfiguration" $cloudwatch_logs_export_configuration "multi") (serialize-qp "ProcessorFeatures" $processor_features "multi") (serialize-qp "UseDefaultProcessorFeatures" $use_default_processor_features "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "MaxAllocatedStorage" $max_allocated_storage "scalar") (serialize-qp "CertificateRotationRestart" $certificate_rotation_restart "scalar") (serialize-qp "ReplicaMode" $replica_mode "scalar") (serialize-qp "EnableCustomerOwnedIp" $enable_customer_owned_ip "scalar") (serialize-qp "AwsBackupRecoveryPointArn" $aws_backup_recovery_point_arn "scalar") (serialize-qp "AutomationMode" $automation_mode "scalar") (serialize-qp "ResumeFullAutomationModeMinutes" $resume_full_automation_mode_minutes "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "StorageThroughput" $storage_throughput "scalar") (serialize-qp "ManageMasterUserPassword" $manage_master_user_password "scalar") (serialize-qp "RotateMasterUserPassword" $rotate_master_user_password "scalar") (serialize-qp "MasterUserSecretKmsKeyId" $master_user_secret_kms_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8361,7 +8361,7 @@ export def "api create-modify-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8401,7 +8401,7 @@ export def "api get-modify-db-parameter-group-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBParameterGroupName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8437,7 +8437,7 @@ export def "api create-modify-db-parameter-group-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBParameterGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8483,7 +8483,7 @@ export def "api get-modify-db-proxy" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxy: record<DBProxyName: record, DBProxyArn: record, Status: record, EngineFamily: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Auth: record, RoleArn: record, Endpoint: record, RequireTLS: record, IdleClientTimeout: record, DebugLogging: record, CreatedDate: record, UpdatedDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "NewDBProxyName" $new_db_proxy_name "scalar") (serialize-qp "Auth" $qp_auth "multi") (serialize-qp "RequireTLS" $require_tls "scalar") (serialize-qp "IdleClientTimeout" $idle_client_timeout "scalar") (serialize-qp "DebugLogging" $debug_logging "scalar") (serialize-qp "RoleArn" $role_arn "scalar") (serialize-qp "SecurityGroups" $security_groups "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8519,7 +8519,7 @@ export def "api create-modify-db-proxy" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxy: record<DBProxyName: record, DBProxyArn: record, Status: record, EngineFamily: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Auth: record, RoleArn: record, Endpoint: record, RequireTLS: record, IdleClientTimeout: record, DebugLogging: record, CreatedDate: record, UpdatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8560,7 +8560,7 @@ export def "api get-modify-db-proxy-endpoint" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxyEndpoint: record<DBProxyEndpointName: record, DBProxyEndpointArn: record, DBProxyName: record, Status: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Endpoint: record, CreatedDate: record, TargetRole: record, IsDefault: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyEndpointName" $db_proxy_endpoint_name "scalar") (serialize-qp "NewDBProxyEndpointName" $new_db_proxy_endpoint_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8596,7 +8596,7 @@ export def "api create-modify-db-proxy-endpoint" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxyEndpoint: record<DBProxyEndpointName: record, DBProxyEndpointArn: record, DBProxyName: record, Status: record, VpcId: record, VpcSecurityGroupIds: record, VpcSubnetIds: record, Endpoint: record, CreatedDate: record, TargetRole: record, IsDefault: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8638,7 +8638,7 @@ export def "api get-modify-db-proxy-target-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxyTargetGroup: record<DBProxyName: record, TargetGroupName: record, TargetGroupArn: record, IsDefault: record, Status: record, ConnectionPoolConfig: record<MaxConnectionsPercent: record, MaxIdleConnectionsPercent: record, ConnectionBorrowTimeout: record, SessionPinningFilters: record, InitQuery: record>, CreatedDate: record, UpdatedDate: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "TargetGroupName" $target_group_name "scalar") (serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "ConnectionPoolConfig" $connection_pool_config "multi") (serialize-qp "NewName" $new_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8674,7 +8674,7 @@ export def "api create-modify-db-proxy-target-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxyTargetGroup: record<DBProxyName: record, TargetGroupName: record, TargetGroupArn: record, IsDefault: record, Status: record, ConnectionPoolConfig: record<MaxConnectionsPercent: record, MaxIdleConnectionsPercent: record, ConnectionBorrowTimeout: record, SessionPinningFilters: record, InitQuery: record>, CreatedDate: record, UpdatedDate: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8715,7 +8715,7 @@ export def "api get-modify-db-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8751,7 +8751,7 @@ export def "api create-modify-db-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSnapshot: record<DBSnapshotIdentifier: record, DBInstanceIdentifier: record, SnapshotCreateTime: record, Engine: record, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, EngineVersion: record, LicenseModel: record, SnapshotType: record, Iops: record, OptionGroupName: record, PercentProgress: record, SourceRegion: record, SourceDBSnapshotIdentifier: record, StorageType: record, TdeCredentialArn: record, Encrypted: record, KmsKeyId: record, DBSnapshotArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, ProcessorFeatures: record, DbiResourceId: record, TagList: list<record>, OriginalSnapshotCreateTime: record, SnapshotDatabaseTime: record, SnapshotTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8793,7 +8793,7 @@ export def "api get-modify-db-snapshot-attribute-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSnapshotAttributesResult: record<DBSnapshotIdentifier: record, DBSnapshotAttributes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "AttributeName" $attribute_name "scalar") (serialize-qp "ValuesToAdd" $values_to_add "multi") (serialize-qp "ValuesToRemove" $values_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8829,7 +8829,7 @@ export def "api create-modify-db-snapshot-attribute-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSnapshotAttributesResult: record<DBSnapshotIdentifier: record, DBSnapshotAttributes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8870,7 +8870,7 @@ export def "api get-modify-db-subnet-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "DBSubnetGroupDescription" $db_subnet_group_description "scalar") (serialize-qp "SubnetIds" $subnet_ids "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8906,7 +8906,7 @@ export def "api create-modify-db-subnet-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8949,7 +8949,7 @@ export def "api get-modify-event-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SnsTopicArn" $sns_topic_arn "scalar") (serialize-qp "SourceType" $source_type "scalar") (serialize-qp "EventCategories" $event_categories "multi") (serialize-qp "Enabled" $enabled "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -8985,7 +8985,7 @@ export def "api create-modify-event-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9028,7 +9028,7 @@ export def "api get-modify-global" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "NewGlobalClusterIdentifier" $new_global_cluster_identifier "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AllowMajorVersionUpgrade" $allow_major_version_upgrade "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9064,7 +9064,7 @@ export def "api create-modify-global" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9106,7 +9106,7 @@ export def "api get-modify-option-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<OptionGroup: record<OptionGroupName: record, OptionGroupDescription: record, EngineName: record, MajorEngineVersion: record, Options: record, AllowsVpcAndNonVpcInstanceMemberships: record, VpcId: record, OptionGroupArn: record, SourceOptionGroup: record, SourceAccountId: record, CopyTimestamp: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "OptionsToInclude" $options_to_include "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9142,7 +9142,7 @@ export def "api create-modify-option-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<OptionGroup: record<OptionGroupName: record, OptionGroupDescription: record, EngineName: record, MajorEngineVersion: record, Options: record, AllowsVpcAndNonVpcInstanceMemberships: record, VpcId: record, OptionGroupArn: record, SourceOptionGroup: record, SourceAccountId: record, CopyTimestamp: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9183,7 +9183,7 @@ export def "api get-promote-replica" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9219,7 +9219,7 @@ export def "api create-promote-get-replica" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9258,7 +9258,7 @@ export def "api get-promote-replica-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9294,7 +9294,7 @@ export def "api create-promote-get-replica-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9336,7 +9336,7 @@ export def "api get-purchase-reserved-db-instances-offering" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ReservedDBInstance: record<ReservedDBInstanceId: record, ReservedDBInstancesOfferingId: record, DBInstanceClass: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CurrencyCode: record, DBInstanceCount: record, ProductDescription: record, OfferingType: record, MultiAZ: record, State: record, RecurringCharges: record, ReservedDBInstanceArn: record, LeaseId: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ReservedDBInstancesOfferingId" $reserved_db_instances_offering_id "scalar") (serialize-qp "ReservedDBInstanceId" $reserved_db_instance_id "scalar") (serialize-qp "DBInstanceCount" $db_instance_count "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9372,7 +9372,7 @@ export def "api create-purchase-reserved-db-instances-offering" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ReservedDBInstance: record<ReservedDBInstanceId: record, ReservedDBInstancesOfferingId: record, DBInstanceClass: record, StartTime: record, Duration: record, FixedPrice: record, UsagePrice: record, CurrencyCode: record, DBInstanceCount: record, ProductDescription: record, OfferingType: record, MultiAZ: record, State: record, RecurringCharges: record, ReservedDBInstanceArn: record, LeaseId: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9411,7 +9411,7 @@ export def "api get-reboot-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9447,7 +9447,7 @@ export def "api create-reboot-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9487,7 +9487,7 @@ export def "api get-reboot-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "ForceFailover" $force_failover "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9523,7 +9523,7 @@ export def "api create-reboot-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9565,7 +9565,7 @@ export def "api get-create-db-proxy-targets" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBProxyTargets: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBProxyName" $db_proxy_name "scalar") (serialize-qp "TargetGroupName" $target_group_name "scalar") (serialize-qp "DBInstanceIdentifiers" $db_instance_identifiers "multi") (serialize-qp "DBClusterIdentifiers" $db_cluster_identifiers "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9601,7 +9601,7 @@ export def "api create-db-proxy-targets" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBProxyTargets: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9641,7 +9641,7 @@ export def "api get-delete-from-global" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "GlobalClusterIdentifier" $global_cluster_identifier "scalar") (serialize-qp "DbClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9677,7 +9677,7 @@ export def "api create-delete-from-global" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<GlobalCluster: record<GlobalClusterIdentifier: record, GlobalClusterResourceId: record, GlobalClusterArn: record, Status: record, Engine: record, EngineVersion: record, DatabaseName: record, StorageEncrypted: record, DeletionProtection: record, GlobalClusterMembers: record, FailoverState: record<Status: record, FromDbClusterArn: record, ToDbClusterArn: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9871,7 +9871,7 @@ export def "api get-delete-source-identifier-from-subscription" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SubscriptionName" $subscription_name "scalar") (serialize-qp "SourceIdentifier" $source_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -9907,7 +9907,7 @@ export def "api create-delete-source-identifier-from-subscription" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EventSubscription: record<CustomerAwsId: record, CustSubscriptionId: record, SnsTopicArn: record, Status: record, SubscriptionCreationTime: record, SourceType: record, SourceIdsList: record, EventCategoriesList: record, Enabled: record, EventSubscriptionArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10024,7 +10024,7 @@ export def "api get-reset-db-parameter-group" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBClusterParameterGroupName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "ResetAllParameters" $reset_all_parameters "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10060,7 +10060,7 @@ export def "api create-reset-db-parameter-group" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBClusterParameterGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10101,7 +10101,7 @@ export def "api get-reset-db-parameter-group-1" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBParameterGroupName: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "ResetAllParameters" $reset_all_parameters "scalar") (serialize-qp "Parameters" $parameters "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10137,7 +10137,7 @@ export def "api create-reset-db-parameter-group-1" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBParameterGroupName: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10210,7 +10210,7 @@ export def "api get-restore-db-from-s3" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "CharacterSetName" $character_set_name "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "MasterUsername" $master_username "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "SourceEngine" $source_engine "scalar") (serialize-qp "SourceEngineVersion" $source_engine_version "scalar") (serialize-qp "S3BucketName" $s3_bucket_name "scalar") (serialize-qp "S3Prefix" $s3_prefix "scalar") (serialize-qp "S3IngestionRoleArn" $s3_ingestion_role_arn "scalar") (serialize-qp "BacktrackWindow" $backtrack_window "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "ServerlessV2ScalingConfiguration" $serverless_v2_scaling_configuration "multi") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "ManageMasterUserPassword" $manage_master_user_password "scalar") (serialize-qp "MasterUserSecretKmsKeyId" $master_user_secret_kms_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10246,7 +10246,7 @@ export def "api create-restore-db-from-s3" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10312,7 +10312,7 @@ export def "api get-restore-db-from-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AvailabilityZones" $availability_zones "multi") (serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "SnapshotIdentifier" $snapshot_identifier "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "DatabaseName" $database_name "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "BacktrackWindow" $backtrack_window "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "EngineMode" $engine_mode "scalar") (serialize-qp "ScalingConfiguration" $scaling_configuration "multi") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "DBClusterInstanceClass" $db_cluster_instance_class "scalar") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "ServerlessV2ScalingConfiguration" $serverless_v2_scaling_configuration "multi") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10348,7 +10348,7 @@ export def "api create-restore-db-from-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10413,7 +10413,7 @@ export def "api get-restore-db-to-point-in-time" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "RestoreType" $restore_type "scalar") (serialize-qp "SourceDBClusterIdentifier" $source_db_cluster_identifier "scalar") (serialize-qp "RestoreToTime" $restore_to_time "scalar") (serialize-qp "UseLatestRestorableTime" $use_latest_restorable_time "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "BacktrackWindow" $backtrack_window "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "DBClusterParameterGroupName" $db_cluster_parameter_group_name "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "ScalingConfiguration" $scaling_configuration "multi") (serialize-qp "EngineMode" $engine_mode "scalar") (serialize-qp "DBClusterInstanceClass" $db_cluster_instance_class "scalar") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "ServerlessV2ScalingConfiguration" $serverless_v2_scaling_configuration "multi") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10449,7 +10449,7 @@ export def "api create-restore-db-to-point-in-time" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10522,7 +10522,7 @@ export def "api get-restore-db-instance-from-db-snapshot" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "DBName" $db_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "TdeCredentialArn" $tde_credential_arn "scalar") (serialize-qp "TdeCredentialPassword" $tde_credential_password "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Domain" $domain "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "ProcessorFeatures" $processor_features "multi") (serialize-qp "UseDefaultProcessorFeatures" $use_default_processor_features "scalar") (serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "EnableCustomerOwnedIp" $enable_customer_owned_ip "scalar") (serialize-qp "CustomIamInstanceProfile" $custom_iam_instance_profile "scalar") (serialize-qp "BackupTarget" $backup_target "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "StorageThroughput" $storage_throughput "scalar") (serialize-qp "DBClusterSnapshotIdentifier" $db_cluster_snapshot_identifier "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10558,7 +10558,7 @@ export def "api create-restore-db-instance-from-db-snapshot" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10644,7 +10644,7 @@ export def "api get-restore-db-instance-from-s3" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBName" $db_name "scalar") (serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "MasterUsername" $master_username "scalar") (serialize-qp "MasterUserPassword" $master_user_password "scalar") (serialize-qp "DBSecurityGroups" $db_security_groups "multi") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "PreferredMaintenanceWindow" $preferred_maintenance_window "scalar") (serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "PreferredBackupWindow" $preferred_backup_window "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "EngineVersion" $engine_version "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "StorageEncrypted" $storage_encrypted "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "MonitoringInterval" $monitoring_interval "scalar") (serialize-qp "MonitoringRoleArn" $monitoring_role_arn "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "SourceEngine" $source_engine "scalar") (serialize-qp "SourceEngineVersion" $source_engine_version "scalar") (serialize-qp "S3BucketName" $s3_bucket_name "scalar") (serialize-qp "S3Prefix" $s3_prefix "scalar") (serialize-qp "S3IngestionRoleArn" $s3_ingestion_role_arn "scalar") (serialize-qp "EnablePerformanceInsights" $enable_performance_insights "scalar") (serialize-qp "PerformanceInsightsKMSKeyId" $performance_insights_kms_key_id "scalar") (serialize-qp "PerformanceInsightsRetentionPeriod" $performance_insights_retention_period "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "ProcessorFeatures" $processor_features "multi") (serialize-qp "UseDefaultProcessorFeatures" $use_default_processor_features "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "MaxAllocatedStorage" $max_allocated_storage "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "StorageThroughput" $storage_throughput "scalar") (serialize-qp "ManageMasterUserPassword" $manage_master_user_password "scalar") (serialize-qp "MasterUserSecretKmsKeyId" $master_user_secret_kms_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10680,7 +10680,7 @@ export def "api create-restore-db-instance-from-s3" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10757,7 +10757,7 @@ export def "api get-restore-db-instance-to-point-in-time" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBInstanceIdentifier" $source_db_instance_identifier "scalar") (serialize-qp "TargetDBInstanceIdentifier" $target_db_instance_identifier "scalar") (serialize-qp "RestoreTime" $restore_time "scalar") (serialize-qp "UseLatestRestorableTime" $use_latest_restorable_time "scalar") (serialize-qp "DBInstanceClass" $db_instance_class "scalar") (serialize-qp "Port" $port "scalar") (serialize-qp "AvailabilityZone" $availability_zone "scalar") (serialize-qp "DBSubnetGroupName" $db_subnet_group_name "scalar") (serialize-qp "MultiAZ" $multi_az "scalar") (serialize-qp "PubliclyAccessible" $publicly_accessible "scalar") (serialize-qp "AutoMinorVersionUpgrade" $auto_minor_version_upgrade "scalar") (serialize-qp "LicenseModel" $license_model "scalar") (serialize-qp "DBName" $db_name "scalar") (serialize-qp "Engine" $engine "scalar") (serialize-qp "Iops" $iops "scalar") (serialize-qp "OptionGroupName" $option_group_name "scalar") (serialize-qp "CopyTagsToSnapshot" $copy_tags_to_snapshot "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "StorageType" $storage_type "scalar") (serialize-qp "TdeCredentialArn" $tde_credential_arn "scalar") (serialize-qp "TdeCredentialPassword" $tde_credential_password "scalar") (serialize-qp "VpcSecurityGroupIds" $vpc_security_group_ids "multi") (serialize-qp "Domain" $domain "scalar") (serialize-qp "DomainIAMRoleName" $domain_iam_role_name "scalar") (serialize-qp "EnableIAMDatabaseAuthentication" $enable_iam_database_authentication "scalar") (serialize-qp "EnableCloudwatchLogsExports" $enable_cloudwatch_logs_exports "multi") (serialize-qp "ProcessorFeatures" $processor_features "multi") (serialize-qp "UseDefaultProcessorFeatures" $use_default_processor_features "scalar") (serialize-qp "DBParameterGroupName" $db_parameter_group_name "scalar") (serialize-qp "DeletionProtection" $deletion_protection "scalar") (serialize-qp "SourceDbiResourceId" $source_dbi_resource_id "scalar") (serialize-qp "MaxAllocatedStorage" $max_allocated_storage "scalar") (serialize-qp "SourceDBInstanceAutomatedBackupsArn" $source_db_instance_automated_backups_arn "scalar") (serialize-qp "EnableCustomerOwnedIp" $enable_customer_owned_ip "scalar") (serialize-qp "CustomIamInstanceProfile" $custom_iam_instance_profile "scalar") (serialize-qp "BackupTarget" $backup_target "scalar") (serialize-qp "NetworkType" $network_type "scalar") (serialize-qp "StorageThroughput" $storage_throughput "scalar") (serialize-qp "AllocatedStorage" $allocated_storage "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10793,7 +10793,7 @@ export def "api create-restore-db-instance-to-point-in-time" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10836,7 +10836,7 @@ export def "api get-delete-db-security-group-ingress" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBSecurityGroup: record<OwnerId: record, DBSecurityGroupName: record, DBSecurityGroupDescription: record, VpcId: record, EC2SecurityGroups: record, IPRanges: record, DBSecurityGroupArn: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBSecurityGroupName" $db_security_group_name "scalar") (serialize-qp "CIDRIP" $cidrip "scalar") (serialize-qp "EC2SecurityGroupName" $ec2_security_group_name "scalar") (serialize-qp "EC2SecurityGroupId" $ec2_security_group_id "scalar") (serialize-qp "EC2SecurityGroupOwnerId" $ec2_security_group_owner_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10872,7 +10872,7 @@ export def "api create-delete-db-security-group-ingress" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBSecurityGroup: record<OwnerId: record, DBSecurityGroupName: record, DBSecurityGroupDescription: record, VpcId: record, EC2SecurityGroups: record, IPRanges: record, DBSecurityGroupArn: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10915,7 +10915,7 @@ export def "api get-start-activity-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<KmsKeyId: record, KinesisStreamName: record, Status: record, Mode: record, ApplyImmediately: record, EngineNativeAuditFieldsIncluded: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "Mode" $mode "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "EngineNativeAuditFieldsIncluded" $engine_native_audit_fields_included "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -10951,7 +10951,7 @@ export def "api create-start-activity-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<KmsKeyId: record, KinesisStreamName: record, Status: record, Mode: record, ApplyImmediately: record, EngineNativeAuditFieldsIncluded: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10990,7 +10990,7 @@ export def "api get-start-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11026,7 +11026,7 @@ export def "api create-start-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11065,7 +11065,7 @@ export def "api get-start-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11101,7 +11101,7 @@ export def "api create-start-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11143,7 +11143,7 @@ export def "api get-start-db-instance-automated-backups-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstanceAutomatedBackup: record<DBInstanceArn: record, DbiResourceId: record, Region: record, DBInstanceIdentifier: record, RestoreWindow: record<EarliestTime: record, LatestTime: record>, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, Engine: record, EngineVersion: record, LicenseModel: record, Iops: record, OptionGroupName: record, TdeCredentialArn: record, Encrypted: record, StorageType: record, KmsKeyId: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, BackupRetentionPeriod: record, DBInstanceAutomatedBackupsArn: record, DBInstanceAutomatedBackupsReplications: record, BackupTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBInstanceArn" $source_db_instance_arn "scalar") (serialize-qp "BackupRetentionPeriod" $backup_retention_period "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "PreSignedUrl" $pre_signed_url "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11179,7 +11179,7 @@ export def "api create-start-db-instance-automated-backups-replication" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstanceAutomatedBackup: record<DBInstanceArn: record, DbiResourceId: record, Region: record, DBInstanceIdentifier: record, RestoreWindow: record<EarliestTime: record, LatestTime: record>, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, Engine: record, EngineVersion: record, LicenseModel: record, Iops: record, OptionGroupName: record, TdeCredentialArn: record, Encrypted: record, StorageType: record, KmsKeyId: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, BackupRetentionPeriod: record, DBInstanceAutomatedBackupsArn: record, DBInstanceAutomatedBackupsReplications: record, BackupTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11224,7 +11224,7 @@ export def "api get-start-export-task" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ExportTaskIdentifier: record, SourceArn: record, ExportOnly: record, SnapshotTime: record, TaskStartTime: record, TaskEndTime: record, S3Bucket: record, S3Prefix: record, IamRoleArn: record, KmsKeyId: record, Status: record, PercentProgress: record, TotalExtractedDataInGB: record, FailureCause: record, WarningMessage: record, SourceType: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ExportTaskIdentifier" $export_task_identifier "scalar") (serialize-qp "SourceArn" $source_arn "scalar") (serialize-qp "S3BucketName" $s3_bucket_name "scalar") (serialize-qp "IamRoleArn" $iam_role_arn "scalar") (serialize-qp "KmsKeyId" $kms_key_id "scalar") (serialize-qp "S3Prefix" $s3_prefix "scalar") (serialize-qp "ExportOnly" $export_only "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11260,7 +11260,7 @@ export def "api create-start-export-task" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ExportTaskIdentifier: record, SourceArn: record, ExportOnly: record, SnapshotTime: record, TaskStartTime: record, TaskEndTime: record, S3Bucket: record, S3Prefix: record, IamRoleArn: record, KmsKeyId: record, Status: record, PercentProgress: record, TotalExtractedDataInGB: record, FailureCause: record, WarningMessage: record, SourceType: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11300,7 +11300,7 @@ export def "api get-stop-activity-stream" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<KmsKeyId: record, KinesisStreamName: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "ApplyImmediately" $apply_immediately "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11336,7 +11336,7 @@ export def "api create-stop-activity-stream" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<KmsKeyId: record, KinesisStreamName: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11375,7 +11375,7 @@ export def "api get-stop-db" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBClusterIdentifier" $db_cluster_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11411,7 +11411,7 @@ export def "api create-stop-db" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBCluster: record<AllocatedStorage: record, AvailabilityZones: record, BackupRetentionPeriod: record, CharacterSetName: record, DatabaseName: record, DBClusterIdentifier: record, DBClusterParameterGroup: record, DBSubnetGroup: record, Status: record, AutomaticRestartTime: record, PercentProgress: record, EarliestRestorableTime: record, Endpoint: record, ReaderEndpoint: record, CustomEndpoints: record, MultiAZ: record, Engine: record, EngineVersion: record, LatestRestorableTime: record, Port: record, MasterUsername: record, DBClusterOptionGroupMemberships: record, PreferredBackupWindow: record, PreferredMaintenanceWindow: record, ReplicationSourceIdentifier: record, ReadReplicaIdentifiers: record, DBClusterMembers: record, VpcSecurityGroups: record, HostedZoneId: record, StorageEncrypted: record, KmsKeyId: record, DbClusterResourceId: record, DBClusterArn: record, AssociatedRoles: record, IAMDatabaseAuthenticationEnabled: record, CloneGroupId: record, ClusterCreateTime: record, EarliestBacktrackTime: record, BacktrackWindow: record, BacktrackConsumedChangeRecords: record, EnabledCloudwatchLogsExports: record, Capacity: record, EngineMode: record, ScalingConfigurationInfo: record<MinCapacity: record, MaxCapacity: record, AutoPause: record, SecondsUntilAutoPause: record, TimeoutAction: record, SecondsBeforeTimeout: record>, DeletionProtection: record, HttpEndpointEnabled: record, ActivityStreamMode: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, CopyTagsToSnapshot: record, CrossAccountClone: record, DomainMemberships: record, TagList: list<record>, GlobalWriteForwardingStatus: record, GlobalWriteForwardingRequested: record, PendingModifiedValues: record<PendingCloudwatchLogsExports: record, DBClusterIdentifier: record, MasterUserPassword: record, IAMDatabaseAuthenticationEnabled: record, EngineVersion: record, BackupRetentionPeriod: record, AllocatedStorage: record, Iops: record>, DBClusterInstanceClass: record, StorageType: record, Iops: record, PubliclyAccessible: record, AutoMinorVersionUpgrade: record, MonitoringInterval: record, MonitoringRoleArn: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, ServerlessV2ScalingConfiguration: record<MinCapacity: record, MaxCapacity: record>, NetworkType: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11451,7 +11451,7 @@ export def "api get-stop-db-instance" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "DBSnapshotIdentifier" $db_snapshot_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11487,7 +11487,7 @@ export def "api create-stop-db-instance" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11526,7 +11526,7 @@ export def "api get-stop-db-instance-automated-backups-replication" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstanceAutomatedBackup: record<DBInstanceArn: record, DbiResourceId: record, Region: record, DBInstanceIdentifier: record, RestoreWindow: record<EarliestTime: record, LatestTime: record>, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, Engine: record, EngineVersion: record, LicenseModel: record, Iops: record, OptionGroupName: record, TdeCredentialArn: record, Encrypted: record, StorageType: record, KmsKeyId: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, BackupRetentionPeriod: record, DBInstanceAutomatedBackupsArn: record, DBInstanceAutomatedBackupsReplications: record, BackupTarget: record, StorageThroughput: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "SourceDBInstanceArn" $source_db_instance_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11562,7 +11562,7 @@ export def "api create-stop-db-instance-automated-backups-replication" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstanceAutomatedBackup: record<DBInstanceArn: record, DbiResourceId: record, Region: record, DBInstanceIdentifier: record, RestoreWindow: record<EarliestTime: record, LatestTime: record>, AllocatedStorage: record, Status: record, Port: record, AvailabilityZone: record, VpcId: record, InstanceCreateTime: record, MasterUsername: record, Engine: record, EngineVersion: record, LicenseModel: record, Iops: record, OptionGroupName: record, TdeCredentialArn: record, Encrypted: record, StorageType: record, KmsKeyId: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, BackupRetentionPeriod: record, DBInstanceAutomatedBackupsArn: record, DBInstanceAutomatedBackupsReplications: record, BackupTarget: record, StorageThroughput: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11602,7 +11602,7 @@ export def "api get-switchover-blue-green-deployment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<BlueGreenDeployment: record<BlueGreenDeploymentIdentifier: record, BlueGreenDeploymentName: record, Source: record, Target: record, SwitchoverDetails: record, Tasks: record, Status: record, StatusDetails: record, CreateTime: record, DeleteTime: record, TagList: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "BlueGreenDeploymentIdentifier" $blue_green_deployment_identifier "scalar") (serialize-qp "SwitchoverTimeout" $switchover_timeout "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11638,7 +11638,7 @@ export def "api create-switchover-blue-green-deployment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<BlueGreenDeployment: record<BlueGreenDeploymentIdentifier: record, BlueGreenDeploymentName: record, Source: record, Target: record, SwitchoverDetails: record, Tasks: record, Status: record, StatusDetails: record, CreateTime: record, DeleteTime: record, TagList: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11677,7 +11677,7 @@ export def "api get-switchover-replica" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "DBInstanceIdentifier" $db_instance_identifier "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -11713,7 +11713,7 @@ export def "api create-switchover-get-replica" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<DBInstance: record<DBInstanceIdentifier: record, DBInstanceClass: record, Engine: record, DBInstanceStatus: record, AutomaticRestartTime: record, MasterUsername: record, DBName: record, Endpoint: record<Address: record, Port: record, HostedZoneId: record>, AllocatedStorage: record, InstanceCreateTime: record, PreferredBackupWindow: record, BackupRetentionPeriod: record, DBSecurityGroups: record, VpcSecurityGroups: record, DBParameterGroups: record, AvailabilityZone: record, DBSubnetGroup: record<DBSubnetGroupName: record, DBSubnetGroupDescription: record, VpcId: record, SubnetGroupStatus: record, Subnets: record, DBSubnetGroupArn: record, SupportedNetworkTypes: record>, PreferredMaintenanceWindow: record, PendingModifiedValues: record<DBInstanceClass: record, AllocatedStorage: record, MasterUserPassword: record, Port: record, BackupRetentionPeriod: record, MultiAZ: record, EngineVersion: record, LicenseModel: record, Iops: record, DBInstanceIdentifier: record, StorageType: record, CACertificateIdentifier: record, DBSubnetGroupName: record, PendingCloudwatchLogsExports: record, ProcessorFeatures: record, IAMDatabaseAuthenticationEnabled: record, AutomationMode: record, ResumeFullAutomationModeTime: record, StorageThroughput: record>, LatestRestorableTime: record, MultiAZ: record, EngineVersion: record, AutoMinorVersionUpgrade: record, ReadReplicaSourceDBInstanceIdentifier: record, ReadReplicaDBInstanceIdentifiers: record, ReadReplicaDBClusterIdentifiers: record, ReplicaMode: record, LicenseModel: record, Iops: record, OptionGroupMemberships: record, CharacterSetName: record, NcharCharacterSetName: record, SecondaryAvailabilityZone: record, PubliclyAccessible: record, StatusInfos: record, StorageType: record, TdeCredentialArn: record, DbInstancePort: record, DBClusterIdentifier: record, StorageEncrypted: record, KmsKeyId: record, DbiResourceId: record, CACertificateIdentifier: record, DomainMemberships: record, CopyTagsToSnapshot: record, MonitoringInterval: record, EnhancedMonitoringResourceArn: record, MonitoringRoleArn: record, PromotionTier: record, DBInstanceArn: record, Timezone: record, IAMDatabaseAuthenticationEnabled: record, PerformanceInsightsEnabled: record, PerformanceInsightsKMSKeyId: record, PerformanceInsightsRetentionPeriod: record, EnabledCloudwatchLogsExports: record, ProcessorFeatures: record, DeletionProtection: record, AssociatedRoles: record, ListenerEndpoint: record<Address: record, Port: record, HostedZoneId: record>, MaxAllocatedStorage: record, TagList: list<record>, DBInstanceAutomatedBackupsReplications: record, CustomerOwnedIpEnabled: record, AwsBackupRecoveryPointArn: record, ActivityStreamStatus: record, ActivityStreamKmsKeyId: record, ActivityStreamKinesisStreamName: record, ActivityStreamMode: record, ActivityStreamEngineNativeAuditFieldsIncluded: record, AutomationMode: record, ResumeFullAutomationModeTime: record, CustomIamInstanceProfile: record, BackupTarget: record, NetworkType: record, ActivityStreamPolicyStatus: record, StorageThroughput: record, DBSystemId: record, MasterUserSecret: record<SecretArn: record, SecretStatus: record, KmsKeyId: record>, CertificateDetails: record<CAIdentifier: record, ValidTill: record>, ReadReplicaSourceDBClusterIdentifier: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -144,8 +154,8 @@ export def commands []: nothing -> table {
 # --consentArtifact shape: {consent: record, signature: record}
 export def "hscer-certificate create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-apikey: string # Auth token for apiKey (X-APISETU-APIKEY)
+  --token-clientid: string # Auth token for clientId (X-APISETU-CLIENTID)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -158,7 +168,7 @@ export def "hscer-certificate create" [
   txn_id: string # A unique transaction id for this request in UUID format. It is used for tracking the request. (format: uuid, e.g. f7f1469c-29b0-4325-9dfc-c567200a70f7)
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-apisetu-apikey"))
+  let auth = (merge-auth [(build-auth ($token_apikey | default ($env | get -o TRIPURA_STATE_BOARD_OF_SECONDARY_EDUCATION_TRIPURA_APIKEY_TOKEN | default "")) "x-apisetu-apikey") (build-auth ($token_clientid | default ($env | get -o TRIPURA_STATE_BOARD_OF_SECONDARY_EDUCATION_TRIPURA_CLIENTID_TOKEN | default "")) "x-apisetu-clientid")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/hscer/certificate")
   let req_body = {"certificateParameters": $certificate_parameters, "consentArtifact": $consent_artifact, "format": $format, "txnId": $txn_id} | compact

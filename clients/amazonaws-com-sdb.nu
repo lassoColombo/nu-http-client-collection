@@ -529,7 +529,7 @@ export def "api get-domain-metadata" [
   --domain-name: string # The name of the domain for which to display the metadata of.
   --action-2: string@action-completer-5 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<ItemCount: record, ItemNamesSizeBytes: record, AttributeNameCount: record, AttributeNamesSizeBytes: record, AttributeValueCount: record, AttributeValuesSizeBytes: record, Timestamp: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -563,7 +563,7 @@ export def "api create-domain-metadata" [
   --action-2: string@action-completer-5 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<ItemCount: record, ItemNamesSizeBytes: record, AttributeNameCount: record, AttributeNamesSizeBytes: record, AttributeValueCount: record, AttributeValuesSizeBytes: record, Timestamp: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -603,7 +603,7 @@ export def "api get-attributes" [
   --consistent-read: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If true, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
   --action-2: string@action-completer-6 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<Attributes: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "DomainName" $domain_name "scalar") (serialize-qp "ItemName" $item_name "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -637,7 +637,7 @@ export def "api create-get-attributes" [
   --action-2: string@action-completer-6 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<Attributes: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -675,7 +675,7 @@ export def "api get-list-domains" [
   --next-token: string # A string informing Amazon SimpleDB where to start the next list of domain names.
   --action-2: string@action-completer-7 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<DomainNames: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "MaxNumberOfDomains" $max_number_of_domains "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -711,7 +711,7 @@ export def "api create-list-domains" [
   --action-2: string@action-completer-7 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<DomainNames: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -824,7 +824,7 @@ export def "api get-select" [
   --consistent-read: oneof<nothing, bool> # Determines whether or not strong consistency should be enforced when data is read from SimpleDB. If true, any data previously written to SimpleDB will be returned. Otherwise, results will be consistent eventually, and the client may not see data that was written immediately before your read.
   --action-2: string@action-completer-9 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
-]: nothing -> any {
+]: nothing -> record<Items: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "AWSAccessKeyId" $aws_access_key_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "SignatureMethod" $signature_method "scalar") (serialize-qp "SignatureVersion" $signature_version "scalar") (serialize-qp "Timestamp" $timestamp "scalar") (serialize-qp "Version" $version "scalar") (serialize-qp "Signature" $signature "scalar") (serialize-qp "SelectExpression" $select_expression "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "ConsistentRead" $consistent_read "scalar") (serialize-qp "Action" $action_2 "scalar") (serialize-qp "Version" $version_2 "scalar")] | flatten | str join "&"
@@ -859,7 +859,7 @@ export def "api create-select" [
   --action-2: string@action-completer-9 #  (disambiguated-2)
   --version-2: string@version-completer #  (disambiguated-2)
   --body: any
-]: any -> any {
+]: any -> record<Items: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

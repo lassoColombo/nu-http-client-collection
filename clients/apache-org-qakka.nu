@@ -271,7 +271,7 @@ export def "queues-data get-message" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<count: int, message: string, queueMessages: table<contentType: string, createDate: int, data: string, href: string, messageId: string, queueMessageId: string, queueName: string, receivingRegion: string, sendingRegion: string>, queues: table<name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($queue_name | is-empty) { error make --unspanned { msg: "path parameter 'queueName' must be non-empty" } }

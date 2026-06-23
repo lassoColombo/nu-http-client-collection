@@ -171,7 +171,7 @@ export def "campagne get" [
   --rapport-campagne: string@rapport-campagne-completer # Doit valoir "1"
   --date-deb: string # date de debut au format YYYY-MM-DD hh:mm
   --date-fin: string # date de fin au format YYYY-MM-DD hh:mm
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "rapportCampagne" $rapport_campagne "scalar") (serialize-qp "date_deb" $date_deb "scalar") (serialize-qp "date_fin" $date_fin "scalar")] | flatten | str join "&"
@@ -289,7 +289,7 @@ export def "get-listenoire get-liste-noire" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --keyid: string # Clé API (format: string)
   --get-liste-noire: string@get-liste-noire-completer # Doit valoir "1"
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "keyid" $keyid "scalar") (serialize-qp "getListeNoire" $get_liste_noire "scalar")] | flatten | str join "&"

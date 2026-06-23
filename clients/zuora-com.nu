@@ -257,7 +257,7 @@ export def "charge-metrics-data-charge-metrics get" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --hdr-accept: string # Expressed as MIME types that the client is able to understand. Using content negotiation, the server then selects one of the proposals, uses it and informs the client of its choice with the `Content-Type` response header. The possible response MIME types are `application/json-seq` compatible with http://jsonlines.org/, and `text/csv` compatible with RFC 4180. `application/json-seq` is the default response MIME type. If the `Accept` header is not sepecified, or set */*, the response body is returned in application/json-seq MIME type.
-]: nothing -> any {
+]: nothing -> record<amendmentId: string, amendmentType: string, chargeNumber: string, createdOn: string, currency: string, deleted: bool, endDate: string, id: string, invoiceOwnerAccountNumber: string, mrrDiscountAmount: float, mrrGrossAmount: float, mrrNetAmount: float, productId: string, productRatePlanChargeId: string, productRatePlanId: string, ratePlanChargeId: string, startDate: string, subscriptionName: string, subscriptionOwnerAccountNumber: string, tcvDiscountAmount: float, tcvGrossAmount: float, tcvNetAmount: float, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTimestamp" $from_timestamp "scalar") (serialize-qp "toTimestamp" $to_timestamp "scalar")] | flatten | str join "&"
@@ -288,7 +288,7 @@ export def "charge-metrics-data-charge-metrics-discount-allocation-detail get" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --hdr-accept: string # Expressed as MIME types that the client is able to understand. Using content negotiation, the server then selects one of the proposals, uses it and informs the client of its choice with the `Content-Type` response header. The possible response MIME types are `application/json-seq` compatible with http://jsonlines.org/, and `text/csv` compatible with RFC 4180. `application/json-seq` is the default response MIME type. If the `Accept` header is not sepecified, or set */*, the response body is returned in application/json-seq MIME type.
-]: nothing -> any {
+]: nothing -> record<amendmentId: string, amendmentType: string, chargeMetricsId: string, chargeNumber: string, createdOn: string, currency: string, deleted: bool, discountChargeNumber: string, discountMrr: float, discountTcv: float, endDate: string, id: string, invoiceOwnerAccountNumber: string, productId: string, productRatePlanChargeId: string, productRatePlanId: string, ratePlanChargeId: string, startDate: string, subscriptionName: string, subscriptionOwnerAccountNumber: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "fromTimestamp" $from_timestamp "scalar") (serialize-qp "toTimestamp" $to_timestamp "scalar")] | flatten | str join "&"
@@ -323,7 +323,7 @@ export def "events-event-triggers list" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<data: table<active: bool, baseObject: string, condition: string, description: string, eventType: record, id: string>, next: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "baseObject" $base_object "scalar") (serialize-qp "eventTypeName" $event_type_name "scalar") (serialize-qp "active" $active "scalar") (serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar")] | flatten | str join "&"
@@ -359,7 +359,7 @@ export def "events-event-triggers create" [
   condition: string # The JEXL expression to be evaluated against object changes. See above for more information and an example.
   --description: string # The description of the event trigger.
   event_type: record # shape: {description?: string, displayName: string, name: string}
-]: any -> any {
+]: any -> record<active: bool, baseObject: string, condition: string, description: string, eventType: record<description: string, displayName: string, name: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -422,7 +422,7 @@ export def "events-event-triggers get" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<active: bool, baseObject: string, condition: string, description: string, eventType: record<description: string, displayName: string, name: string>, id: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -458,7 +458,7 @@ export def "events-event-triggers update" [
   --condition: string # The JEXL expression to be evaluated against object changes. See above for more information and an example.
   --description: string # The description of the trigger.
   --event-type: record # The type of events to be triggered. — shape: {description?: string, displayName?: string}
-]: any -> any {
+]: any -> record<active: bool, baseObject: string, condition: string, description: string, eventType: record<description: string, displayName: string, name: string>, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -494,7 +494,7 @@ export def "notifications-email-templates get-list" [
   --authorization: string # `Bearer {token}` for a valid OAuth token. Note that you must regenerate the OAuth token after the Custom Events feature is enabled in your Zuora tenant. The OAuth tokens generated before this feature is turned on will not work.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<data: table<active: bool, bccEmailAddress: string, ccEmailAddress: string, ccEmailType: string, createdBy: string, createdOn: string, description: string, emailBody: string, emailSubject: string, encodingType: string, eventTypeName: string, eventTypeNamespace: string, fromEmailAddress: string, fromEmailType: string, fromName: string, id: string, isHtml: bool, name: string, replyToEmailAddress: string, replyToEmailType: string, toEmailAddress: string, toEmailType: string, updatedBy: string, updatedOn: string>, next: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "eventTypeName" $event_type_name "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -542,7 +542,7 @@ export def "notifications-email-templates create" [
   --reply-to-email-type: string@reply-to-email-type-completer # Type of the replyTo email.
   --to-email-address: string # If toEmailType is SpecificEmail, this field is required.
   to_email_type: string@to-email-type-completer # Email receive type. * When EventType is CDC/External and 'ReferenceObjectType' in EventType is associated to Account, toEmailType can be ALL values in enum. * When EventType is CDC/External and 'ReferenceObjectType' in EventType is not associated to Account, toEmailType MUST be TenantAdmin, RunOwner or SpecificEmail. * When EventType is CDC/External and 'ReferenceObjectType' in EventType is EMPTY, toEmailType MUST be TenantAdmin, RunOwner or SpecificEmail.
-]: any -> any {
+]: any -> record<active: bool, bccEmailAddress: string, ccEmailAddress: string, ccEmailType: string, createdBy: string, createdOn: string, description: string, emailBody: string, emailSubject: string, encodingType: string, eventTypeName: string, eventTypeNamespace: string, fromEmailAddress: string, fromEmailType: string, fromName: string, id: string, isHtml: bool, name: string, replyToEmailAddress: string, replyToEmailType: string, toEmailAddress: string, toEmailType: string, updatedBy: string, updatedOn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -604,7 +604,7 @@ export def "notifications-email-templates get" [
   --authorization: string # `Bearer {token}` for a valid OAuth token. Note that you must regenerate the OAuth token after the Custom Events feature is enabled in your Zuora tenant. The OAuth tokens generated before this feature is turned on will not work.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<active: bool, bccEmailAddress: string, ccEmailAddress: string, ccEmailType: string, createdBy: string, createdOn: string, description: string, emailBody: string, emailSubject: string, encodingType: string, eventTypeName: string, eventTypeNamespace: string, fromEmailAddress: string, fromEmailType: string, fromName: string, id: string, isHtml: bool, name: string, replyToEmailAddress: string, replyToEmailType: string, toEmailAddress: string, toEmailType: string, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -651,7 +651,7 @@ export def "notifications-email-templates update" [
   --reply-to-email-type: string@reply-to-email-type-completer # The type of the reply email.
   --to-email-address: string # If toEmailType is SpecificEmail, this field is required.
   --to-email-type: string@to-email-type-completer # Email receive type. * When EventType is CDC/External and 'ReferenceObjectType' in EventType is associated to Account, toEmailType can be ALL values in enum. * When EventType is CDC/External and 'ReferenceObjectType' in EventType is not associated to Account, toEmailType MUST be TenantAdmin, RunOwner or SpecificEmail. * When EventType is CDC/External and 'ReferenceObjectType' in EventType is EMPTY, toEmailType MUST be TenantAdmin, RunOwner or SpecificEmail.
-]: any -> any {
+]: any -> record<active: bool, bccEmailAddress: string, ccEmailAddress: string, ccEmailType: string, createdBy: string, createdOn: string, description: string, emailBody: string, emailSubject: string, encodingType: string, eventTypeName: string, eventTypeNamespace: string, fromEmailAddress: string, fromEmailType: string, fromName: string, id: string, isHtml: bool, name: string, replyToEmailAddress: string, replyToEmailType: string, toEmailAddress: string, toEmailType: string, updatedBy: string, updatedOn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -685,7 +685,7 @@ export def "notifications-history delete-for-account" [
   --authorization: string # `Bearer {token}` for a valid OAuth token. Note that you must regenerate the OAuth token after the Custom Events feature is enabled in your Zuora tenant. The OAuth tokens generated before this feature is turned on will not work.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, createdBy: string, createdOn: int, id: string, status: string, tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "accountId" $account_id "scalar")] | flatten | str join "&"
@@ -716,7 +716,7 @@ export def "notifications-history-tasks get-deletion" [
   --authorization: string # `Bearer {token}` for a valid OAuth token. Note that you must regenerate the OAuth token after the Custom Events feature is enabled in your Zuora tenant. The OAuth tokens generated before this feature is turned on will not work.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, createdBy: string, createdOn: int, id: string, status: string, tenantId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -750,7 +750,7 @@ export def "notifications-notification-definitions get-list" [
   --authorization: string # `Bearer {token}` for a valid OAuth token. Note that you must regenerate the OAuth token after the Custom Events feature is enabled in your Zuora tenant. The OAuth tokens generated before this feature is turned on will not work.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<data: table<active: bool, callout: record, calloutActive: bool, communicationProfileId: string, createdBy: string, createdOn: string, description: string, emailActive: bool, emailTemplateId: string, eventTypeName: string, eventTypeNamespace: string, filterRule: record, filterRuleParams: record, id: string, name: string, updatedBy: string, updatedOn: string>, next: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "start" $start "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "profileId" $profile_id "scalar") (serialize-qp "eventTypeName" $event_type_name "scalar") (serialize-qp "emailTemplateId" $email_template_id "scalar")] | flatten | str join "&"
@@ -793,7 +793,7 @@ export def "notifications-notification-definitions create" [
   --filter-rule: record # shape: {condition: string, description?: string, parameters: record}
   --filter-rule-params: record # The parameter values used to configure the filter rule.
   name: string # The name of the notification definition, unique per communication profile.
-]: any -> any {
+]: any -> record<active: bool, callout: record<active: bool, calloutAuth: record<domain: string, password: string, preemptive: bool, username: string>, calloutBaseurl: string, calloutParams: record, calloutRetry: bool, description: string, eventTypeName: string, httpMethod: string, id: string, name: string, requiredAuth: bool>, calloutActive: bool, communicationProfileId: string, createdBy: string, createdOn: string, description: string, emailActive: bool, emailTemplateId: string, eventTypeName: string, eventTypeNamespace: string, filterRule: record<condition: string, description: string, eventTypeName: string, id: string, parameters: record>, filterRuleParams: record, id: string, name: string, updatedBy: string, updatedOn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -855,7 +855,7 @@ export def "notifications-notification-definitions get" [
   --authorization: string # `Bearer {token}` for a valid OAuth token. Note that you must regenerate the OAuth token after the Custom Events feature is enabled in your Zuora tenant. The OAuth tokens generated before this feature is turned on will not work.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<active: bool, callout: record<active: bool, calloutAuth: record<domain: string, password: string, preemptive: bool, username: string>, calloutBaseurl: string, calloutParams: record, calloutRetry: bool, description: string, eventTypeName: string, httpMethod: string, id: string, name: string, requiredAuth: bool>, calloutActive: bool, communicationProfileId: string, createdBy: string, createdOn: string, description: string, emailActive: bool, emailTemplateId: string, eventTypeName: string, eventTypeNamespace: string, filterRule: record<condition: string, description: string, eventTypeName: string, id: string, parameters: record>, filterRuleParams: record, id: string, name: string, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -897,7 +897,7 @@ export def "notifications-notification-definitions update" [
   --filter-rule: record # shape: {condition: string, description?: string, parameters: record}
   --filter-rule-params: record # The parameter values used to configure the filter rule.
   --name: string # The name of the notification definition, which is unique in the profile.
-]: any -> any {
+]: any -> record<active: bool, callout: record<active: bool, calloutAuth: record<domain: string, password: string, preemptive: bool, username: string>, calloutBaseurl: string, calloutParams: record, calloutRetry: bool, description: string, eventTypeName: string, httpMethod: string, id: string, name: string, requiredAuth: bool>, calloutActive: bool, communicationProfileId: string, createdBy: string, createdOn: string, description: string, emailActive: bool, emailTemplateId: string, eventTypeName: string, eventTypeNamespace: string, filterRule: record<condition: string, description: string, eventTypeName: string, id: string, parameters: record>, filterRuleParams: record, id: string, name: string, updatedBy: string, updatedOn: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -931,7 +931,7 @@ export def "oauth-token create" [
   client_id: string # The Client ID of the OAuth client.
   client_secret: string # The Client Secret that was displayed when the OAuth client was created.
   grant_type: string@grant-type-completer # The OAuth grant type that will be used to generate the token. The value of this parameter must be `client_credentials`.
-]: any -> any {
+]: any -> record<access_token: string, expires_in: float, jti: string, scope: string, token_type: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -967,7 +967,7 @@ export def "objects-batch-default create-custom-records-update-or-delete" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   action: record # The batch action on custom object records — shape: {allowPartialSuccess?: bool, ids?: list<string>, records?: record, type: "delete"|"update"}
-]: any -> any {
+]: any -> record<error: record<code: int, details: list<record>, message: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1001,7 @@ export def "objects-definitions-default get-list-custom-in-namespace" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record<count: int, definitions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "select" $select "scalar")] | flatten | str join "&"
@@ -1032,7 +1032,7 @@ export def "objects-definitions-default create-custom" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   --definitions: record # The custom object definitions. This object maps types to custom object definitions.
-]: any -> any {
+]: any -> record<count: int, definitions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1065,7 +1065,7 @@ export def "objects-definitions-default delete-custom-by-type" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1096,7 +1096,7 @@ export def "objects-definitions-default get-custom-by-type" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Id: string, UpdatedById: string, UpdatedDate: string, schema: record<filterable: list<string>, label: string, object: string, properties: record<CreatedById: record, CreatedDate: record, Id: record, UpdatedById: record, UpdatedDate: record>, relationships: list<record>, required: list<string>, type: string>, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1128,7 +1128,7 @@ export def "objects-jobs get-list-custom-bulk" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record<count: int, cursor: string, jobs: table<CreatedById: string, CreatedDate: string, Id: string, UpdatedById: string, UpdatedDate: string, error: record, namespace: string, object: string, operation: string, processingTime: int, recordsProcessed: int, status: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "cursor" $cursor "scalar")] | flatten | str join "&"
@@ -1163,7 +1163,7 @@ export def "objects-jobs create-custom-bulk" [
   namespace: string@namespace-completer # The namespace of the object. Custom objects belong to the `default` namespace. Zuora standard objects belong to the `com_zuora` namespace. Bulk job operations on the following Zuora standard objects are supported: * SavedQuery
   object: string # The object that the bulk operation performs on. (e.g. passenger)
   operation: string@operation-completer # The operation that the bulk job performs. Only the users that have the "Delete Custom Objects" permission can submit a `delete` bulk job request. Only the users that have the "Edit Custom Objects" permission can submit a `create` or `update` bulk job request. See [Platform Permissions](https://knowledgecenter.zuora.com/Billing/Tenant_Management/A_Administrator_Settings/User_Roles/h_Platform_Roles#Platform_Permissions) for more information.
-]: any -> any {
+]: any -> record<CreatedById: string, CreatedDate: string, Id: string, UpdatedById: string, UpdatedDate: string, error: record<code: int, message: string>, namespace: string, object: string, operation: string, processingTime: int, recordsProcessed: int, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1196,7 +1196,7 @@ export def "objects-jobs get-custom-bulk" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Id: string, UpdatedById: string, UpdatedDate: string, error: record<code: int, message: string>, namespace: string, object: string, operation: string, processingTime: int, recordsProcessed: int, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1227,7 +1227,7 @@ export def "objects-jobs-errors get-custom-bulk" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record<errors: table<code: int, message: string, record: record, row: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1261,7 +1261,7 @@ export def "objects-jobs-files create-upload-for-custom-bulk" [
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   --content-type: string # The `Content-Type` of the request must be `text/csv`.
   --body: string
-]: any -> any {
+]: any -> record<CreatedById: string, CreatedDate: string, Id: string, UpdatedById: string, UpdatedDate: string, error: record<code: int, message: string>, namespace: string, object: string, operation: string, processingTime: int, recordsProcessed: int, status: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1298,7 +1298,7 @@ export def "objects-migrations create-update-custom-definition" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   actions: list # The actions of updating custom object definitions, to be performed as parts of the migration. Currently only one action per migration is supported. — item shape: {description?: string, field?: record, label?: string, namespace: string, object: string, relationship?: record, type: "addField"|"deleteField"|"updateField"|"updateObject"|"renameField"|"addRelationship"|"deleteRelationship"}
-]: any -> any {
+]: any -> record<actions: table<description: string, field: record, label: string, namespace: string, object: string, relationship: record, type: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1335,7 +1335,7 @@ export def "objects-records-default get-list-for-custom-type" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record<count: int, records: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1369,7 +1369,7 @@ export def "objects-records-default create-custom" [
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   --allow-partial-success: oneof<nothing, bool> # Indicates whether the records that pass the schema validation should be created when not all records in the request pass the schema validation. (default: false, e.g. true)
   records: list # A list of custom object records to be created
-]: any -> any {
+]: any -> record<error: record<code: int, details: list<record>, message: string>, records: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1404,7 +1404,7 @@ export def "objects-records-default delete-custom" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1437,7 +1437,7 @@ export def "objects-records-default get-custom" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
-]: nothing -> any {
+]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -1471,7 +1471,7 @@ export def "objects-records-default update-custom-by-object-id" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   --body: any
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1509,7 +1509,7 @@ export def "objects-records-default update-custom-by-object-id-1" [
   --if-match: string # The expected ETag of the resource. You can use this header to perform a conditional request. Zuora responds with 412 Precondition Failed if the ETag of the resource does not match the value of this header.
   --zuora-version: string # API version that determines the response schema. The default version is used if this parameter is not included. Specify `Zuora-Version` in the request header if you expect a specific response schema.
   --body: record
-]: any -> any {
+]: any -> record {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1545,7 +1545,7 @@ export def "query-jobs list" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<data: table<createdBy: string, id: string, query: string, remainingRetries: int, updatedOn: string, dataFile: string, outputRows: int, processingTime: int, queryStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "queryStatus" $query_status "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1585,7 +1585,7 @@ export def "query-jobs create-data" [
   --read-deleted: oneof<nothing, bool> # Indicates whether the query will retrieve only the deleted record. If `readDeleted` is set to `false` or it is not included in the request body, the query will retrieve only the non-deleted records. If it is set to `true`, only the deleted records will be retrieved. Note that Data Query is subject to Zuora Data Retention Policy. The retention period of deleted data is 30 days. You can only retrieve deleted data for 30 days through Data Query. (default: false)
   --source-data: string@source-data-completer # Specifiy that data queries run against the live transactional databases at Zuora (Data Query Live), or run against the optimized, replicated database at 12 hours freshness for high volume extraction (Data Query Unlimited). **Note**: Data Query Unlimited is an Early Adopter feature. If you want to have access to the feature, submit a request at [Zuora Global Support](http://support.zuora.com/). * `DATAHUB` - Data queries run against the optimized, replicated database at 12 hours freshness for high volume extraction (Data Query Unlimited). Data Query Unlimited is an Early Adopter feature. If you want to have access to the feature, submit a request at [Zuora Global Support](http://support.zuora.com/). * `LIVE` - Data queries run against the live transactional databases at Zuora (Data Query Live). The default value is `LIVE`.
   --use-index-join: oneof<nothing, bool> # Indicates whether to use Index Join. Index join is useful when you have a specific reference value in your WHERE clause to index another large table by. See [Use Index Join](https://knowledgecenter.zuora.com/DC_Developers/BA_Data_Query/Best_practices_of_Data_Query#Use_Index_Join) for more information.
-]: any -> any {
+]: any -> record<data: record<createdBy: string, id: string, query: string, remainingRetries: int, updatedOn: string, dataFile: string, outputRows: int, processingTime: int, queryStatus: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1618,7 +1618,7 @@ export def "query-jobs delete-data" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<data: record<createdBy: string, id: string, query: string, remainingRetries: int, updatedOn: string, queryStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job-id' must be non-empty" } }
@@ -1649,7 +1649,7 @@ export def "query-jobs get-data" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<data: record<createdBy: string, id: string, query: string, remainingRetries: int, updatedOn: string, dataFile: string, outputRows: int, processingTime: int, queryStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'job-id' must be non-empty" } }
@@ -1742,7 +1742,7 @@ export def "accounting-codes get-list" [
   --page-size: int # Number of rows returned per page. (default: 300)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountingCodes: table<category: string, createdBy: string, createdOn: string, glAccountName: string, glAccountNumber: string, id: string, name: string, notes: string, status: string, type: string, updatedBy: string, updatedOn: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -1776,7 +1776,7 @@ export def "accounting-codes create" [
   name: string # Name of the accounting code. Accounting code name must be unique. Maximum of 100 characters.
   --notes: string # Maximum of 2,000 characters.
   type: string@type-completer # Accounting code type. You cannot create new accounting codes of type `AccountsReceivable`. Note that `On-Account Receivable` is only available if you enable the Invoice Settlement feature.
-]: any -> any {
+]: any -> record<id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1808,7 +1808,7 @@ export def "accounting-codes delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
@@ -1838,7 +1838,7 @@ export def "accounting-codes get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<category: string, createdBy: string, createdOn: string, glAccountName: string, glAccountNumber: string, id: string, name: string, notes: string, status: string, success: bool, type: string, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
@@ -1873,7 +1873,7 @@ export def "accounting-codes update" [
   --name: string # Name of the accounting code. Accounting code name must be unique. Maximum of 100 characters.
   --notes: string # Maximum of 2,000 characters.
   --type: string@type-completer # Accounting code type. You cannot change the type of an accounting code from `AccountsReceivable` to a different type. Note that `On-Account Receivable` is only available if you enable the Invoice Settlement feature.
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1906,7 +1906,7 @@ export def "accounting-codes-activate update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
@@ -1936,7 +1936,7 @@ export def "accounting-codes-deactivate update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ac_id | is-empty) { error make --unspanned { msg: "path parameter 'ac-id' must be non-empty" } }
@@ -1966,7 +1966,7 @@ export def "accounting-periods get-list" [
   --page-size: int # Number of rows returned per page. (default: 300)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountingPeriods: table<createdBy: string, createdOn: string, endDate: string, fileIds: record, fiscalYear: string, fiscal_quarter: int, id: string, name: string, notes: string, runTrialBalanceEnd: string, runTrialBalanceErrorMessage: string, runTrialBalanceStart: string, runTrialBalanceStatus: string, startDate: string, status: string, updatedBy: string, updatedOn: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -2001,7 +2001,7 @@ export def "accounting-periods create" [
   name: string # Name of the accounting period. Accounting period name must be unique. Maximum of 100 characters.
   --notes: string # Notes about the accounting period. Maximum of 255 characters.
   start_date: string # The start date of the accounting period in yyyy-mm-dd format, for example, "2016-02-19". (format: date)
-]: any -> any {
+]: any -> record<id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2033,7 +2033,7 @@ export def "accounting-periods delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
@@ -2063,7 +2063,7 @@ export def "accounting-periods get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<createdBy: string, createdOn: string, endDate: string, fileIds: record<accountsReceivableAccountAgingDetailExportFileId: string, accountsReceivableInvoiceAgingDetailExportFileId: string, arRollForwardDetailExportFileId: string, fxRealizedGainAndLossDetailExportFileId: string, fxUnrealizedGainAndLossDetailExportFileId: string, revenueDetailCsvFileId: string, revenueDetailExcelFileId: string, unprocessedChargesFileId: string>, fiscalYear: string, fiscal_quarter: int, id: string, name: string, notes: string, runTrialBalanceEnd: string, runTrialBalanceErrorMessage: string, runTrialBalanceStart: string, runTrialBalanceStatus: string, startDate: string, status: string, success: bool, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
@@ -2099,7 +2099,7 @@ export def "accounting-periods update" [
   --name: string # Name of the accounting period. Accounting period name must be unique. Maximum of 100 characters.
   --notes: string # Notes about the accounting period. Maximum of 255 characters.
   --start-date: string # The start date of the accounting period in yyyy-mm-dd format, for example, "2016-02-19". (format: date)
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2132,7 +2132,7 @@ export def "accounting-periods-close update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
@@ -2162,7 +2162,7 @@ export def "accounting-periods-pending-close update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
@@ -2192,7 +2192,7 @@ export def "accounting-periods-reopen update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
@@ -2222,7 +2222,7 @@ export def "accounting-periods-run-trial-balance update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ap_id | is-empty) { error make --unspanned { msg: "path parameter 'ap-id' must be non-empty" } }
@@ -2301,7 +2301,7 @@ export def "accounts create" [
   --subsidiary-ns: string # Value of the Subsidiary field for the corresponding customer account in NetSuite. The Subsidiary field is required if you use NetSuite OneWorld. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the account was sychronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string@syncto-net-suite-ns-completer # Specifies whether the account should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, accountNumber: string, billToContactId: string, contractedMrr: string, creditMemoId: string, invoiceId: string, paidAmount: string, paymentId: string, paymentMethodId: string, soldToContactId: string, subscriptionId: string, subscriptionNumber: string, success: bool, totalContractedValue: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2333,7 +2333,7 @@ export def "accounts-billing-documents-files-deletion-jobs create" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --account-ids: list<string> # Container for the IDs of the accounts that you want to create the billing document files deletion job for.
-]: any -> any {
+]: any -> record<id: string, status: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2365,7 +2365,7 @@ export def "accounts-billing-documents-files-deletion-jobs get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<id: string, status: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -2395,7 +2395,7 @@ export def "accounts get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<basicInfo: record<accountNumber: string, batch: string, communicationProfileId: string, creditMemoTemplateId: string, crmId: string, currency: string, debitMemoTemplateId: string, id: string, invoiceTemplateId: string, name: string, notes: string, parentId: string, salesRep: string, sequenceSetId: string, status: string, tags: string, Class__NS: string, CustomerType__NS: string, Department__NS: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Location__NS: string, Subsidiary__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string>, billToContact: record<address1: string, address2: string, city: string, country: string, county: string, fax: string, firstName: string, homePhone: string, lastName: string, mobilePhone: string, nickname: string, otherPhone: string, otherPhoneType: string, personalEmail: string, state: string, taxRegion: string, workEmail: string, workPhone: string, zipCode: string>, billingAndPayment: record<additionalEmailAddresses: list<string>, billCycleDay: string, currency: string, invoiceDeliveryPrefsEmail: bool, invoiceDeliveryPrefsPrint: bool, paymentGateway: string, paymentTerm: string>, metrics: record<balance: string, contractedMrr: string, creditBalance: string, totalDebitMemoBalance: string, totalInvoiceBalance: string, unappliedCreditMemoAmount: string, unappliedPaymentAmount: string>, soldToContact: record<address1: string, address2: string, city: string, country: string, county: string, fax: string, firstName: string, homePhone: string, lastName: string, mobilePhone: string, nickname: string, otherPhone: string, otherPhoneType: string, personalEmail: string, state: string, taxRegion: string, workEmail: string, workPhone: string, zipCode: string>, success: bool, taxInfo: record<VATId: string, companyCode: string, exemptCertificateId: string, exemptCertificateType: string, exemptDescription: string, exemptEffectiveDate: string, exemptEntityUseCode: string, exemptExpirationDate: string, exemptIssuingJurisdiction: string, exemptStatus: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -2455,7 +2455,7 @@ export def "accounts update" [
   --subsidiary-ns: string # Value of the Subsidiary field for the corresponding customer account in NetSuite. The Subsidiary field is required if you use NetSuite OneWorld. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the account was sychronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string@syncto-net-suite-ns-completer # Specifies whether the account should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2488,7 +2488,7 @@ export def "accounts-summary get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<basicInfo: record<accountNumber: string, additionalEmailAddresses: list<string>, balance: string, batch: string, billCycleDay: string, currency: string, defaultPaymentMethod: record<creditCardExpirationMonth: string, creditCardExpirationYear: string, creditCardNumber: string, creditCardType: string, id: string, paymentMethodType: string>, id: string, invoiceDeliveryPrefsEmail: bool, invoiceDeliveryPrefsPrint: bool, lastInvoiceDate: string, lastPaymentAmount: string, lastPaymentDate: string, name: string, status: string, tags: string, Class__NS: string, CustomerType__NS: string, Department__NS: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Location__NS: string, Subsidiary__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string>, billToContact: record<address1: string, address2: string, city: string, country: string, county: string, fax: string, firstName: string, id: string, lastName: string, state: string, taxRegion: string, workEmail: string, workPhone: string, zipCode: string>, invoices: table<amount: float, balance: string, dueDate: string, id: string, invoiceDate: string, invoiceNumber: string, status: string>, payments: table<effectiveDate: string, id: string, paidInvoices: list, paymentNumber: string, paymentType: string, status: string>, soldToContact: record<address1: string, address2: string, city: string, country: string, county: string, fax: string, firstName: string, id: string, lastName: string, state: string, taxRegion: string, workEmail: string, workPhone: string, zipCode: string>, subscriptions: table<autoRenew: bool, id: string, initialTerm: string, ratePlans: list, renewalTerm: string, status: string, subscriptionNumber: string, subscriptionStartDate: string, termEndDate: string, termStartDate: string, termType: string, CpqBundleJsonId__QT: string, OpportunityCloseDate__QT: string, OpportunityName__QT: string, QuoteBusinessType__QT: string, QuoteNumber__QT: string, QuoteType__QT: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Project__NS: string, SalesOrder__NS: string, SyncDate__NS: string>, success: bool, taxInfo: record<VATId: string, companyCode: string, exemptCertificateId: string, exemptCertificateType: string, exemptDescription: string, exemptEffectiveDate: string, exemptEntityUseCode: string, exemptExpirationDate: string, exemptIssuingJurisdiction: string, exemptStatus: string>, usage: table<quantity: string, startDate: string, unitOfMeasure: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -2524,7 +2524,7 @@ export def "accounts-billing-documents-generate create" [
   --effective-date: string # The date on which to generate the billing documents, in `yyyy-mm-dd` format. (format: date)
   --subscription-ids: list<string> # The IDs of the subscriptions that you want to create the billing documents for.
   --target-date: string # The date used to determine which charges are to be billed, in `yyyy-mm-dd` format. (format: date)
-]: any -> any {
+]: any -> record<creditMemos: table<id: string>, invoices: table<id: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2560,7 +2560,7 @@ export def "action-amend create-pos-tamend" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   --requests: list # The value of this field must be an array that contains a single AmendRequest object. To specify multiple Amendment objects, use the `Amendments` field of the AmendRequest object. — item shape: {AmendOptions?: record, Amendments: list, PreviewOptions?: record}
-]: any -> any {
+]: any -> record<results: table<AmendmentIds: list, ChargeMetricsData: record, CreditMemoDatas: list, CreditMemoId: string, Errors: list, GatewayResponse: string, GatewayResponseCode: string, InvoiceDatas: list, InvoiceId: string, PaymentId: string, PaymentTransactionNumber: string, SubscriptionId: string, Success: bool, TotalDeltaMrr: float, TotalDeltaTcv: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2596,7 +2596,7 @@ export def "action-create create-pos-tcreate" [
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   objects: list
   type: string
-]: any -> any {
+]: any -> table<Errors: list<record>, Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2632,7 +2632,7 @@ export def "action-delete create-pos-tdelete" [
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   ids: list<string> # A list of one or more IDs for the objects you want to delete.
   type: string # The type of object that you are deleting.
-]: any -> any {
+]: any -> table<errors: list<record>, id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2669,7 +2669,7 @@ export def "action-execute create-pos-texecute" [
   ids: list<string> # The ID of the object. **Values:** a valid InvoiceSplit object ID.
   --synchronous: oneof<nothing, bool> # Indicates if the call is synchronous or asynchronous. **Values:** `false`
   type: string@type-completer-1 # Specifies the type of executed item.
-]: any -> any {
+]: any -> table<Errors: list<record>, Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2705,7 +2705,7 @@ export def "action-generate create-pos-tgenerate" [
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   objects: list
   type: string@type-completer-2
-]: any -> any {
+]: any -> table<Errors: list<record>, Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2742,7 +2742,7 @@ export def "action-query create-pos-tquery" [
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   --conf: record # shape: {batchSize?: int}
   query_string: string # [ZOQL](https://knowledgecenter.zuora.com/DC_Developers/K_Zuora_Object_Query_Language) expression that specifies the object to query, the fields to retrieve, and any filters. **Note:** When querying one time charges from ProductRatePlanCharge, you need to specify the `ChargeType` value as `One-Time` rather than `OneTime`.
-]: any -> any {
+]: any -> record<done: bool, queryLocator: string, records: list<record>, size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2776,7 +2776,7 @@ export def "action-query-more create-pos-tquery" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   query_locator: string
-]: any -> any {
+]: any -> record<done: bool, queryLocator: string, records: list<record>, size: int> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2812,7 +2812,7 @@ export def "action-subscribe create-pos-tsubscribe" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   subscribes: list # item shape: {Account: any, BillToContact?: any, PaymentMethod?: record, PreviewOptions?: record, SoldToContact?: any, SubscribeOptions?: record, SubscriptionData: record}
-]: any -> any {
+]: any -> table<AccountId: string, AccountNumber: string, ChargeMetricsData: record<ChargeMetrics: list>, CreditMemoData: list<record>, CreditMemoId: string, CreditMemoNumber: string, CreditMemoResult: record<CreditMemo: list>, Errors: list<record>, GatewayResponse: string, GatewayResponseCode: string, InvoiceData: list<record>, InvoiceId: string, InvoiceNumber: string, InvoiceResult: record<Invoice: list>, PaymentId: string, PaymentTransactionNumber: string, SubscriptionId: string, SubscriptionNumber: string, Success: bool, TotalMrr: float, TotalTcv: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2849,7 +2849,7 @@ export def "action-update create-pos-tupdate" [
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
   objects: list # item shape: {Id: string, fieldsToNull?: list<string>}
   type: string
-]: any -> any {
+]: any -> table<Errors: list<record>, Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2882,7 +2882,7 @@ export def "amendments-subscriptions get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<autoRenew: bool, baseRatePlanId: string, baseSubscriptionId: string, code: string, contractEffectiveDate: string, currentTerm: int, currentTermPeriodType: string, customerAcceptanceDate: string, description: string, destinationAccountId: string, destinationInvoiceOwnerId: string, effectiveDate: string, id: string, name: string, newRatePlanId: string, newSubscriptionId: string, renewalSetting: string, renewalTerm: int, renewalTermPeriodType: string, resumeDate: string, serviceActivationDate: string, specificUpdateDate: string, status: string, success: bool, suspendDate: string, termStartDate: string, termType: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscription-id' must be non-empty" } }
@@ -2912,7 +2912,7 @@ export def "amendments get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<autoRenew: bool, baseRatePlanId: string, baseSubscriptionId: string, code: string, contractEffectiveDate: string, currentTerm: int, currentTermPeriodType: string, customerAcceptanceDate: string, description: string, destinationAccountId: string, destinationInvoiceOwnerId: string, effectiveDate: string, id: string, name: string, newRatePlanId: string, newSubscriptionId: string, renewalSetting: string, renewalTerm: int, renewalTermPeriodType: string, resumeDate: string, serviceActivationDate: string, specificUpdateDate: string, status: string, success: bool, suspendDate: string, termStartDate: string, termType: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($amendment_key | is-empty) { error make --unspanned { msg: "path parameter 'amendment-key' must be non-empty" } }
@@ -2941,7 +2941,7 @@ export def "async-jobs get-status-and-response" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<errors: string, result: record<processId: string, reasons: list<record>, success: bool, accountId: string, accountNumber: string, creditMemoIds: list<string>, creditMemoNumbers: list<string>, invoiceId: string, invoiceNumbers: list<string>, orderId: string, orderLineItems: list<record>, orderNumber: string, paidAmount: string, paymentId: string, paymentNumber: string, ramps: list<record>, status: string, subscriptionIds: list<string>, subscriptionNumbers: list<string>, subscriptions: list<record>>, status: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
@@ -2984,7 +2984,7 @@ export def "async-orders create-asynchronously" [
   --order-number: string # The order number of the new order. If not provided, system will auto-generate a number for this order.
   --processing-options: record # Invoice or Payment. — shape: {applicationOrder?: list<string>, applyCredit?: bool, applyCreditBalance?: bool, billingOptions?: record, collectPayment?: bool, electronicPaymentOptions?: record, runBilling?: bool}
   subscriptions: list # Each item includes a set of order actions, which will be applied to the same base subscription. — item shape: {customFields?: record, orderActions?: list, quote?: record, ramp?: record, subscriptionNumber?: string}
-]: any -> any {
+]: any -> record<jobId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3029,7 +3029,7 @@ export def "async-orders-preview create-asynchronously" [
   --preview-account-info: record # Information about the account that will own the order. — shape: {billCycleDay: int, currency: string, customFields?: record, soldToContact?: record, taxInfo?: record}
   preview_options: record # shape: {previewNumberOfPeriods?: int, previewThruType?: "SpecificDate"|"TermEnd"|"NumberOfPeriods", previewTypes?: list<string>, specificPreviewThruDate?: string}
   subscriptions: list # Each item includes a set of order actions, which will be applied to the same base subscription. — item shape: {customFields?: record, orderActions?: list, quote?: record, ramp?: record, subscriptionNumber?: string}
-]: any -> any {
+]: any -> record<jobId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3064,7 +3064,7 @@ export def "attachments create" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   file: string # The file to be attached. Files with the following extensions are supported: .pdf, .csv, .png, .xlsx, .xls, .doc, .docx, .msg, .jpg, .txt, .htm, .html, .eml, .pptx, .gif, .rtf, .xml, .jpeg, .log, .cls The maximum file size is 4 MB. (format: binary)
-]: any -> any {
+]: any -> record<fileId: string, id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3099,7 +3099,7 @@ export def "attachments delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment-id' must be non-empty" } }
@@ -3129,7 +3129,7 @@ export def "attachments get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<createdBy: string, createdOn: string, description: string, fileContentType: string, fileId: string, fileName: string, id: string, success: bool, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($attachment_id | is-empty) { error make --unspanned { msg: "path parameter 'attachment-id' must be non-empty" } }
@@ -3161,7 +3161,7 @@ export def "attachments update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --description: string # Description of the attachment.
   --file-name: string # File name of the attachment. The value should not contain the file extension. Only the file name without the extension can be edited.
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3196,7 +3196,7 @@ export def "attachments get-list" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<attachments: table<createdBy: string, createdOn: string, description: string, fileContentType: string, fileId: string, fileName: string, id: string, updatedBy: string, updatedOn: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object_type | is-empty) { error make --unspanned { msg: "path parameter 'object-type' must be non-empty" } }
@@ -3229,7 +3229,7 @@ export def "bill-runs-emails create-billing-documentsfrom" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --resend: oneof<nothing, bool> # Whether to send out emails for all the billing documents that are associated with the bill run. If the value is `false`, emails are sent out only for the billing documents that never have emails sent out. (default: false)
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3266,7 +3266,7 @@ export def "billing-documents get" [
   --qp-sort: string # This parameter restricts the order of the data returned in the response. You can use this parameter to supply a dimension you want to sort on. If you do not specify any sortable field, the response data is sorted by the `documentDate` field in descending order. A sortable field uses the following form: *operator* *field_name* You can use at most two sortable fields in one URL path. Use a comma to separate sortable fields. For example: *operator* *field_name*, *operator* *field_name* *operator* is used to mark the order of sequencing. The operator is optional. If you only specify the sortable field without any operator, the response data is sorted in descending order by this field. - The `-` operator indicates an ascending order. - The `+` operator indicates a descending order. *field_name* indicates the name of a sortable field. The supported sortable fields of this operation are as below: - documentDate - documentType Examples: - /billing-documents?accountId=4028905f5e4feb38015e50af9aa002d1 &sort=+documentDate,-documentType - /billing-documents?accountId=4028905f5e4feb38015e50af9aa002d1 &status=Posted&sort=+documentDate&page=2&pageSize=15
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<documents: table<accountId: string, amount: float, balance: float, documentDate: string, documentNumber: string, documentType: string, id: string, status: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "documentDate" $document_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3300,7 +3300,7 @@ export def "billing-preview-runs create" [
   --charge-type-to-exclude: string # The charge types to exclude from the forecast run. **Possible values:** OneTime, Recurring, Usage, and any comma-separated combination of these values.
   --including-evergreen-subscription: oneof<nothing, bool> # Indicates if evergreen subscriptions are included in the billing preview run. By default, evergreen subscriptions are not included.
   target_date: string # The target date for the billing preview run. The billing preview run generates preview invoice item data and credit memo item data from the first day of the customer's next billing period to the TargetDate. If the TargetDate is later than the subscription current term end date, the preview invoice item data and credit memo item data is generated from the first day of the customer's next billing period to the current term end date. If you want to generate preview invoice item data and credit memo item data past the end of the subscription current term, specify the AssumeRenewal field in the request. **Note:** The credit memo item data is only available if you have Invoice Settlement feature enabled. The Invoice Settlement feature is generally available as of Zuora Billing Release 296 (March 2021). This feature includes Unapplied Payments, Credit and Debit Memo, and Invoice Item Settlement. If you want to enable Invoice Settlement, see [Invoice Settlement Enablement and Checklist Guide](https://knowledgecenter.zuora.com/Billing/Billing_and_Payments/Invoice_Settlement/Invoice_Settlement_Migration_Checklist_and_Guide) for more information. (format: date)
-]: any -> any {
+]: any -> record<billingPreviewRunId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3332,7 +3332,7 @@ export def "billing-preview-runs get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<assumeRenewal: string, batch: string, chargeTypeToExclude: string, createdById: string, createdDate: string, endDate: string, errorMessage: string, includingEvergreenSubscription: bool, resultFileUrl: string, runNumber: string, startDate: string, status: string, succeededAccounts: int, success: bool, targetDate: string, totalAccounts: int, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($billing_preview_run_id | is-empty) { error make --unspanned { msg: "path parameter 'billingPreviewRunId' must be non-empty" } }
@@ -3363,7 +3363,7 @@ export def "bulk create-mass-updater" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   file: string # File containing data about the mass action you want to perform. The file requirements are the same as when uploading a file through the Mass Updater in the Zuora UI. The file must be a `.csv` file or a zipped `.csv` file. The maximum file size is 4 MB. The data in the file must be formatted according to the mass action type you want to perform. (format: binary)
   params: string # Container for the following fields. You must format this parameter as a JSON object. * `actionType` (string, **Required**) - Type of mass action you want to perform. The following mass actions are supported: `UpdateAccountingCode`, `CreateRevenueSchedule`, `UpdateRevenueSchedule`, `DeleteRevenueSchedule`, `ImportFXRate`, and `MPU`. * `checksum` (string) - An MD5 checksum that is used to validate the integrity of the uploaded file. The checksum is a 32-character string.
-]: any -> any {
+]: any -> record<bulkKey: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3397,7 +3397,7 @@ export def "bulk get-mass-updater" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<actionType: string, endedOn: string, errorCount: string, inputSize: int, outputSize: int, outputType: string, outputURL: string, processedCount: string, startedOn: string, status: string, success: bool, successCount: string, totalCount: string, uploadedBy: string, uploadedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_key | is-empty) { error make --unspanned { msg: "path parameter 'bulk-key' must be non-empty" } }
@@ -3427,7 +3427,7 @@ export def "bulk-stop update-mass-updater" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($bulk_key | is-empty) { error make --unspanned { msg: "path parameter 'bulk-key' must be non-empty" } }
@@ -3458,7 +3458,7 @@ export def "catalog-product get" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-version: string # The minor version of the Zuora REST API. You only need to set this parameter if you use the `productRatePlans` field.
-]: nothing -> any {
+]: nothing -> record<category: string, description: string, effectiveEndDate: string, effectiveStartDate: string, id: string, name: string, productFeatures: table<code: string, description: string, id: string, name: string, status: string>, productRatePlans: string, sku: string, tags: string, IntegrationId__NS: string, IntegrationStatus__NS: string, ItemType__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product-id' must be non-empty" } }
@@ -3490,7 +3490,7 @@ export def "catalog-products get" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-version: string # The minor version of the Zuora REST API. You only need to set this parameter if you use the `productRatePlans` field.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, products: table<category: string, description: string, effectiveEndDate: string, effectiveStartDate: string, id: string, name: string, productFeatures: list, productRatePlans: string, sku: string, tags: string, IntegrationId__NS: string, IntegrationStatus__NS: string, ItemType__NS: string, SyncDate__NS: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar")] | flatten | str join "&"
@@ -3521,7 +3521,7 @@ export def "catalog-products-share create" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   to_entity_ids: list<string> # The entity that you want to share the product with.
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3554,7 +3554,7 @@ export def "charge-revenue-summaries-subscription-charges get-crs" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, currency: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, isAccountingPeriodClosed: bool>, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
@@ -3584,7 +3584,7 @@ export def "charge-revenue-summaries get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, currency: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, isAccountingPeriodClosed: bool>, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs_number | is-empty) { error make --unspanned { msg: "path parameter 'crs-number' must be non-empty" } }
@@ -3616,7 +3616,7 @@ export def "connections create" [
   --api-access-key-id: string # Account username
   --api-secret-access-key: string # Account password
   --content-type: string # Must be set to "application/json"
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/connections")
@@ -3645,7 +3645,7 @@ export def "contacts-scrub update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($contact_id | is-empty) { error make --unspanned { msg: "path parameter 'contactId' must be non-empty" } }
@@ -3696,7 +3696,7 @@ export def "creditmemos get-credit-memos" [
   --qp-sort: string # This parameter restricts the order of the data returned in the response. You can use this parameter to supply a dimension you want to sort on. A sortable field uses the following form: *operator* *field_name* You can use at most two sortable fields in one URL path. Use a comma to separate sortable fields. For example: *operator* *field_name*, *operator* *field_name* *operator* is used to mark the order of sequencing. The operator is optional. If you only specify the sortable field without any operator, the response data is sorted in descending order by this field. - The `-` operator indicates an ascending order. - The `+` operator indicates a descending order. By default, the response data is displayed in descending order by credit memo number. *field_name* indicates the name of a sortable field. The supported sortable fields of this operation are as below: - accountId - amount - appliedAmount - createdById - createdDate - creditMemoDate - number - referredInvoiceId - refundAmount - status - targetDate - taxAmount - totalTaxExemptAmount - transferredToAccounting - unappliedAmount - updatedDate Examples: - /v1/creditmemos?sort=+number - /v1/creditmemos?status=Processed&sort=-number,+amount
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<creditmemos: table<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "appliedAmount" $applied_amount "scalar") (serialize-qp "autoApplyUponPosting" $auto_apply_upon_posting "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "creditMemoDate" $credit_memo_date "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "excludeFromAutoApplyRules" $exclude_from_auto_apply_rules "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "referredInvoiceId" $referred_invoice_id "scalar") (serialize-qp "refundAmount" $refund_amount "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "targetDate" $target_date "scalar") (serialize-qp "taxAmount" $tax_amount "scalar") (serialize-qp "totalTaxExemptAmount" $total_tax_exempt_amount "scalar") (serialize-qp "transferredToAccounting" $transferred_to_accounting "scalar") (serialize-qp "unappliedAmount" $unapplied_amount "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3738,7 +3738,7 @@ export def "creditmemos create-credit-memo-from-prpc" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the credit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3770,7 +3770,7 @@ export def "creditmemos delete-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -3800,7 +3800,7 @@ export def "creditmemos get-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -3843,7 +3843,7 @@ export def "creditmemos update-credit-memo" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the credit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3881,7 +3881,7 @@ export def "creditmemos-apply update-credit-memo" [
   --debit-memos: list # Container for debit memos that the credit memo is applied to. The maximum number of debit memos is 1,000. — item shape: {amount: float, debitMemoId: string, items?: list}
   --effective-date: string # The date when the credit memo is applied. (format: date)
   --invoices: list # Container for invoices that the credit memo is applied to. The maximum number of invoices is 1,000. — item shape: {amount: float, invoiceId: string, items?: list}
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3914,7 +3914,7 @@ export def "creditmemos-cancel update-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -3947,7 +3947,7 @@ export def "creditmemos-emails create-credit-memo" [
   --email-addresses: string # The valid email addresses you want to email a credit memo to. Use commas to separate email addresses. **Note:** This field is only applicable if you set the `useEmailTemplateSetting` field to `false`.
   --include-additional-email-addresses: oneof<nothing, bool> # Indicates whether to send a credit memo to the additional email addresses of the memo account. You can set the additional email addresses in the **Additional Email Addresses** field on the account detail page from the Zuora UI. See [Create a Customer Account](https://knowledgecenter.zuora.com/BC_Subscription_Management/Customer_Accounts/B_Create_a_Customer_Account#section_2) for more information. (default: false)
   --use-email-template-setting: oneof<nothing, bool> # Indicates whether to email a credit memo based on the email template setting. If you set this field to `true`, the credit memo is sent to the email addresses specified in the **To Email** field of the email template. The email template is the one you set in the **Delivery Options** panel of the **Edit notification** dialog from the Zuora UI. See [Edit Email Templates](https://knowledgecenter.zuora.com/CF_Users_and_Administrators/Notifications/Create_Email_Templates) for more information about how to edit the **To Email** field in the email template. (default: false)
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3981,7 +3981,7 @@ export def "creditmemos-files create-upload-for-credit-memo" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --file: string # The PDF file to upload for the credit memo. (format: binary)
-]: any -> any {
+]: any -> record<fileId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4033,7 +4033,7 @@ export def "creditmemos-items list" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-version: string # The minor version of the Zuora REST API. See [Minor Version](https://www.zuora.com/developer/api-reference/#section/API-Versions/Minor-Version) for information about REST API version control. This header affects the availability of the following response fields: * `items` > `creditTaxItems` * `items` > `taxationItems` * `items` > `comment` * `items` > `description`
-]: nothing -> any {
+]: nothing -> record<items: table<amount: float, amountWithoutTax: float, appliedAmount: float, appliedToItemId: string, comment: string, createdById: string, createdDate: string, creditFromItemId: string, creditFromItemSource: string, creditTaxItems: list, description: string, financeInformation: record, id: string, processingType: string, quantity: float, refundAmount: float, serviceEndDate: string, serviceStartDate: string, sku: string, skuName: string, sourceItemId: string, sourceItemType: string, subscriptionId: string, taxMode: string, taxationItems: record, unappliedAmount: float, unitOfMeasure: string, unitPrice: float, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4066,7 +4066,7 @@ export def "creditmemos-items get-credit-memo" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-version: string # The minor version of the Zuora REST API. See [Minor Version](https://www.zuora.com/developer/api-reference/#section/API-Versions/Minor-Version) for information about REST API version control. This header affects the availability of the following response fields: * `creditTaxItems` * `taxationItems` * `comment` * `description`
-]: nothing -> any {
+]: nothing -> record<amount: float, amountWithoutTax: float, appliedAmount: float, appliedToItemId: string, comment: string, createdById: string, createdDate: string, creditFromItemId: string, creditFromItemSource: string, creditTaxItems: table<appliedAmount: float, exemptAmount: float, financeInformation: record, id: string, jurisdiction: string, locationCode: string, name: string, refundAmount: float, sourceTaxItemId: string, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, unappliedAmount: float>, description: string, financeInformation: record<deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, onAccountAccountingCode: string, onAccountAccountingCodeType: string, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string, revenueRecognitionRuleName: string, revenueScheduleNumber: string>, id: string, processingType: string, quantity: float, refundAmount: float, serviceEndDate: string, serviceStartDate: string, sku: string, skuName: string, sourceItemId: string, sourceItemType: string, subscriptionId: string, success: bool, taxMode: string, taxationItems: record<data: list<record>, nextPage: string>, unappliedAmount: float, unitOfMeasure: string, unitPrice: float, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4100,7 +4100,7 @@ export def "creditmemos-items-taxation-items get-of-credit-memo" [
   --page: int # Page number. (default: 1)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<data: table<appliedAmount: float, exemptAmount: float, financeInformation: record, id: string, jurisdiction: string, locationCode: string, name: string, refundAmount: float, sourceTaxItemId: string, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, unappliedAmount: float>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4133,7 +4133,7 @@ export def "creditmemos-parts list" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, parts: table<amount: float, createdById: string, createdDate: string, debitMemoId: string, id: string, invoiceId: string, updatedById: string, updatedDate: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4165,7 +4165,7 @@ export def "creditmemos-parts get-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<amount: float, createdById: string, createdDate: string, debitMemoId: string, id: string, invoiceId: string, success: bool, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4198,7 +4198,7 @@ export def "creditmemos-parts-itemparts list" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<itemParts: table<amount: float, createdById: string, createdDate: string, creditMemoItemId: string, creditTaxItemId: string, debitMemoItemId: string, id: string, invoiceItemId: string, taxItemId: string, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4232,7 +4232,7 @@ export def "creditmemos-parts-itemparts get-credit-memo-item" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<amount: float, createdById: string, createdDate: string, creditMemoItemId: string, creditTaxItemId: string, debitMemoItemId: string, id: string, invoiceItemId: string, success: bool, taxItemId: string, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4264,7 +4264,7 @@ export def "creditmemos-pdfs create-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4294,7 +4294,7 @@ export def "creditmemos-post update-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4326,7 +4326,7 @@ export def "creditmemos-taxationitems create-cm-taxation-items" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --taxation-items: list # Container for taxation items. — item shape: {exemptAmount?: float, financeInformation?: record, jurisdiction: string, locationCode?: string, memoItemId?: string, name: string, sourceTaxItemId?: string, taxAmount: float, taxCode?: string, taxCodeDescription?: string, taxDate?: string, taxRate: float, taxRateDescription?: string, taxRateType: "Percentage"|"FlatFee"}
-]: any -> any {
+]: any -> record<success: bool, taxationItems: table<createdById: string, createdDate: string, exemptAmount: float, financeInformation: record, id: string, jurisdiction: string, locationCode: string, memoItemId: string, name: string, sourceTaxItemId: string, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, updatedById: string, updatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4364,7 +4364,7 @@ export def "creditmemos-unapply update-credit-memo" [
   --debit-memos: list # Container for debit memos that the credit memo is unapplied from. The maximum number of debit memos is 1,000. — item shape: {amount: float, debitMemoId: string, items?: list}
   --effective-date: string # The date when the credit memo is unapplied. (format: date)
   --invoices: list # Container for invoices that the credit memo is unapplied from. The maximum number of invoices is 1,000. — item shape: {amount: float, invoiceId: string, items?: list}
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4397,7 +4397,7 @@ export def "creditmemos-unpost update-credit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($credit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'creditMemoId' must be non-empty" } }
@@ -4450,7 +4450,7 @@ export def "creditmemos-refunds create-credit-memo" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the refund was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string # Specifies whether the refund should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4485,7 +4485,7 @@ export def "custom-exchange-rates get" [
   --end-date: string # End date of the date range for which you want to get exchange rates. The date must be in yyyy-mm-dd format, for example, 2016-01-16. The end date can be a maximum of 90 days after the start date.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<inverse: bool, rates: table<DATE: record>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($currency | is-empty) { error make --unspanned { msg: "path parameter 'currency' must be non-empty" } }
@@ -4534,7 +4534,7 @@ export def "debitmemos get-debit-memos" [
   --qp-sort: string # This parameter restricts the order of the data returned in the response. You can use this parameter to supply a dimension you want to sort on. A sortable field uses the following form: *operator* *field_name* You can use at most two sortable fields in one URL path. Use a comma to separate sortable fields. For example: *operator* *field_name*, *operator* *field_name* *operator* is used to mark the order of sequencing. The operator is optional. If you only specify the sortable field without any operator, the response data is sorted in descending order by this field. - The `-` operator indicates an ascending order. - The `+` operator indicates a descending order. By default, the response data is displayed in descending order by debit memo number. *field_name* indicates the name of a sortable field. The supported sortable fields of this operation are as below: - number - accountId - debitMemoDate - targetDate - dueDate - amount - taxAmount - totalTaxExemptAmount - balance - beAppliedAmount - referredInvoiceId - createdDate - createdById - updatedDate - updatedById Examples: - /v1/debitmemos?sort=+number - /v1/debitmemos?status=Processed&sort=-number,+amount
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<debitmemos: table<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "balance" $balance "scalar") (serialize-qp "beAppliedAmount" $be_applied_amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "debitMemoDate" $debit_memo_date "scalar") (serialize-qp "dueDate" $due_date "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "referredInvoiceId" $referred_invoice_id "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "targetDate" $target_date "scalar") (serialize-qp "taxAmount" $tax_amount "scalar") (serialize-qp "totalTaxExemptAmount" $total_tax_exempt_amount "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -4577,7 +4577,7 @@ export def "debitmemos create-debit-memo-from-prpc" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the debit memo's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the debit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4610,7 +4610,7 @@ export def "debitmemos update-batch-debit-memos" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --debit-memos: list # Container for debit memo update details. — item shape: {dueDate?: string, id?: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4642,7 +4642,7 @@ export def "debitmemos delete-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -4672,7 +4672,7 @@ export def "debitmemos get-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -4713,7 +4713,7 @@ export def "debitmemos update-debit-memo" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the debit memo's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the debit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4746,7 +4746,7 @@ export def "debitmemos-application-parts get-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<applicationParts: table<appliedAmount: float, createdById: string, createdDate: string, creditMemoId: string, paymentId: string, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -4776,7 +4776,7 @@ export def "debitmemos-cancel update-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -4811,7 +4811,7 @@ export def "debitmemos-collect create-debit-memo" [
   --apply-credit: oneof<nothing, bool> # Whether to automatically apply credit memos or unapplied payments, or both to the debit memo. If the value is `true`, the credit memo or unapplied payment, or both will be automatically applied to the debit memo. If no value is specified or the value is `false`, no action is taken. (default: false)
   --collect: oneof<nothing, bool> # Indicates if the current request needs to collect payment or not. (default: false)
   --payment: record # Some detail info that would be used to processed an electronic payment. The info would only effect when `collect` set to `true`. — shape: {gatewayId?: string, paymentMethodId?: string}
-]: any -> any {
+]: any -> record<appliedCreditMemos: table<appliedAmount: float, id: string, number: string, unappliedAmount: float>, appliedPayments: table<appliedAmount: float, id: string, number: string, unappliedAmount: float>, debitMemo: record<id: string, number: string>, processedPayment: record<amount: float, gatewayId: string, gatewayResponse: string, gatewayResponseCode: string, id: string, number: string, paymentMethodId: string, status: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4847,7 +4847,7 @@ export def "debitmemos-emails create-debit-memo" [
   --email-addresses: string # The valid email addresses you want to email a debit memo to. Use commas to separate email addresses. **Note:** This field is only applicable if you set the `useEmailTemplateSetting` field to `false`.
   --include-additional-email-addresses: oneof<nothing, bool> # Indicates whether to send a debit memo to the additional email addresses of the memo account. You can set the additional email addresses in the **Additional Email Addresses** field on the account detail page from the Zuora UI. See [Create a Customer Account](https://knowledgecenter.zuora.com/BC_Subscription_Management/Customer_Accounts/B_Create_a_Customer_Account#section_2) for more information. (default: false)
   --use-email-template-setting: oneof<nothing, bool> # Indicates whether to email a debit memo based on the email template setting. If you set this field to `true`, the debit memo is sent to the email addresses specified in the **To Email** field of the email template. The email template is the one you set in the **Delivery Options** panel of the **Edit notification** dialog from the Zuora UI. See [Edit Email Templates](https://knowledgecenter.zuora.com/CF_Users_and_Administrators/Notifications/Create_Email_Templates) for more information about how to edit the **To Email** field in the email template. (default: false)
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4881,7 +4881,7 @@ export def "debitmemos-files create-upload-for-debit-memo" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --file: string # The PDF file to upload for the debit memo. (format: binary)
-]: any -> any {
+]: any -> record<fileId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4932,7 +4932,7 @@ export def "debitmemos-items list" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-version: string # The minor version of the Zuora REST API. See [Minor Version](https://www.zuora.com/developer/api-reference/#section/API-Versions/Minor-Version) for information about REST API version control. This header affects the availability of the following response fields: * `items` > `taxItems` * `items` > `taxationItems` * `items` > `comment` * `items` > `description`
-]: nothing -> any {
+]: nothing -> record<items: table<amount: float, amountWithoutTax: float, balance: float, beAppliedAmount: float, comment: string, createdById: string, createdDate: string, description: string, financeInformation: record, id: string, quantity: float, serviceEndDate: string, serviceStartDate: string, sku: string, skuName: string, sourceItemId: string, sourceItemType: string, subscriptionId: string, taxItems: list, taxMode: string, taxationItems: record, unitOfMeasure: string, unitPrice: float, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -4965,7 +4965,7 @@ export def "debitmemos-items get-debit-memo" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-version: string # The minor version of the Zuora REST API. See [Minor Version](https://www.zuora.com/developer/api-reference/#section/API-Versions/Minor-Version) for information about REST API version control. This header affects the availability of the following response fields: * `taxItems` * `taxationItems` * `comment` * `description`
-]: nothing -> any {
+]: nothing -> record<amount: float, amountWithoutTax: float, balance: float, beAppliedAmount: float, comment: string, createdById: string, createdDate: string, description: string, financeInformation: record<deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string, revenueRecognitionRuleName: string, revenueScheduleNumber: string>, id: string, quantity: float, serviceEndDate: string, serviceStartDate: string, sku: string, skuName: string, sourceItemId: string, sourceItemType: string, subscriptionId: string, success: bool, taxItems: table<appliedAmount: float, creditAmount: float, exemptAmount: float, financeInformation: record, id: string, jurisdiction: string, locationCode: string, name: string, paymentAmount: float, refundAmount: float, sourceTaxItemId: string, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, unappliedAmount: float>, taxMode: string, taxationItems: record<data: list<record>, nextPage: string>, unitOfMeasure: string, unitPrice: float, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -4999,7 +4999,7 @@ export def "debitmemos-items-taxation-items get-of-debit-memo" [
   --page: int # Page number. (default: 1)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<data: table<balance: float, creditAmount: float, exemptAmount: float, financeInformation: record, id: string, jurisdiction: string, locationCode: string, name: string, paymentAmount: float, sourceTaxItemId: string, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -5031,7 +5031,7 @@ export def "debitmemos-pdfs create-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -5061,7 +5061,7 @@ export def "debitmemos-post update-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -5093,7 +5093,7 @@ export def "debitmemos-taxationitems create-dm-taxation-items" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --taxation-items: list # Container for taxation items. — item shape: {exemptAmount?: float, financeInformation?: record, jurisdiction: string, locationCode?: string, memoItemId?: string, name: string, sourceTaxItemId?: string, taxAmount: float, taxCode?: string, taxCodeDescription?: string, taxDate?: string, taxRate: float, taxRateDescription?: string, taxRateType: "Percentage"|"FlatFee"}
-]: any -> any {
+]: any -> record<success: bool, taxationItems: table<createdById: string, createdDate: string, exemptAmount: float, financeInformation: record, id: string, jurisdiction: string, locationCode: string, memoItemId: string, name: string, sourceTaxItemId: string, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, updatedById: string, updatedDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5126,7 +5126,7 @@ export def "debitmemos-unpost update-debit-memo" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($debit_memo_id | is-empty) { error make --unspanned { msg: "path parameter 'debitMemoId' must be non-empty" } }
@@ -5155,7 +5155,7 @@ export def "describe get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($object | is-empty) { error make --unspanned { msg: "path parameter 'object' must be non-empty" } }
@@ -5187,7 +5187,7 @@ export def "document-properties create" [
   --custom-file-name: string # The custom file name to use to generate new Word or PDF files for the billing document.
   --document-id: string # The unique ID of a billing document that you want to create document properties for.
   --document-type: string@document-type-completer # The type of the billing document.
-]: any -> any {
+]: any -> record<customFileName: string, documentId: string, documentType: string, id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5219,7 +5219,7 @@ export def "document-properties delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_properties_id | is-empty) { error make --unspanned { msg: "path parameter 'documentPropertiesId' must be non-empty" } }
@@ -5250,7 +5250,7 @@ export def "document-properties update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --custom-file-name: string # The custom file name to use to generate new Word or PDF files for the billing document.
-]: any -> any {
+]: any -> record<customFileName: string, documentId: string, documentType: string, id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5284,7 +5284,7 @@ export def "document-properties get-properies" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<customFileName: string, documentId: string, documentType: string, id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($document_type | is-empty) { error make --unspanned { msg: "path parameter 'documentType' must be non-empty" } }
@@ -5315,7 +5315,7 @@ export def "entities get" [
   --provisioned: string # Specify whether to retrieve provisioned or unprovisioned entities: - `true`: Provisioned entities - `false`: Unprovisioned entities If you do not specify this field in the request, both the provisioned and unprovisioned entities are returned.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<entities: table<displayName: string, id: string, locale: string, name: string, parentId: string, status: string, tenantId: string, timezone: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "provisioned" $provisioned "scalar")] | flatten | str join "&"
@@ -5349,7 +5349,7 @@ export def "entities create" [
   name: string # The name of the entity that is the entity identifier and is unique across all entities in a multi-entity hierarchy. **Note:** Only alphanumeric characters (letters A–Z and a–z, and digits 0–9), space, period, and hyphen are allowed to be used in entity names.
   parent_id: string # The Id of the entity under which you want to create an entity. You can get the parent entity Id by using the GET Entities call.
   timezone: string # The time zone that is used in this entity.
-]: any -> any {
+]: any -> record<displayName: string, id: string, locale: string, name: string, parentId: string, status: string, success: bool, tenantId: string, timezone: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5381,7 +5381,7 @@ export def "entities delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5411,7 +5411,7 @@ export def "entities get-entity" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<displayName: string, id: string, locale: string, name: string, parentId: string, status: string, success: bool, tenantId: string, timezone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5445,7 +5445,7 @@ export def "entities update" [
   --locale: string # The locale that is used in this entity.
   --name: string # The name of the entity that is the entity identifier and is unique across all entities in a multi-entity hierarchy. **Note:** Only alphanumeric characters (letters A–Z and a–z, and digits 0–9), space, period, and hyphen are allowed to be used in entity names.
   --timezone: string # The time zone that is used in this entity.
-]: any -> any {
+]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5478,7 +5478,7 @@ export def "entities-provision update-entity" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -5509,7 +5509,7 @@ export def "entity-connections get" [
   --type: string@type-completer-4 # Specifies whether to retrieve inbound or outbound connections for an entity. Possible values: - `inbound`: All the incoming connections to the entity. - `outbound`: All the outgoing connections from the entity. If you do not specify this field in the request, both the inbound and outbound connections are returned.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<entityConnections: table<id: string, sourceEntityId: string, status: string, targetEntityId: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -5539,7 +5539,7 @@ export def "entity-connections create" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   target_entity_id: string # The ID of the target entity that you want to connect with. You can get the entity Id using the Multi-entity: Get entities call.
-]: any -> any {
+]: any -> record<id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5571,7 +5571,7 @@ export def "entity-connections-accept update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection-id' must be non-empty" } }
@@ -5601,7 +5601,7 @@ export def "entity-connections-deny update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection-id' must be non-empty" } }
@@ -5631,7 +5631,7 @@ export def "entity-connections-disconnect update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($connection_id | is-empty) { error make --unspanned { msg: "path parameter 'connection-id' must be non-empty" } }
@@ -5696,7 +5696,7 @@ export def "gateway-settlement-payments-chargeback create-reverse" [
   --reference-id: string # Unique Id generated by the gateway for each transaction. Use this ID to find the respective Zuora Payment ID.
   --second-reference-id: string # The second reference Id. Some gateways use two unique transaction IDs.
   --settled-on: string # The date and time of the transaction settlement. The format is `yyyy-mm-dd hh:mm:ss`. (format: date-time)
-]: any -> any {
+]: any -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5734,7 +5734,7 @@ export def "gateway-settlement-payments-reject create" [
   --reference-id: string # Unique Id generated by the gateway for each transaction. Use this ID to find the respective Zuora Payment ID.
   --second-reference-id: string # The second reference Id. Some gateway uses two unique transaction IDs.
   --settled-on: string # The date and time of the transaction settlement. The format is `yyyy-mm-dd hh:mm:ss`. (format: date-time)
-]: any -> any {
+]: any -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5768,7 +5768,7 @@ export def "gateway-settlement-payments-settle create" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --settled-on: string # The date and time of the transaction settlement. The format is `yyyy-mm-dd hh:mm:ss`. (format: date-time)
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5805,7 +5805,7 @@ export def "hmac-signatures create" [
   --name: string # Account name. Specifies this field only when creating signatures for Create account.
   --page-id: string # The page id of your Payment Pages 2.0 form. Click **Show Page Id** next to the Payment Page name in the Hosted Page List to retrieve the page id. Specifies this field only when creating signatures for RSA Signatures.
   uri: string # The URI of the API object the customer will make a CORS enabled call to. e.g. "https://rest.zuora.com/v1/payment-methods/credit-cards"
-]: any -> any {
+]: any -> record<signature: string, success: bool, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5837,7 +5837,7 @@ export def "hostedpages get-hosted-pages" [
   --version-number: string # Version of the Payment Pages for which you want to retrieve the configuration information. Specify 1 for Payment Pages 1.0 or 2 for Payment Pages 2.0. If omitted, information for all versions of Payment Pages are returned. The response also depends on your tenant settings for Payment Pages 1.0 and Payment Pages 2.0. For example, if only the tenant setting for Payment Pages 2.0 is enabled, the response will only contain information for Payment Pages 2.0 forms even when this parameter is omitted.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<hostedpages: table<pageId: string, pageName: string, pageType: string, pageVersion: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "versionNumber" $version_number "scalar")] | flatten | str join "&"
@@ -5878,7 +5878,7 @@ export def "invoices create-standalone" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the invoice's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the invoice was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: string, amountWithoutTax: string, autoPay: bool, comments: string, dueDate: string, id: string, invoiceDate: string, invoiceNumber: string, status: string, taxAmount: string, taxExemptAmount: string, transferredToAccounting: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5911,7 +5911,7 @@ export def "invoices update-batch" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --invoices: list # Container for invoice update details. — item shape: {autoPay?: bool, comments?: string, dueDate?: string, id?: string, invoiceDate?: string, invoiceItems?: list, transferredToAccounting?: "Processing"|"Yes"|"Error"|"Ignore", IntegrationId__NS?: string, IntegrationStatus__NS?: string, SyncDate__NS?: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5953,7 +5953,7 @@ export def "invoices update" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the invoice's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the invoice was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, autoPay: bool, balance: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAdjustmentAmount: float, currency: string, dueDate: string, id: string, invoiceDate: string, number: string, postedById: string, postedOn: string, status: string, success: bool, targetDate: string, taxAmount: float, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5986,7 +5986,7 @@ export def "invoices-application-parts get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<applicationParts: table<appliedAmount: float, createdById: string, createdDate: string, creditMemoId: string, paymentId: string, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -6032,7 +6032,7 @@ export def "invoices-creditmemos create-credit-memo" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the credit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, autoApplyUponPosting: bool, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoDate: string, currency: string, excludeFromAutoApplyRules: bool, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, refundAmount: float, source: string, sourceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6078,7 +6078,7 @@ export def "invoices-debitmemos create-debit-memo" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the debit memo's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the debit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, autoPay: bool, balance: float, beAppliedAmount: float, cancelledById: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, debitMemoDate: string, dueDate: string, id: string, latestPDFFileId: string, number: string, postedById: string, postedOn: string, reasonCode: string, referredInvoiceId: string, status: string, success: bool, targetDate: string, taxAmount: float, taxMessage: string, taxStatus: string, totalTaxExemptAmount: float, transferredToAccounting: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6114,7 +6114,7 @@ export def "invoices-emails create" [
   --email-addresses: string # The valid email addresses you want to email an invoice to. Use commas to separate email addresses. **Note:** This field is only applicable if you set the `useEmailTemplateSetting` field to `false`.
   --include-additional-email-addresses: oneof<nothing, bool> # Indicates whether to send an invoice to the additional email addresses of the invoice account. You can set the additional email addresses in the **Additional Email Addresses** field on the account detail page from the Zuora UI. See [Create a Customer Account](https://knowledgecenter.zuora.com/BC_Subscription_Management/Customer_Accounts/B_Create_a_Customer_Account#section_2) for more information. (default: false)
   --use-email-template-setting: oneof<nothing, bool> # Indicates whether to email an invoice based on the email template setting. If you set this field to `true`, the invoice is sent to the email addresses specified in the **To Email** field of the email template. The email template is the one you set in the **Delivery Options** panel of the **Edit notification** dialog from the Zuora UI. See [Edit Email Templates](https://knowledgecenter.zuora.com/CF_Users_and_Administrators/Notifications/Create_Email_Templates) for more information about how to edit the **To Email** field in the email template. (default: false)
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6148,7 +6148,7 @@ export def "invoices-files get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<invoiceFiles: table<id: string, pdfFileUrl: string, versionNumber: int>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -6180,7 +6180,7 @@ export def "invoices-files create-upload" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --file: string # The PDF file to upload for the invoice. (format: binary)
-]: any -> any {
+]: any -> record<fileId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6216,7 +6216,7 @@ export def "invoices-items get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<invoiceItems: table<accountingCode: string, appliedToItemId: string, availableToCreditAmount: float, balance: string, bookingReference: string, chargeAmount: string, chargeDescription: string, chargeId: string, chargeName: string, deferredRevenueAccountingCode: string, description: string, id: string, itemType: string, productName: string, productRatePlanChargeId: string, purchaseOrderNumber: string, quantity: string, recognizedRevenueAccountingCode: string, revRecCode: string, revRecTriggerCondition: string, revenueRecognitionRuleName: string, serviceEndDate: string, serviceStartDate: string, sku: string, subscriptionId: string, subscriptionName: string, success: bool, taxAmount: string, taxCode: string, taxMode: string, taxationItems: record, unitOfMeasure: string, unitPrice: float, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -6250,7 +6250,7 @@ export def "invoices-items-taxation-items get" [
   --page: int # Page number. (default: 1)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<data: table<availableToCreditAmount: float, balance: float, creditAmount: float, exemptAmount: float, id: string, jurisdiction: string, locationCode: string, name: string, paymentAmount: float, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_id | is-empty) { error make --unspanned { msg: "path parameter 'invoiceId' must be non-empty" } }
@@ -6284,7 +6284,7 @@ export def "invoices-reverse update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --apply-effective-date: string # The date when the credit memo was applied to the invoice that will be reversed, in `yyyy-mm-dd` format. The effective date must be later than or equal to the memo date. Default value is today's date. (format: date)
   --memo-date: string # The date when the credit memo was created, in `yyyy-mm-dd` format. The memo date must be later than or equal to the invoice date. Default value is today's date. (format: date)
-]: any -> any {
+]: any -> record<creditMemo: record<id: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6327,7 +6327,7 @@ export def "invoices-write-off update" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the credit memo was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<creditMemo: record<id: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6368,7 +6368,7 @@ export def "journal-entries create-summary-entry" [
   --notes: string # The number associated with the revenue event. Character limit: 2,000
   --segments: list # List of segments that apply to the summary journal entry. — item shape: {segmentName: string, segmentValue: string}
   --transferred-to-accounting: string@transferred-to-accounting-completer # Status shows whether the journal entry has been transferred to an accounting system.
-]: any -> any {
+]: any -> record<journalEntryNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6401,7 +6401,7 @@ export def "journal-entries-journal-runs get-list-summary" [
   --page-size: int # Number of rows returned per page. (default: 8)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<journalEntries: table<accountingPeriodName: string, aggregateCurrency: bool, currency: string, homeCurrency: string, journalEntryDate: string, journalEntryItems: list, notes: string, number: string, segments: list, status: string, timePeriodEnd: string, timePeriodStart: string, transactionType: string, transferDateTime: string, transferredBy: string, transferredToAccounting: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
@@ -6432,7 +6432,7 @@ export def "journal-entries delete-summary-entry" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
@@ -6462,7 +6462,7 @@ export def "journal-entries get-summary-entry" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountingPeriodName: string, aggregateCurrency: bool, currency: string, homeCurrency: string, journalEntryDate: string, journalEntryItems: table<accountingCodeName: string, accountingCodeType: string, amount: string, glAccountName: string, glAccountNumber: string, homeCurrencyAmount: string, type: string>, notes: string, number: string, segments: table<segmentName: string, segmentValue: string>, status: string, success: bool, timePeriodEnd: string, timePeriodStart: string, transactionType: string, transferDateTime: string, transferredBy: string, transferredToAccounting: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
@@ -6496,7 +6496,7 @@ export def "journal-entries-basic-information update-summary-entry" [
   --journal-entry-items: list # Key name that represents the list of journal entry items. — item shape: {accountingCodeName: string, accountingCodeType?: "AccountsReceivable"|"On-Account Receivable"|"Cash"|"OtherAssets"|"CustomerCashOnAccount"|"DeferredRevenue"|"SalesTaxPayable"|"OtherLiabilities"|"SalesRevenue"|"SalesDiscounts"|"OtherRevenue"|"OtherEquity"|"BadDebt"|"OtherExpenses", type: "Credit"|"Debit"}
   --notes: string # Additional information about this record. ***Character limit:*** 2,000
   --transferred-to-accounting: string@transferred-to-accounting-completer # Status shows whether the journal entry has been transferred to an accounting system. This field cannot be changed after the summary journal entry has been canceled. **Note:** The Zuora Finance ***Override Transferred to Accounting*** permission is required to change `transferredToAccounting` from `Yes` to any other value.
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6529,7 +6529,7 @@ export def "journal-entries-cancel update-summary-entry" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($je_number | is-empty) { error make --unspanned { msg: "path parameter 'je-number' must be non-empty" } }
@@ -6564,7 +6564,7 @@ export def "journal-runs create" [
   --target-end-date: string # The target end date of the journal run. If you include `accountingPeriodName`, the `targetEndDate` must be empty or the same as the end date of the accounting period specified in `accountingPeriodName`. (format: date)
   --target-start-date: string # The target start date of the journal run. Required if you include targetEndDate. If you include `accountingPeriodName`, the `targetStartDate` must be empty or the same as the start date of the accounting period specified in `accountingPeriodName`. (format: date)
   transaction_types: list # Transaction types included in the journal run. You can include one or more transaction types. — item shape: {type: "Invoice Item"|"Taxation Item"|"Invoice Item Adjustment (Invoice)"|"Invoice Item Adjustment (Tax)"|"Invoice Adjustment"|"Electronic Payment"|"External Payment"|"Electronic Refund"|"External Refund"|"Electronic Credit Balance Payment"|"External Credit Balance Payment"|"Electronic Credit Balance Refund"|"External Credit Balance Refund"|"Credit Balance Adjustment (Applied from Credit Balance)"|"Credit Balance Adjustment (Transferred to Credit Balance)"|"Revenue Event Item"|"Debit Memo Item (Charge)"|"Debit Memo Item (Tax)"|"Credit Memo Item (Charge)"|"Credit Memo Item (Tax)"|"Credit Memo Application Item"|"Electronic Payment Application"|"External Payment Application"|"Electronic Refund Application"|"External Refund Application"|"Electronic Payment Application Item"|"External Payment Application Item"|"Electronic Refund Application Item"|"External Refund Application Item"}
-]: any -> any {
+]: any -> record<journalRunNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6596,7 +6596,7 @@ export def "journal-runs delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
@@ -6626,7 +6626,7 @@ export def "journal-runs get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<aggregateCurrency: bool, executedOn: string, journalEntryDate: string, number: string, segmentationRuleName: string, status: string, success: bool, targetEndDate: string, targetStartDate: string, totalJournalEntryCount: int, transactionTypes: table<type: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
@@ -6656,7 +6656,7 @@ export def "journal-runs-cancel update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($jr_number | is-empty) { error make --unspanned { msg: "path parameter 'jr-number' must be non-empty" } }
@@ -6692,7 +6692,7 @@ export def "notification-history-callout get" [
   --include-response-content: oneof<nothing, bool>
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<calloutHistories: table<attemptedNum: string, createTime: string, eventCategory: string, eventContext: string, notification: string, requestMethod: string, requestUrl: string, responseCode: string, responseContent: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "failedOnly" $failed_only "scalar") (serialize-qp "eventCategory" $event_category "scalar") (serialize-qp "includeResponseContent" $include_response_content "scalar")] | flatten | str join "&"
@@ -6727,7 +6727,7 @@ export def "notification-history-email get" [
   --event-category: string # Category of records to be returned by event category. The following formats are supported: * `{Event Type Namespace}:{Event Type Name}` if the Custom Events feature is enabled in your tenant. For example: `user.notification:NewSubscriptionCreated`. * Numeric code of the event category if the Custom Events feature is not enabled in your tenant. For example, `1210`. See [Event Category Code](https://knowledgecenter.zuora.com/DC_Developers/AA_REST_API/Event_Categories_for_Notification_Histories) for more information. **Note**: The `eventCategory` will be ignored if the `objectId` is present in query parameters.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<emailHistories: table<bcc: string, cc: string, errorMessage: string, eventCategory: string, fromEmail: string, notification: string, replyTo: string, result: string, sendTime: string, subject: string, toEmail: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "endTime" $end_time "scalar") (serialize-qp "startTime" $start_time "scalar") (serialize-qp "objectId" $object_id "scalar") (serialize-qp "failedOnly" $failed_only "scalar") (serialize-qp "eventCategory" $event_category "scalar")] | flatten | str join "&"
@@ -6800,7 +6800,7 @@ export def "object-account create" [
   --subsidiary-ns: string # Value of the Subsidiary field for the corresponding customer account in NetSuite. The Subsidiary field is required if you use NetSuite OneWorld. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the account was sychronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string@syncto-net-suite-ns-completer # Specifies whether the account should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6833,7 +6833,7 @@ export def "object-account delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6864,7 +6864,7 @@ export def "object-account get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountNumber: string, AdditionalEmailAddresses: string, AllowInvoiceEdit: bool, AutoPay: bool, Balance: float, Batch: string, BcdSettingOption: string, BillCycleDay: int, BillToId: string, CommunicationProfileId: string, CreatedById: string, CreatedDate: string, CreditBalance: float, CrmId: string, Currency: string, CustomerServiceRepName: string, DefaultPaymentMethodId: string, Id: string, InvoiceDeliveryPrefsEmail: bool, InvoiceDeliveryPrefsPrint: bool, InvoiceTemplateId: string, LastInvoiceDate: string, Name: string, Notes: string, ParentId: string, PaymentGateway: string, PaymentTerm: string, PurchaseOrderNumber: string, SalesRepName: string, SoldToId: string, Status: string, TaxCompanyCode: string, TaxExemptCertificateID: string, TaxExemptCertificateType: string, TaxExemptDescription: string, TaxExemptEffectiveDate: string, TaxExemptExpirationDate: string, TaxExemptIssuingJurisdiction: string, TaxExemptStatus: string, TotalInvoiceBalance: float, UpdatedById: string, UpdatedDate: string, VATId: string, Class__NS: string, CustomerType__NS: string, Department__NS: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Location__NS: string, Subsidiary__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -6939,7 +6939,7 @@ export def "object-account update" [
   --subsidiary-ns: string # Value of the Subsidiary field for the corresponding customer account in NetSuite. The Subsidiary field is required if you use NetSuite OneWorld. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the account was sychronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string@syncto-net-suite-ns-completer # Specifies whether the account should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -6973,7 +6973,7 @@ export def "object-amendment delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7004,7 +7004,7 @@ export def "object-amendment get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AutoRenew: bool, Code: string, ContractEffectiveDate: string, CreatedById: string, CreatedDate: string, CurrentTerm: int, CurrentTermPeriodType: string, CustomerAcceptanceDate: string, Description: string, EffectiveDate: string, Id: string, Name: string, RenewalSetting: string, RenewalTerm: int, RenewalTermPeriodType: string, ServiceActivationDate: string, SpecificUpdateDate: string, Status: string, SubscriptionId: string, TermStartDate: string, TermType: string, Type: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7054,7 +7054,7 @@ export def "object-amendment update" [
   --term-start-date: string # The date when the new terms and conditions take effect. **Required**: Only if the value of the Type field is set to TermsAndConditions. **Version notes**: -- (format: date)
   --term-type: string # Indicates if the subscription is TERMED or EVERGREEN. This field can be updated when Status is `Draft`. - A TERMED subscription has an expiration date, and must be manually renewed. - An EVERGREEN subscription doesn't have an expiration date, and must be manually ended. **Required**: Only when as part of an amendment of type TermsAndConditions &#65279;to change the term type of a subscription. Type: string **Character limit**: 9 **Values**: TERMED, EVERGREEN
   --type: string # The type of amendment. This field can be updated when Status is `Draft`. **Character limit**: 18 **Values**: one of the following: - Cancellation - NewProduct - OwnerTransfer - RemoveProduct - Renewal - UpdateProduct - TermsAndConditions - SuspendSubscription - ResumeSubscription
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7098,7 +7098,7 @@ export def "object-bill-run create" [
   invoice_date: string # Invoice date for this bill run. **Character limit:** 29 (format: date)
   --no-email-for-zero-amount-invoice: oneof<nothing, bool> # Determines whether to suppress email for invoices with zero total or not for this bill run once the bill run completes. (Do not email invoices with 0 Invoice Total). (default: false)
   target_date: string # Target date for this bill run. See [Create Bill Run](https://knowledgecenter.zuora.com/CB_Billing/J_Billing_Operations/G_Bill_Runs/Creating_Bill_Runs) for more information. **Character limit:** 29 (format: date)
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7131,7 +7131,7 @@ export def "object-bill-run delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7162,7 +7162,7 @@ export def "object-bill-run get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AutoEmail: bool, AutoPost: bool, AutoRenewal: bool, Batch: string, BillCycleDay: string, BillRunNumber: string, CreatedById: string, CreatedDate: string, ExecutedDate: string, Id: string, InvoiceDate: string, InvoicesEmailed: bool, LastEmailSentTime: string, NoEmailForZeroAmountInvoice: bool, NumberOfAccounts: int, NumberOfInvoices: int, Status: string, TargetDate: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7196,7 +7196,7 @@ export def "object-bill-run update" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --invoice-date: string # The new invoice date of all invoices invloved in the bill run, or the new memo date of all credit memos invloved in the bill run. The date cannot fall in a closed accounting period. This field takes effect only when `Status` is set to `Posted`. **Note**: The Credit and Debit Memos feature is only available if you have [Invoice Settlement](https://knowledgecenter.zuora.com/Billing/Billing_and_Payments/Invoice_Settlement) enabled. The Invoice Settlement feature is generally available as of Zuora Billing Release 296 (March 2021). This feature includes Unapplied Payments, Credit and Debit Memo, and Invoice Item Settlement. If you want to enable Invoice Settlement, see [Invoice Settlement Enablement and Checklist Guide](https://knowledgecenter.zuora.com/Billing/Billing_and_Payments/Invoice_Settlement/Invoice_Settlement_Migration_Checklist_and_Guide) for more information. (format: date)
   status: string # The status for this bill run. See [Status Types](https://knowledgecenter.zuora.com/CB_Billing/J_Billing_Operations/G_Bill_Runs#Status_Types) for more information. To cancel a bill run, specify `Canceled`. To post a bill run, specify `Posted`. **Character limit:** 20 **Values:** * `Pending` * `Processing` * `Completed` * `Error` * `Canceled` * `Posted`
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7230,7 +7230,7 @@ export def "object-communication-profile get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Description: string, Id: string, ProfileName: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7282,7 +7282,7 @@ export def "object-contact create" [
   --tax-region: string # If using Zuora Tax rules
   --work-email: string # The contact's business email address. **Character limit**: 80 **Values**: a string of 80 characters or fewer
   --work-phone: string # The contact's business phone number. **Character limit**: 40 **notes**: -- **Values**: a string of 40 characters or fewer
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7315,7 +7315,7 @@ export def "object-contact delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7346,7 +7346,7 @@ export def "object-contact get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, Address1: string, Address2: string, City: string, Country: string, County: string, CreatedById: string, CreatedDate: string, Description: string, Fax: string, FirstName: string, HomePhone: string, Id: string, LastName: string, MobilePhone: string, NickName: string, OtherPhone: string, OtherPhoneType: string, PersonalEmail: string, PostalCode: string, State: string, TaxRegion: string, UpdatedById: string, UpdatedDate: string, WorkEmail: string, WorkPhone: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7399,7 +7399,7 @@ export def "object-contact update" [
   --tax-region: string # If using Zuora Tax rules
   --work-email: string # The contact's business email address. **Character limit**: 80 **Values**: a string of 80 characters or fewer
   --work-phone: string # The contact's business phone number. **Character limit**: 40 **notes**: -- **Values**: a string of 40 characters or fewer
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7445,7 +7445,7 @@ export def "object-credit-balance-adjustment create" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the credit balance adjustment's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the credit balance adjustment was sychronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7479,7 +7479,7 @@ export def "object-credit-balance-adjustment get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AccountingCode: string, AdjustmentDate: string, Amount: float, CancelledOn: string, Comment: string, CreatedById: string, CreatedDate: string, Id: string, Number: string, ReasonCode: string, ReferenceId: string, SourceTransactionId: string, SourceTransactionNumber: string, SourceTransactionType: string, Status: string, TransferredToAccounting: string, Type: string, UpdatedById: string, UpdatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7517,7 +7517,7 @@ export def "object-credit-balance-adjustment update" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the credit balance adjustment's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the credit balance adjustment was sychronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7561,7 +7561,7 @@ export def "object-export create" [
   --status: string # The status of the export. Type: string (enum) **Character limit**: 10 **Values**: automatically generated to be one of the following values: - Pending - Processing - Completed - Canceled - Failed
   --status-reason: string # The reason for the given status. Use this information to help ascertain why an export failed. **Character limi**t: 255 **Values**: automatically generated
   --zip: oneof<nothing, bool> # Indicates if you want the resulting export file to be compressed into a zip file. **Character limit**: **Values**: true, false (default)
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7595,7 +7595,7 @@ export def "object-export get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<ConvertToCurrencies: string, CreatedById: string, CreatedDate: string, Encrypted: bool, FileId: string, Format: string, Id: string, Name: string, Query: string, Size: int, Status: string, StatusReason: string, UpdatedById: string, UpdatedDate: string, Zip: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7630,7 +7630,7 @@ export def "object-feature create" [
   feature_code: string # Unique code of the feature.
   name: string # Name of the feature.
   --status: string@status-completer-5 # Status of the feature. (default: Active)
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7663,7 +7663,7 @@ export def "object-feature delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7694,7 +7694,7 @@ export def "object-feature get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Description: string, FeatureCode: string, Id: string, Name: string, Status: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7730,7 +7730,7 @@ export def "object-feature update" [
   --feature-code: string # Unique code of the feature.
   --name: string # Name of the feature.
   --status: string@status-completer-5 # Status of the feature.
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7767,7 +7767,7 @@ export def "object-import create" [
   file: string # The data to import. (format: binary)
   import_type: string@import-type-completer # The type of data to import.
   name: string # A descriptive name for the import.
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7802,7 +7802,7 @@ export def "object-import get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Id: string, ImportType: string, ImportedCount: int, Md5: string, Name: string, OriginalResourceUrl: string, ResultResourceUrl: string, Status: string, StatusReason: string, TotalCount: int, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7848,7 +7848,7 @@ export def "object-invoice-adjustment create" [
   --reference-id: string # A code to reference an object external to Zuora. For example, you can use this field to reference a case number in an external system. **Character limit**: 100 **Values**: a string of 100 characters or fewer
   --status: string # The status of the invoice adjustment. This field is only required in the Query call, but is automatically generated in other calls. **Character limit**: 9 **Values**: `Canceled`, `Processed`
   type: string # Indicates whether the adjustment credits or debits the invoice amount. **Character limit**: 6 **Values**: `Credit`, `Charge`
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7880,7 +7880,7 @@ export def "object-invoice-adjustment delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7911,7 +7911,7 @@ export def "object-invoice-adjustment get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AccountingCode: string, AdjustmentDate: string, AdjustmentNumber: string, Amount: float, CancelledById: string, CancelledOn: string, Comments: string, CreatedById: string, CreatedDate: string, CustomerName: string, CustomerNumber: string, Id: string, ImpactAmount: float, InvoiceId: string, InvoiceNumber: string, ReasonCode: string, ReferenceId: string, Status: string, TransferredToAccounting: string, Type: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -7945,7 +7945,7 @@ export def "object-invoice-adjustment update" [
   --reason-code: string # A code identifying the reason for the transaction. Must be an existing reason code or empty. If you do not specify a value, Zuora uses the default reason code. **Character limit**: 32 **V****alues**: a valid reason code
   --status: string # The status of the invoice adjustment. This field is required in the Query call, but is automatically generated in other calls. **Character limit**: 9 **Values**: `Canceled`, `Processed`
   --transferred-to-accounting: string@transferred-to-accounting-completer # Indicates the status of the adjustment's transfer to an external accounting system, such as NetSuite.
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7978,7 +7978,7 @@ export def "object-invoice-item-adjustment delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8009,7 +8009,7 @@ export def "object-invoice-item-adjustment get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AccountingCode: string, AdjustmentDate: string, AdjustmentNumber: string, Amount: float, CancelledById: string, CancelledDate: string, Comment: string, CreatedById: string, CreatedDate: string, CustomerName: string, CustomerNumber: string, Id: string, InvoiceId: string, InvoiceItemName: string, InvoiceNumber: string, ReasonCode: string, ReferenceId: string, ServiceEndDate: string, ServiceStartDate: string, SourceId: string, SourceType: string, Status: string, TransferredToAccounting: string, UpdatedById: string, UpdatedDate: string, InvoiceItemAdjustment_IntegrationId__NS: string, InvoiceItemAdjustment_IntegrationStatus__NS: string, InvoiceItemAdjustment_SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8041,7 +8041,7 @@ export def "object-invoice-item get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountingCode: string, AppliedToInvoiceItemId: string, ChargeAmount: float, ChargeDate: string, ChargeName: string, CreatedById: string, CreatedDate: string, Id: string, InvoiceId: string, ProcessingType: float, ProductDescription: string, ProductName: string, Quantity: float, RatePlanChargeId: string, RevRecStartDate: string, SKU: string, ServiceEndDate: string, ServiceStartDate: string, SubscriptionId: string, TaxAmount: float, TaxCode: string, TaxExemptAmount: float, TaxMode: string, UOM: string, UnitPrice: float, UpdatedById: string, UpdatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8075,7 +8075,7 @@ export def "object-invoice-payment create" [
   amount: float # The amount of the payment. **Character limit**: 16 **Values**: a valid currency amount (format: double)
   invoice_id: string # The unique ID of the invoice associated with this invoice payment. **Character limit**: 32 **Values**: a valid invoice ID
   payment_id: string # The unique ID of the payment associated with this invoice payment. **Character limit**: 32 **V****alues**: a valid payment ID
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8109,7 +8109,7 @@ export def "object-invoice-payment get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<Amount: float, CreatedById: string, CreatedDate: string, Id: string, InvoiceId: string, PaymentId: string, RefundAmount: float, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8141,7 +8141,7 @@ export def "object-invoice-payment update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --amount: float # The amount of the payment. **Character limit**: 16 **Values**: a valid currency amount (format: double)
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8176,7 +8176,7 @@ export def "object-invoice-split-item get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Id: string, InvoiceDate: string, InvoiceId: string, InvoiceSplitId: string, PaymentTerm: string, SplitPercentage: float, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8208,7 +8208,7 @@ export def "object-invoice-split get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Id: string, InvoiceId: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8239,7 +8239,7 @@ export def "object-invoice delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8270,7 +8270,7 @@ export def "object-invoice get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AdjustmentAmount: float, Amount: float, AmountWithoutTax: float, Balance: float, Body: string, Comments: string, CreatedById: string, CreatedDate: string, CreditBalanceAdjustmentAmount: float, DueDate: string, Id: string, IncludesOneTime: bool, IncludesRecurring: bool, IncludesUsage: bool, InvoiceDate: string, InvoiceNumber: string, LastEmailSentDate: string, PaymentAmount: float, PostedBy: string, PostedDate: string, RefundAmount: float, Status: string, TargetDate: string, TaxAmount: float, TaxExemptAmount: float, TransferredToAccounting: string, UpdatedById: string, UpdatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8308,7 +8308,7 @@ export def "object-invoice update" [
   --integration-id-ns: string # ID of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --integration-status-ns: string # Status of the invoice's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the invoice was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8373,7 +8373,7 @@ export def "object-payment create" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the payment was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8474,7 +8474,7 @@ export def "object-payment-method create" [
   type: string@type-completer-6 # The type of payment method. If you want to create an Amazon Pay payment method, specify `CreditCardReferenceTransaction` for this field. If you want create a custom payment method, specify the name of the custom payment method type. This type is only available if the Universal Payment Connector and Open Payment Method services are enabled. See [Set up custom payment gateways and payment methods](https://knowledgecenter.zuora.com/Billing/Billing_and_Payments/MB_Set_up_custom_payment_gateways_and_payment_methods) for details.
   --use-default-retry-rule: oneof<nothing, bool> # Determines whether to use the default retry rules configured in the Z-Payments settings. Set this to `true` to use the default retry rules. Set this to `false` to set the specific rules for this payment method. If you set this value to `false`, then the fields, `PaymentRetryWindow` and `MaxConsecutivePaymentFailures`, are required. **Character limit**: 5 **Values**: `true` or `false`
   --currency-code: string # The currency used for payment method authorization. If this field is not specified, `currency` specified for the account is used for payment method authorization. If no currency is specified for the account, the default currency of the account is then used.
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8508,7 +8508,7 @@ export def "object-payment-method-snapshot get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AchAbaCode: string, AchAccountName: string, AchAccountNumberMask: string, AchAccountType: string, AchBankName: string, BankBranchCode: string, BankCheckDigit: string, BankCity: string, BankCode: string, BankIdentificationNumber: string, BankName: string, BankPostalCode: string, BankStreetName: string, BankStreetNumber: string, BankTransferAccountName: string, BankTransferAccountNumberMask: string, BankTransferAccountType: string, BankTransferType: string, BusinessIdentificationCode: string, City: string, CompanyName: string, Country: string, CreditCardAddress1: string, CreditCardAddress2: string, CreditCardCity: string, CreditCardCountry: string, CreditCardExpirationMonth: int, CreditCardExpirationYear: int, CreditCardHolderName: string, CreditCardMaskNumber: string, CreditCardPostalCode: string, CreditCardState: string, CreditCardType: string, DeviceSessionId: string, Email: string, ExistingMandate: string, FirstName: string, IBAN: string, IPAddress: string, Id: string, IdentityNumber: string, IsCompany: bool, LastFailedSaleTransactionDate: string, LastName: string, LastTransactionDateTime: string, LastTransactionStatus: string, MandateCreationDate: string, MandateID: string, MandateReceived: string, MandateUpdateDate: string, MaxConsecutivePaymentFailures: int, Name: string, NumConsecutiveFailures: int, PaymentMethodId: string, PaymentMethodStatus: string, PaymentRetryWindow: int, PaypalBaid: string, PaypalEmail: string, PaypalPreapprovalKey: string, PaypalType: string, Phone: string, PostalCode: string, SecondTokenId: string, State: string, StreetName: string, StreetNumber: string, TokenId: string, TotalNumberOfErrorPayments: int, TotalNumberOfProcessedPayments: int, Type: string, UseDefaultRetryRule: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8539,7 +8539,7 @@ export def "object-payment-method-transaction-log get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<Gateway: string, GatewayReasonCode: string, GatewayReasonCodeDescription: string, GatewayTransactionType: string, Id: string, PaymentMethodId: string, PaymentMethodType: string, RequestString: string, ResponseString: string, TransactionDate: string, TransactionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8570,7 +8570,7 @@ export def "object-payment-method delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8601,7 +8601,7 @@ export def "object-payment-method get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AchAbaCode: string, AchAccountName: string, AchAccountNumberMask: string, AchAccountType: string, AchAddress1: string, AchAddress2: string, AchBankName: string, Active: bool, BankBranchCode: string, BankCheckDigit: string, BankCity: string, BankCode: string, BankIdentificationNumber: string, BankName: string, BankPostalCode: string, BankStreetName: string, BankStreetNumber: string, BankTransferAccountName: string, BankTransferAccountNumber: string, BankTransferAccountNumberMask: string, BankTransferAccountType: string, BankTransferType: string, BusinessIdentificationCode: string, City: string, CompanyName: string, Country: string, CreatedById: string, CreatedDate: string, CreditCardAddress1: string, CreditCardAddress2: string, CreditCardCity: string, CreditCardCountry: string, CreditCardExpirationMonth: int, CreditCardExpirationYear: int, CreditCardHolderName: string, CreditCardMaskNumber: string, CreditCardPostalCode: string, CreditCardState: string, CreditCardType: string, DeviceSessionId: string, Email: string, ExistingMandate: string, FirstName: string, IBAN: string, IPAddress: string, Id: string, IdentityNumber: string, IsCompany: bool, LastFailedSaleTransactionDate: string, LastName: string, LastTransactionDateTime: string, LastTransactionStatus: string, MandateCreationDate: string, MandateID: string, MandateReceived: string, MandateUpdateDate: string, MaxConsecutivePaymentFailures: int, Name: string, NumConsecutiveFailures: int, PaymentMethodStatus: string, PaymentRetryWindow: int, PaypalBaid: string, PaypalEmail: string, PaypalPreapprovalKey: string, PaypalType: string, Phone: string, PostalCode: string, SecondTokenId: string, State: string, StreetName: string, StreetNumber: string, TokenId: string, TotalNumberOfErrorPayments: int, TotalNumberOfProcessedPayments: int, Type: string, UpdatedById: string, UpdatedDate: string, UseDefaultRetryRule: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8687,7 +8687,7 @@ export def "object-payment-method update" [
   --street-name: string # The street name of the customer's address. This field is used only for the direct debit payment method. **Character limit**: 100 **Values**: a string of 100 characters or fewer
   --street-number: string # The street number of the customer's address. This field is used only for the direct debit payment method. **Character limit**: 30 **Values**: a string of 30 characters or fewer
   --use-default-retry-rule: oneof<nothing, bool> # Determines whether to use the default retry rules configured in the Zuora Payments settings. Set this to `true` to use the default retry rules. Set this to `false` to set the specific rules for this payment method. If you set this value to `false`, then the fields, `PaymentRetryWindow` and `MaxConsecutivePaymentFailures`, are required. **Character limit**: 5 **Values**: `true` or `false`
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8721,7 +8721,7 @@ export def "object-payment-transaction-log get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AVSResponseCode: string, BatchId: string, CVVResponseCode: string, Gateway: string, GatewayReasonCode: string, GatewayReasonCodeDescription: string, GatewayState: string, GatewayTransactionType: string, Id: string, PaymentId: string, RequestString: string, ResponseString: string, TransactionDate: string, TransactionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8751,7 +8751,7 @@ export def "object-payment delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8781,7 +8781,7 @@ export def "object-payment get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AccountingCode: string, Amount: float, AppliedAmount: float, AppliedCreditBalanceAmount: float, AuthTransactionId: string, BankIdentificationNumber: string, CancelledOn: string, Comment: string, CreatedById: string, CreatedDate: string, EffectiveDate: string, Gateway: string, GatewayOrderId: string, GatewayResponse: string, GatewayResponseCode: string, GatewayState: string, Id: string, MarkedForSubmissionOn: string, PaymentMethodId: string, PaymentMethodSnapshotId: string, PaymentNumber: string, ReferenceId: string, RefundAmount: float, SecondPaymentReferenceId: string, SettledOn: string, SoftDescriptor: string, SoftDescriptorPhone: string, Source: string, SourceName: string, Status: string, SubmittedOn: string, TransferredToAccounting: string, Type: string, UnappliedAmount: float, UpdatedById: string, UpdatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8826,7 +8826,7 @@ export def "object-payment update" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the payment was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8871,7 +8871,7 @@ export def "object-product create" [
   --integration-status-ns: string # Status of the product's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --item-type-ns: string@item-type-ns-completer # Type of item that is created in NetSuite for the product. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the product was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8904,7 +8904,7 @@ export def "object-product-feature delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8935,7 +8935,7 @@ export def "object-product-feature get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, FeatureId: string, Id: string, ProductId: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -8984,7 +8984,7 @@ export def "object-product-rate-plan create" [
   --price-ns: string # Price associated with the corresponding item in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --subsidiary-ns: string # Subsidiary associated with the corresponding item in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the product rate plan was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9081,7 +9081,7 @@ export def "object-product-rate-plan-charge create" [
   --rev-rec-template-type-ns: string # Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --subsidiary-ns: string # Subsidiary associated with the corresponding item in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the product rate plan charge was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9115,7 +9115,7 @@ export def "object-product-rate-plan-charge-tier get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Currency: string, EndingUnit: float, Id: string, Price: float, PriceFormat: string, StartingUnit: float, Tier: int, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9148,7 +9148,7 @@ export def "object-product-rate-plan-charge-tier update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --price: float # The price of the tier if the charge is a flat fee, or the price of each unit in the tier if the charge model is tiered pricing. (format: double)
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9182,7 +9182,7 @@ export def "object-product-rate-plan-charge delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9213,7 +9213,7 @@ export def "object-product-rate-plan-charge get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountingCode: string, ApplyDiscountTo: string, BillCycleDay: int, BillCycleType: string, BillingPeriod: string, BillingPeriodAlignment: string, BillingTiming: string, ChargeModel: string, ChargeType: string, CreatedById: string, CreatedDate: string, DefaultQuantity: float, DeferredRevenueAccount: string, Description: string, DiscountLevel: string, EndDateCondition: string, Id: string, IncludedUnits: float, LegacyRevenueReporting: bool, ListPriceBase: string, MaxQuantity: float, MinQuantity: float, Name: string, NumberOfPeriod: int, OverageCalculationOption: string, OverageUnusedUnitsCreditOption: string, PriceChangeOption: string, PriceIncreasePercentage: float, ProductRatePlanId: string, RatingGroup: string, RecognizedRevenueAccount: string, RevRecCode: string, RevRecTriggerCondition: string, RevenueRecognitionRuleName: string, SmoothingModel: string, SpecificBillingPeriod: int, TaxCode: string, TaxMode: string, Taxable: bool, TriggerEvent: string, UOM: string, UpToPeriods: int, UpToPeriodsType: string, UpdatedById: string, UpdatedDate: string, UseDiscountSpecificAccountingCode: bool, UseTenantDefaultForPriceChange: bool, WeeklyBillCycleDay: string, Class__NS: string, DeferredRevAccount__NS: string, Department__NS: string, IncludeChildren__NS: string, IntegrationId__NS: string, IntegrationStatus__NS: string, ItemType__NS: string, Location__NS: string, RecognizedRevAccount__NS: string, RevRecEnd__NS: string, RevRecStart__NS: string, RevRecTemplateType__NS: string, Subsidiary__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9308,7 +9308,7 @@ export def "object-product-rate-plan-charge update" [
   --rev-rec-template-type-ns: string # Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --subsidiary-ns: string # Subsidiary associated with the corresponding item in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the product rate plan charge was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9342,7 +9342,7 @@ export def "object-product-rate-plan delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9373,7 +9373,7 @@ export def "object-product-rate-plan get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<ActiveCurrencies: list<string>, CreatedById: string, CreatedDate: string, Description: string, EffectiveEndDate: string, EffectiveStartDate: string, Id: string, Name: string, ProductId: string, UpdatedById: string, UpdatedDate: string, BillingPeriod__NS: string, Class__NS: string, Department__NS: string, IncludeChildren__NS: string, IntegrationId__NS: string, IntegrationStatus__NS: string, ItemType__NS: string, Location__NS: string, MultiCurrencyPrice__NS: string, Price__NS: string, Subsidiary__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9423,7 +9423,7 @@ export def "object-product-rate-plan update" [
   --price-ns: string # Price associated with the corresponding item in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --subsidiary-ns: string # Subsidiary associated with the corresponding item in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the product rate plan was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9457,7 +9457,7 @@ export def "object-product delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9488,7 +9488,7 @@ export def "object-product get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AllowFeatureChanges: bool, Category: string, CreatedById: string, CreatedDate: string, Description: string, EffectiveEndDate: string, EffectiveStartDate: string, Id: string, Name: string, SKU: string, UpdatedById: string, UpdatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, ItemType__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9531,7 +9531,7 @@ export def "object-product update" [
   --integration-status-ns: string # Status of the product's synchronization with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --item-type-ns: string@item-type-ns-completer # Type of item that is created in NetSuite for the product. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the product was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9566,7 +9566,7 @@ export def "object-rate-plan-charge-tier get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, EndingUnit: float, Id: string, Price: float, PriceFormat: string, RatePlanChargeId: string, StartingUnit: float, Tier: int, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9598,7 +9598,7 @@ export def "object-rate-plan-charge get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountingCode: string, ApplyDiscountTo: string, BillCycleDay: int, BillCycleType: string, BillingPeriod: string, BillingPeriodAlignment: string, BillingTiming: string, ChargeModel: string, ChargeNumber: string, ChargeType: string, ChargedThroughDate: string, CreatedById: string, CreatedDate: string, DMRC: float, DTCV: float, Description: string, DiscountLevel: string, EffectiveEndDate: string, EffectiveStartDate: string, EndDateCondition: string, Id: string, IsLastSegment: bool, ListPriceBase: string, MRR: float, Name: string, NumberOfPeriods: int, OriginalId: string, OverageCalculationOption: string, OverageUnusedUnitsCreditOption: string, PriceChangeOption: string, PriceIncreasePercentage: float, ProcessedThroughDate: string, Quantity: float, RatePlanId: string, RatingGroup: string, RevRecCode: string, RevRecTriggerCondition: string, RevenueRecognitionRuleName: string, RolloverBalance: float, Segment: int, SpecificBillingPeriod: int, SpecificEndDate: string, TCV: float, TriggerDate: string, TriggerEvent: string, UOM: string, UpToPeriods: int, UpToPeriodsType: string, UpdatedById: string, UpdatedDate: string, Version: int, WeeklyBillCycleDay: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9646,7 +9646,7 @@ export def "object-rate-plan-charge update" [
   --trigger-event: string # Specifies when to start billing the customer for the charge. **Note:** This field can be passed through the Subscribe and Amend calls and will override the default value set on the Product Rate Plan Charge. **Note:** When the [Update rate plan charge trigger condition?](https://knowledgecenter.zuora.com/Billing/Billing_and_Payments/Billing_Settings/Define_Default_Subscription_Settings) setting is set to `Yes`, this field can be passed through the update() call and override the previous value. You can use this feature to directly update the trigger condition of a rate plan charge without creating an order action (or amendment). **Character limit**: 18 **Values**: inherited from `ProductRatePlanCharge.TriggerEvent` and can be one of the following values: - `ContractEffective` is the date when the subscription's contract goes into effect and the charge is ready to be billed. - `ServiceActivation` is when the services or products for a subscription have been activated and the customers have access. - `CustomerAcceptance` is when the customer accepts the services or products for a subscription. - `SpecificDate` is valid only on the RatePlanCharge. When this value is specified, use the `TriggerDate` field to set the specific date.
   --up-to-periods-type: string # The period type used to define when the charge ends. This field can be updated when **Status** is `Draft`. **Values**: one of the following: - `Billing Periods` (default) - `Days` - `Weeks` - `Months` - `Years` **Note**: - You must use this field together with the `UpToPeriods` field to specify the time period. - This field is only applicable only when the `EndDateCondition` field is set to `FixedPeriod`.
   --weekly-bill-cycle-day: string # Specifies which day of the week as the bill cycle day (BCD) for the charge. This feature is in **Limited Availability**. If you wish to have access to the feature, submit a request at [Zuora Global Support](http://support.zuora.com/). **Values**: one of the following: - `Sunday` - `Monday` - `Tuesday` - `Wednesday` - `Thursday` - `Friday` - `Saturday`
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9681,7 +9681,7 @@ export def "object-rate-plan get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AmendmentId: string, AmendmentType: string, CreatedById: string, CreatedDate: string, Id: string, Name: string, SubscriptionId: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9734,7 +9734,7 @@ export def "object-refund create" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the refund was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string # Specifies whether the refund should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9767,7 +9767,7 @@ export def "object-refund-invoice-payment get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Id: string, InvoiceId: string, InvoicePaymentId: string, RefundAmount: float, RefundId: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9799,7 +9799,7 @@ export def "object-refund-transaction-log get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<BatchId: string, Gateway: string, GatewayReasonCode: string, GatewayReasonCodeDescription: string, GatewayState: string, GatewayTransactionType: string, Id: string, RefundId: string, RequestString: string, ResponseString: string, TransactionDate: string, TransactionId: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9830,7 +9830,7 @@ export def "object-refund delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9861,7 +9861,7 @@ export def "object-refund get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AccountingCode: string, Amount: float, CancelledOn: string, Comment: string, CreatedById: string, CreatedDate: string, Gateway: string, GatewayResponse: string, GatewayResponseCode: string, GatewayState: string, Id: string, MarkedForSubmissionOn: string, MethodType: string, PaymentId: any, PaymentMethodId: string, PaymentMethodSnapshotId: string, ReasonCode: string, ReferenceID: string, RefundDate: string, RefundNumber: string, RefundTransactionTime: string, SecondRefundReferenceId: string, SettledOn: string, SoftDescriptor: string, SoftDescriptorPhone: string, SourceType: string, Status: string, SubmittedOn: string, TransferredToAccounting: string, Type: string, UpdatedById: string, UpdatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9901,7 +9901,7 @@ export def "object-refund update" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the refund was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string # Specifies whether the refund should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9936,7 +9936,7 @@ export def "object-subscription-product-feature get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<CreatedById: string, CreatedDate: string, Description: string, FeatureCode: string, FeatureId: string, Id: string, Name: string, RatePlanId: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9967,7 +9967,7 @@ export def "object-subscription delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -9999,7 +9999,7 @@ export def "object-subscription get" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --x-zuora-wsdl-version: string # Zuora WSDL version number.
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AutoRenew: bool, CancelledDate: string, ContractAcceptanceDate: string, ContractEffectiveDate: string, CreatedById: string, CreatedDate: string, CreatorAccountId: string, CreatorInvoiceOwnerId: string, CurrentTerm: int, CurrentTermPeriodType: string, Id: string, InitialTerm: int, InitialTermPeriodType: string, InvoiceOwnerId: string, IsInvoiceSeparate: bool, Name: string, Notes: string, OriginalCreatedDate: string, OriginalId: string, PreviousSubscriptionId: string, RenewalSetting: string, RenewalTerm: int, RenewalTermPeriodType: string, Revision: string, ServiceActivationDate: string, Status: string, SubscriptionEndDate: string, SubscriptionStartDate: string, TermEndDate: string, TermStartDate: string, TermType: string, UpdatedById: string, UpdatedDate: string, Version: int, CpqBundleJsonId__QT: string, OpportunityCloseDate__QT: string, OpportunityName__QT: string, QuoteBusinessType__QT: string, QuoteNumber__QT: string, QuoteType__QT: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Project__NS: string, SalesOrder__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10062,7 +10062,7 @@ export def "object-subscription update" [
   --project-ns: string # The NetSuite project that the subscription was created from. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sales-order-ns: string # The NetSuite sales order than the subscription was created from. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the subscription was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10109,7 +10109,7 @@ export def "object-taxation-item create" [
   tax_rate: float # The tax rate applied to the charge. **Character limit**: 16 **Values**: a valid decimal value (format: double)
   --tax-rate-description: string # The description of the tax rate. **Character limit**: 255 **Values**: a string of 255 characters or fewer
   tax_rate_type: string # The type of the tax rate applied to the charge. **Character limit**: 10 **Values**: `Percentage`, `FlatFee`
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10141,7 +10141,7 @@ export def "object-taxation-item delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10172,7 +10172,7 @@ export def "object-taxation-item get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountingCode: string, CreatedById: string, CreatedDate: string, ExemptAmount: float, Id: string, InvoiceItemId: string, Jurisdiction: string, LocationCode: string, Name: string, TaxAmount: float, TaxCode: string, TaxCodeDescription: string, TaxDate: string, TaxRate: float, TaxRateDescription: string, TaxRateType: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10215,7 +10215,7 @@ export def "object-taxation-item update" [
   --tax-rate: float # The tax rate applied to the charge. **Character limit**: 16 **Values**: a valid decimal value (format: double)
   --tax-rate-description: string # The description of the tax rate. **Character limit**: 255 **Values**: a string of 255 characters or fewer
   --tax-rate-type: string # The type of the tax rate applied to the charge. **Character limit**: 10 **Values**: `Percentage`, `FlatFee`
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10254,7 +10254,7 @@ export def "object-unit-of-measure create" [
   --displayed-as: string # The name of the UOM that you want displayed on invoices. The default value is the `UomName` field value. **Character limit**: 50 **Values**: A string of 50 characters or fewer
   --rounding-mode: string # Specifies whether to round the UOM value up or down when the value exceeds the `DecimalPlaces` field value. The default value is `Up`. **Character limit**: 4 **Values**: `Up`, `Down`
   uom_name: string # The name of the UOM, such as license or GB. This name is displayed in query results and in the web-based UI labels. If you want a different name to be displayed on invoices, then use the `DisplayedAs` field to provide the invoice label. **Character limit**: 50 **Values**: a string of 50 characters or fewer
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10286,7 +10286,7 @@ export def "object-unit-of-measure delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10317,7 +10317,7 @@ export def "object-unit-of-measure get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<Active: bool, CreatedById: string, CreatedDate: string, DecimalPlaces: int, DisplayedAs: string, Id: string, RoundingMode: string, UomName: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10353,7 +10353,7 @@ export def "object-unit-of-measure update" [
   --displayed-as: string # The name of the UOM that you want displayed on invoices. The default value is the `UomName` field value. **Character limit**: 50 **Values**: A string of 50 characters or fewer
   --rounding-mode: string # Specifies whether to round the UOM value up or down when the value exceeds the `DecimalPlaces` field value. The default value is `Up`. **Character limit**: 4 **Values**: `Up`, `Down`
   --uom-name: string # The name of the UOM, such as license or GB. This name is displayed in query results and in the web-based UI labels. If you want a different name to be displayed on invoices, then use the `DisplayedAs` field to provide the invoice label. **Character limit**: 50 **Values**: a string of 50 characters or fewer
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10399,7 +10399,7 @@ export def "object-usage create" [
   --subscription-id: string # The ID of the subscription that contains the fees related to the usage data. The ID of a subscription might change when you create amendments to the subscription. It is good practice to use the unique subscription number that you can specify in the `SubscriptionNumber` field.
   --subscription-number: string # The unique identifier number of the subscription that contains the fees related to the usage data. It is good practice to use this field when creating usage records.
   uom: string # Specifies the units to measure usage. Units of measure are configured in the web-based UI. Your values depend on your configuration in **Billing Settings**. **Character limit**: **Values**: a valid unit of measure
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10431,7 +10431,7 @@ export def "object-usage delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10462,7 +10462,7 @@ export def "object-usage get" [
   --fields: string # Object fields to return
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<AccountId: string, AccountNumber: string, ChargeId: string, CreatedById: string, CreatedDate: string, Description: string, EndDateTime: string, Id: string, Quantity: float, RbeStatus: string, SourceType: string, StartDateTime: string, SubmissionDateTime: string, SubscriptionId: string, SubscriptionNumber: string, UOM: string, UpdatedById: string, UpdatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -10499,7 +10499,7 @@ export def "object-usage update" [
   --start-date-time: string # The start date and time of a range of time when usage is tracked. Zuora uses this field value to determine the usage date. Unlike the `EndDateTime`, the `StartDateTime` field does affect usage calculation. **Character limit**: 29 **Values**: a valid date and time value (format: date-time)
   --submission-date-time: string # The date when usage was submitted. **Character limit**: 29 **Values**: automatically generated (format: date-time)
   --uom: string # Specifies the units to measure usage. Units of measure are configured in the web-based UI. Your values depend on your configuration in **Billing Settings**. **Character limit**: **Values**: a valid unit of measure
-]: any -> any {
+]: any -> record<Id: string, Success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10537,7 +10537,7 @@ export def "operations-billing-preview create" [
   --charge-type-to-exclude: string # The charge types to exclude from the billing preview. **Possible values:** OneTime, Recurring, Usage, and any combination of these values.
   --including-evergreen-subscription: oneof<nothing, bool> # Indicates if evergreen subscriptions are included in the billingPreview call.
   target_date: string # The target date for the billingPreview call. The billingPreview call generates preview invoice item data and credit memo item data from the first day of the customer's next billing period to the TargetDate. If the TargetDate is later than the subscription current term end date, the preview invoice item data and credit memo item data is generated from the first day of the customer's next billing period to the current term end date. If you want to generate preview invoice item data and credit memo item data past the end of the subscription current term, specify the `AssumeRenewal` field in the request. **Note:** The credit memo item data is only available if you have Invoice Settlement feature enabled. The Invoice Settlement feature is generally available as of Zuora Billing Release 296 (March 2021). This feature includes Unapplied Payments, Credit and Debit Memo, and Invoice Item Settlement. If you want to enable Invoice Settlement, see [Invoice Settlement Enablement and Checklist Guide](https://knowledgecenter.zuora.com/Billing/Billing_and_Payments/Invoice_Settlement/Invoice_Settlement_Migration_Checklist_and_Guide) for more information. (format: date)
-]: any -> any {
+]: any -> record<accountId: string, creditMemoItems: table<amount: float, amountWithoutTax: float, appliedToItemId: string, chargeDate: string, chargeNumber: string, chargeType: string, comment: string, id: string, processingType: string, quantity: string, ratePlanChargeId: string, serviceEndDate: string, serviceStartDate: string, sku: string, skuName: string, subscriptionId: string, subscriptionNumber: string, unitOfMeasure: string>, invoiceItems: table<appliedToItemId: string, chargeAmount: string, chargeDate: string, chargeDescription: string, chargeId: string, chargeName: string, chargeNumber: string, chargeType: string, id: string, processingType: string, productName: string, quantity: string, serviceEndDate: string, serviceStartDate: string, subscriptionId: string, subscriptionName: string, subscriptionNumber: string, taxAmount: string, unitOfMeasure: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10576,7 +10576,7 @@ export def "operations-invoice-collect create-transaction-payment" [
   --invoice-target-date: string # **Note:** This field has been replaced by the `targetDate` field in Zuora REST API version `215.0` and later. The `invoiceTargetDate` field is only available for backward compatibility. The date through which to calculate charges on this account if an invoice is generated, in `yyyy-mm-dd` format. If this field is omitted and `invoiceId` is not specified, the current date is used by default. This field is in Zuora REST API version control. Supported minor versions are `214.0` and earlier. (format: date)
   --payment-gateway: string # The name of the gateway that will be used for the payment. Must be a valid gateway name and the gateway must support the specific payment method. If a value is not specified, the default gateway on the Account will be used.
   --target-date: string # The date through which to calculate charges on this account if an invoice or a credit memo is generated, in `yyyy-mm-dd` format. If this field is omitted and `invoiceId` is not specified, the current date is used by default. **Note:** The credit memo is only available if you have the Invoice Settlement feature enabled. This field is in Zuora REST API version control. Supported minor versions are `215.0` and later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (format: date)
-]: any -> any {
+]: any -> record<amountCollected: string, creditMemos: table<id: string, memoAmount: string, memoNumber: string>, invoices: table<invoiceAmount: string, invoiceId: string, invoiceNumber: string>, paymentId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10610,7 +10610,7 @@ export def "order-line-items-bulk create" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --order-line-items: list # item shape: {id: string, UOM?: string, accountingCode?: string, amountPerUnit?: float, billTargetDate?: string, customFields?: record, deferredRevenueAccountingCode?: string, description?: string, itemName?: string, itemNumber?: string, itemState?: "Executing"|"SentToBilling"|"Complete"|"Cancelled", itemType?: "Product"|"Fee"|"Services", listPricePerUnit?: float, productCode?: string, purchaseOrderNumber?: string, quantity?: float, recognizedRevenueAccountingCode?: string, revenueRecognitionRule?: string, ... (3 more fields)}
   --processing-options: record # Invoice or Payment. — shape: {applicationOrder?: list<string>, applyCredit?: bool, applyCreditBalance?: bool, billingOptions?: record, collectPayment?: bool, electronicPaymentOptions?: record, runBilling?: bool}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool, orderLineItem: record<amount: float, id: string, UOM: string, accountingCode: string, amountPerUnit: float, billTargetDate: string, customFields: record, deferredRevenueAccountingCode: string, description: string, itemName: string, itemNumber: string, itemState: string, itemType: string, listPricePerUnit: float, productCode: string, productRatePlanChargeId: string, purchaseOrderNumber: string, quantity: float, recognizedRevenueAccountingCode: string, revenueRecognitionRule: string, soldTo: string, soldToData: record<address1: string, address2: string, city: string, country: string, county: string, firstName: string, lastName: string, postalCode: string, state: string>, taxCode: string, taxMode: string, transactionDate: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10642,7 +10642,7 @@ export def "order-line-items get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, orderLineItem: record<amount: float, id: string, UOM: string, accountingCode: string, amountPerUnit: float, billTargetDate: string, customFields: record, deferredRevenueAccountingCode: string, description: string, itemName: string, itemNumber: string, itemState: string, itemType: string, listPricePerUnit: float, productCode: string, productRatePlanChargeId: string, purchaseOrderNumber: string, quantity: float, recognizedRevenueAccountingCode: string, revenueRecognitionRule: string, soldTo: string, soldToData: record<address1: string, address2: string, city: string, country: string, county: string, firstName: string, lastName: string, postalCode: string, state: string>, taxCode: string, taxMode: string, transactionDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($item_id | is-empty) { error make --unspanned { msg: "path parameter 'itemId' must be non-empty" } }
@@ -10692,7 +10692,7 @@ export def "order-line-items update" [
   --tax-code: string # The tax code for the Order Line Item (OLI). You can update this field for an OLI only when the OLI is in the `Executing` state (when the `itemState` field is set as `Executing`).
   --tax-mode: string@tax-mode-completer # The tax mode for the Order Line Item (OLI). You can update this field for an OLI only when the OLI is in the `Executing` state (when the `itemState` field is set as `Executing`).
   --transaction-date: string # The transaction date of the Order Line Item (OLI). You can update this field for an OLI only when the OLI is in the `Executing` state (when the `itemState` field is set as `Executing`). (format: date)
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10729,7 +10729,7 @@ export def "orders get-list" [
   --end-date: string # The result will only contains orders with the date of dateFilterOption earlier than or equal to this date. (format: date)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, orders: table<createdBy: string, createdDate: string, currency: string, customFields: record, description: string, existingAccountNumber: string, orderDate: string, orderLineItems: list, orderNumber: string, status: string, subscriptions: list, updatedBy: string, updatedDate: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "pageSize" $page_size "scalar") (serialize-qp "dateFilterOption" $date_filter_option "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar")] | flatten | str join "&"
@@ -10772,7 +10772,7 @@ export def "orders create" [
   --order-number: string # The order number of the new order. If not provided, system will auto-generate a number for this order.
   --processing-options: record # Invoice or Payment. — shape: {applicationOrder?: list<string>, applyCredit?: bool, applyCreditBalance?: bool, billingOptions?: record, collectPayment?: bool, electronicPaymentOptions?: record, runBilling?: bool}
   subscriptions: list # Each item includes a set of order actions, which will be applied to the same base subscription. — item shape: {customFields?: record, orderActions?: list, quote?: record, ramp?: record, subscriptionNumber?: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool, accountId: string, accountNumber: string, creditMemoIds: list<string>, creditMemoNumbers: list<string>, invoiceIds: list<string>, invoiceNumbers: list<string>, orderId: string, orderLineItems: table<id: string, itemNumber: string>, orderNumber: string, paidAmount: string, paymentId: string, paymentNumber: string, ramps: table<rampNumber: string, subscriptionNumber: string>, status: string, subscriptionIds: list<string>, subscriptionNumbers: list<string>, subscriptions: table<status: string, subscriptionId: string, subscriptionNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10810,7 +10810,7 @@ export def "orders-invoice-owner get" [
   --end-date: string # The result will only contain the orders with the date of dateFilterOption earlier than or equal to this date. (format: date)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, nextPage: string, orders: table<createdBy: string, createdDate: string, currency: string, customFields: record, description: string, existingAccountNumber: string, orderDate: string, orderLineItems: list, orderNumber: string, status: string, subscriptions: list, updatedBy: string, updatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'accountNumber' must be non-empty" } }
@@ -10853,7 +10853,7 @@ export def "orders-preview create" [
   --preview-account-info: record # Information about the account that will own the order. — shape: {billCycleDay: int, currency: string, customFields?: record, soldToContact?: record, taxInfo?: record}
   preview_options: record # shape: {previewNumberOfPeriods?: int, previewThruType?: "SpecificDate"|"TermEnd"|"NumberOfPeriods", previewTypes?: list<string>, specificPreviewThruDate?: string}
   subscriptions: list # Each item includes a set of order actions, which will be applied to the same base subscription. — item shape: {customFields?: record, orderActions?: list, quote?: record, ramp?: record, subscriptionNumber?: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool, previewResult: record<chargeMetrics: list<record>, creditMemos: list<record>, invoices: list<record>, orderDeltaMetrics: record<orderDeltaMrr: list, orderDeltaTcb: list, orderDeltaTcv: list>, orderMetrics: list<record>, rampMetrics: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -10890,7 +10890,7 @@ export def "orders-subscription get-by-number" [
   --end-date: string # The result will only contain the orders with the date of 'dateFilterOption' earlier than or equal to this date. (format: date)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, nextPage: string, orders: table<createdBy: string, createdDate: string, currency: string, customFields: record, description: string, existingAccountNumber: string, orderDate: string, orderLineItems: list, orderNumber: string, status: string, subscriptions: list, updatedBy: string, updatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
@@ -10926,7 +10926,7 @@ export def "orders-subscription-owner get" [
   --end-date: string # The result will only contain the orders with the date of 'dateFilterOption' earlier than or equal to this date. (format: date)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, nextPage: string, orders: table<createdBy: string, createdDate: string, currency: string, customFields: record, description: string, existingAccountNumber: string, orderDate: string, orderLineItems: list, orderNumber: string, status: string, subscriptions: list, updatedBy: string, updatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_number | is-empty) { error make --unspanned { msg: "path parameter 'accountNumber' must be non-empty" } }
@@ -10960,7 +10960,7 @@ export def "orders-term get-subscription" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, nextPage: string, terms: table<endDate: string, isEvergreen: bool, startDate: string, termNumber: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_number | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionNumber' must be non-empty" } }
@@ -10991,7 +10991,7 @@ export def "orders delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
@@ -11021,7 +11021,7 @@ export def "orders get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, order: record<createdBy: string, createdDate: string, currency: string, customFields: record, description: string, existingAccountNumber: string, orderDate: string, orderLineItems: list<record>, orderNumber: string, status: string, subscriptions: list<record>, updatedBy: string, updatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
@@ -11054,7 +11054,7 @@ export def "orders-custom-fields update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --custom-fields: record # Container for custom fields of an Order object.
   --subscriptions: list # item shape: {orderActions?: list, subscriptionNumber?: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11090,7 +11090,7 @@ export def "orders-evergreen-metrics get-metricsfor-subscription" [
   --end-date: string # The end date of the date range for which you want to get the metrics. The date must be in yyyy-mm-dd format. For example, 2017-12-03. (format: date)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool, order: record<createdBy: string, createdDate: string, currency: string, customFields: record, description: string, existingAccountNumber: string, orderDate: string, orderNumber: string, status: string, subscriptions: list<record>, updatedBy: string, updatedDate: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
@@ -11122,7 +11122,7 @@ export def "orders-ramp-metrics get-by-number" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<rampMetrics: table<description: string, discountTcb: float, discountTcv: float, grossTcb: float, grossTcv: float, intervals: list, name: string, netTcb: float, netTcv: float, number: string>, processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($order_number | is-empty) { error make --unspanned { msg: "path parameter 'orderNumber' must be non-empty" } }
@@ -11154,7 +11154,7 @@ export def "orders-trigger-dates update" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --subscriptions: list # item shape: {orderActions?: list, subscriptionNumber: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool, accountNumber: string, orderNumber: string, status: string, subscriptions: table<status: string, subscriptionNumber: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11228,7 +11228,7 @@ export def "payment-methods create" [
   --business-identification-code: string # The BIC code used for SEPA.
   --currency-code: string # The currency used for payment method authorization. If this field is not specified, `currency` specified for the account is used for payment method authorization. If no currency is specified for the account, the default currency of the account is then used.
   --identity-number: string # The identity number used for Bank Transfer.
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool, id: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11277,7 +11277,7 @@ export def "payment-methods-credit-cards create" [
   --mit-profile-type: string@mit-profile-type-completer # Required if you set the `mitProfileAction` field. Indicates the type of the stored credential profile to process recurring or unsecheduled transactions.
   --num-consecutive-failures: int # The number of consecutive failed payments for this payment method. It is reset to `0` upon successful payment. (format: int32)
   --security-code: string # The CVV or CVV2 security code for the credit card or debit card. Only required if changing expirationMonth, expirationYear, or cardHolderName. To ensure PCI compliance, this value isn't stored and can't be queried.
-]: any -> any {
+]: any -> record<paymentMethodId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11310,7 +11310,7 @@ export def "payment-methods-credit-cards-accounts get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<creditCards: table<cardHolderInfo: record, cardNumber: string, cardType: string, defaultPaymentMethod: bool, expirationMonth: int, expirationYear: int, id: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -11357,7 +11357,7 @@ export def "payment-methods-credit-cards update" [
   --security-code: string # The CVV or CVV2 security code for the credit card or debit card. Only required if changing expirationMonth, expirationYear, or cardHolderName. To ensure PCI compliance, this value isn't stored and can't be queried.
   --state: string # State; must be a valid state name or 2-character abbreviation.
   --zip-code: string # Zip code, 20 characters or less.
-]: any -> any {
+]: any -> record<paymentMethodId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11401,7 +11401,7 @@ export def "payment-methods-decryption create" [
   --payment-gateway: string # The label name of the gateway instance configured in Zuora that should process the payment. When creating a Payment, this must be a valid gateway instance ID and this gateway must support the specific payment method. If not specified, the default gateway on the Account will be used. **Note:** When `processPayment` is `true`, this field is required.
   payment_token: record # The complete JSON Object representing the encrypted payment token payload returned in the response from the Apple Pay session.
   --process-payment: oneof<nothing, bool> # A boolean flag to control whether a payment should be processed after creating payment method. The payment amount will be equivalent to the amount the merchant supplied in the ApplePay session. Default is false. When `processPayment` is set to `false`, it must be followed by a separate subscribe or payment API call. **Note:** If you set this field to `true`, you must specify the `paymentGateway` field with the payment gateway instance name. If you set this field to `false`, you must select the **Verify new credit card** check box on the gateway instance settings page. Otherwise, the cryptogram will not be sent to the gateway.
-]: any -> any {
+]: any -> record<amount: string, paymentId: string, paymentMethodId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11433,7 +11433,7 @@ export def "payment-methods delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
@@ -11463,7 +11463,7 @@ export def "payment-methods get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountHolderInfo: record<accountHolderName: string, addressLine1: string, addressLine2: string, city: string, country: string, email: string, phone: string, state: string, zipCode: string>, id: string, isDefault: bool, mandateInfo: record<existingMandateStatus: string, mandateCreationDate: string, mandateId: string, mandateReason: string, mandateReceivedStatus: string, mandateStatus: string, mandateUpdateDate: string, mitConsentAgreementRef: string, mitConsentAgreementSrc: string, mitProfileAction: string, mitProfileAgreedOn: string, mitProfileType: string, mitTransactionId: string>, status: string, type: string, IBAN: string, accountNumber: string, bankCode: string, bankTransferType: string, branchCode: string, businessIdentificationCode: string, identityNumber: string, bankABACode: string, bankAccountName: string, bankAccountNumber: string, bankAccountType: string, bankName: string, cardNumber: string, expirationMonth: int, expirationYear: int, securityCode: string, BAID: string, email: string, preapprovalKey: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
@@ -11502,7 +11502,7 @@ export def "payment-methods update" [
   --expiration-month: int # One or two digits expiration month (1-12).
   --expiration-year: int # Four-digit expiration year.
   --security-code: string # Optional. It is the CVV or CVV2 security code specific for the credit card or debit card. To ensure PCI compliance, this value is not stored and cannot be queried. If securityCode code is not passed in the request payload, this operation only updates related fields in the payload. It does not validate the payment method through the gateway. If securityCode is passed in the request payload, this operation retrieves the credit card information from payload and validates them through the gateway.
-]: any -> any {
+]: any -> record<id: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11541,7 +11541,7 @@ export def "payment-methods-authorize create-authorization" [
   --mit-transaction-source: string@mit-transaction-source-completer # Payment transaction source used to differentiate the transaction source in Stored Credential Transaction framework. - `C_Unscheduled`: Cardholder-initiated transaction (CIT) that does not occur on scheduled or regularly occurring dates. - `M_Recurring`: Merchant-initiated transaction (MIT) that occurs at regular intervals. - `M_Unscheduled`: Merchant-initiated transaction (MIT) that does not occur on scheduled or regularly occurring dates.
   --soft-descriptor: string # A text, rendered on a cardholder’s statement, describing a particular product or service purchased by the cardholder.
   --soft-descriptor-phone: string # The phone number that relates to the soft descriptor, usually the phone number of customer service.
-]: any -> any {
+]: any -> record<gatewayOrderId: string, resultCode: string, resultMessage: string, success: bool, transactionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11575,7 +11575,7 @@ export def "payment-methods-profiles get-stored-credential" [
   --include-all: oneof<nothing, bool> # Specifies whether to retrieve all the stored credential profiles within the payment method. By default, Zuora returns only the stored credential profiles with `Agreed` or `Active` status. If you set this parameter to `true`, Zuora returns all the stored credential profiles. (default: false)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<profiles: record<activatedOn: string, agreedOn: string, brand: string, cancelledOn: string, consentAgreementRef: string, consentAgreementSrc: string, expiredOn: string, number: int, paymentMethodId: string, status: string, type: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
@@ -11615,7 +11615,7 @@ export def "payment-methods-profiles create-stored-credential" [
   --network-transaction-id: string # The ID of a network transaction.
   status: string@status-completer-7 # Specifies the status of the stored credential profile. * `Active` - Use this value if you are creating the stored credential profile after receiving the customer's consent, or if the stored credential profile represents a stored credential profile in an external system. You can use the `action` field to specify how Zuora activates the stored credential profile. * `Agreed` - Use this value if you are migrating the payment method to the stored credential transaction framework. In this case, Zuora will not send a cardholder-initiated transaction (CIT) to the payment gateway to validate the stored credential profile.
   type: string@type-completer-7
-]: any -> any {
+]: any -> record<number: int, paymentMethodId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11649,7 +11649,7 @@ export def "payment-methods-profiles-cancel create-stored-credential" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<number: int, paymentMethodId: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
@@ -11681,7 +11681,7 @@ export def "payment-methods-profiles-expire create-stored-credential" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<number: int, paymentMethodId: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
@@ -11712,7 +11712,7 @@ export def "payment-methods-scrub update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_method_id | is-empty) { error make --unspanned { msg: "path parameter 'payment-method-id' must be non-empty" } }
@@ -11746,7 +11746,7 @@ export def "payment-methods-verify update" [
   --gateway-options: record # The field used to pass gateway-specific parameters and parameter values. — shape: {key?: string, value?: string}
   --payment-gateway-name: string # The name of the payment gateway instance. If no value is specified for this field, the default payment gateway of the customer account will be used.
   --security-code: string # The CVV or CVV2 security code for the credit card or debit card. To ensure PCI compliance, the value of this field is not stored and cannot be queried.
-]: any -> any {
+]: any -> record<paymentMethodId: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11783,7 +11783,7 @@ export def "payment-methods-void-authorize create-cancel-authorization" [
   gateway_order_id: string # The order ID for the specific gateway.
   --payment-gateway-id: string # The ID of the payment gateway instance. This field is required if you do not specify the `accountId` and `accountNumber` fields.
   transaction_id: string # The ID of the transaction.
-]: any -> any {
+]: any -> record<gatewayOrderId: string, resultCode: string, resultMessage: string, success: bool, transactionId: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11867,7 +11867,7 @@ export def "payment-runs create" [
   --process-payment-with-closed-pm: oneof<nothing, bool> # **Note:** The **Process Electronic Payment** permission also needs to be allowed for a Manage Payment Runs role to work. See [Payments Roles](https://knowledgecenter.zuora.com/CF_Users_and_Administrators/A_Administrator_Settings/User_Roles/e_Payments_Roles) for more information. Whether to process payments even if the default payment method is closed.
   --run-date: string # The date and time when the scheduled payment run is to be executed, in `yyyy-mm-dd hh:mm:ss` format. The backend will ignore mintues and seconds in the field value. For example, if you specify `2017-03-01 11:30:37` for this value, this payment run will be run at 2017-03-01 11:00:00. You must specify either the `runDate` field or the `targetDate` field in the request body. If you specify the `runDate` field, the scheduced payment run is to be executed on the run date. If you specify the `targetDate` field, the payment run is executed immediately after it is created. (format: date-time)
   --target-date: string # The target date used to determine which receivables to be paid in the payment run. The payments are collected for all receivables with the due date no later than the target date. You must specify either the `runDate` field or the `targetDate` field in the request body. If you specify the `runDate` field, the scheduced payment run is to be executed on the run date. If you specify the `targetDate` field, the payment run is executed immediately after it is created. (format: date)
-]: any -> any {
+]: any -> record<accountId: string, applyCreditBalance: bool, autoApplyCreditMemo: bool, autoApplyUnappliedPayment: bool, batch: string, billCycleDay: string, billingRunId: string, collectPayment: bool, completedOn: string, consolidatedPayment: bool, createdById: string, createdDate: string, currency: string, executedOn: string, id: string, number: string, paymentGatewayId: string, processPaymentWithClosedPM: bool, runDate: string, status: string, success: bool, targetDate: string, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -11970,7 +11970,7 @@ export def "payment-runs update" [
   --process-payment-with-closed-pm: oneof<nothing, bool> # **Note:** The **Process Electronic Payment** permission also needs to be allowed for a Manage Payment Runs role to work. See [Payments Roles](https://knowledgecenter.zuora.com/CF_Users_and_Administrators/A_Administrator_Settings/User_Roles/e_Payments_Roles) for more information. Whether to process payments even if the default payment method is closed.
   --run-date: string # The date and time when the scheduled payment run is to be executed, in `yyyy-mm-dd hh:mm:ss` format. The backend will ignore mintues and seconds in the field value. For example, if you specify `2017-03-01 11:30:37` for this value, this payment run will be run at 2017-03-01 11:00:00. (format: date-time)
   --target-date: string # The target date used to determine which receivables to be paid in the payment run. The payments are collected for all receivables with the due date no later than the target date. (format: date)
-]: any -> any {
+]: any -> record<accountId: string, applyCreditBalance: bool, autoApplyCreditMemo: bool, autoApplyUnappliedPayment: bool, batch: string, billCycleDay: string, billingRunId: string, collectPayment: bool, completedOn: string, consolidatedPayment: bool, createdById: string, createdDate: string, currency: string, executedOn: string, id: string, number: string, paymentGatewayId: string, processPaymentWithClosedPM: bool, runDate: string, status: string, success: bool, targetDate: string, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12058,7 +12058,7 @@ export def "paymentgateways get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<paymentgateways: table<id: string, isActive: bool, isDefault: bool, name: string, type: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/paymentgateways")
@@ -12103,7 +12103,7 @@ export def "payments get-list" [
   --qp-sort: string # This parameter restricts the order of the data returned in the response. You can use this parameter to supply a dimension you want to sort on. A sortable field uses the following form: *operator* *field_name* You can use at most two sortable fields in one URL path. Use a comma to separate sortable fields. For example: *operator* *field_name*, *operator* *field_name* *operator* is used to mark the order of sequencing. The operator is optional. If you only specify the sortable field without any operator, the response data is sorted in descending order by this field. - The `-` operator indicates an ascending order. - The `+` operator indicates a descending order. By default, the response data is displayed in descending order by payment number. *field_name* indicates the name of a sortable field. The supported sortable fields of this operation are as below: - number - accountId - amount - appliedAmount - unappliedAmount - refundAmount - creditBalanceAmount - effectiveDate - createdDate - createdById - updatedDate - updatedById Examples: - /v1/payments?sort=+number - /v1/payments?status=Processed&sort=-number,+amount
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, payments: table<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "appliedAmount" $applied_amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "creditBalanceAmount" $credit_balance_amount "scalar") (serialize-qp "currency" $currency "scalar") (serialize-qp "effectiveDate" $effective_date "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "refundAmount" $refund_amount "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "unappliedAmount" $unapplied_amount "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -12160,7 +12160,7 @@ export def "payments create" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the payment was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12192,7 +12192,7 @@ export def "payments delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12222,7 +12222,7 @@ export def "payments get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12261,7 +12261,7 @@ export def "payments update" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the payment was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --transaction-ns: string # Related transaction in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12299,7 +12299,7 @@ export def "payments-apply update" [
   --debit-memos: list # Container for debit memos. The maximum number of debit memos is 1,000. — item shape: {amount: float, debitMemoId?: string, items?: list}
   --effective-date: string # The date when the payment application takes effect, in `yyyy-mm-dd` format. (format: date)
   --invoices: list # Container for invoices. The maximum number of invoices is 1,000. — item shape: {amount: float, invoiceId?: string, items?: list}
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12332,7 +12332,7 @@ export def "payments-cancel update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12363,7 +12363,7 @@ export def "payments-parts list" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, parts: table<amount: float, createdById: string, createdDate: string, debitMemoId: string, id: string, invoiceId: string, updatedById: string, updatedDate: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12395,7 +12395,7 @@ export def "payments-parts get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<amount: float, createdById: string, createdDate: string, debitMemoId: string, id: string, invoiceId: string, success: bool, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12428,7 +12428,7 @@ export def "payments-parts-itemparts list" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<itemParts: table<amount: float, createdById: string, createdDate: string, debitMemoItemId: string, id: string, invoiceItemId: string, taxItemId: string, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12462,7 +12462,7 @@ export def "payments-parts-itemparts get-item" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<amount: float, createdById: string, createdDate: string, debitMemoItemId: string, id: string, invoiceItemId: string, success: bool, taxItemId: string, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($payment_id | is-empty) { error make --unspanned { msg: "path parameter 'paymentId' must be non-empty" } }
@@ -12513,7 +12513,7 @@ export def "payments-refunds create" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the refund was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string # Specifies whether the refund should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12547,7 +12547,7 @@ export def "payments-transfer update" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --account-id: string # The ID of the customer account that the payment is transferred to.
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12585,7 +12585,7 @@ export def "payments-unapply update" [
   --debit-memos: list # Container for debit memos. The maximum number of debit memos is 1,000. — item shape: {amount: float, debitMemoId?: string, items?: list}
   --effective-date: string # The date when the payment is unapplied, in `yyyy-mm-dd` format. (format: date)
   --invoices: list # Container for invoices. The maximum number of invoice is 1,000. — item shape: {amount: float, invoiceId?: string, items?: list}
-]: any -> any {
+]: any -> record<accountId: string, amount: float, appliedAmount: float, authTransactionId: string, bankIdentificationNumber: string, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditBalanceAmount: float, currency: string, effectiveDate: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayOrderId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, number: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, referenceId: string, refundAmount: float, secondPaymentReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, standalone: bool, status: string, submittedOn: string, success: bool, type: string, unappliedAmount: float, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12631,7 +12631,7 @@ export def "quotes-document create" [
   --username: string
   --zquotes-major-version: string # The major version number of Zuora Quotes you are generating the quote document in. You can use a quote template with hierarchy sizes bigger than 3 if this is set to 7 or higher.
   --zquotes-minor-version: string # The minor version number of Zuora Quotes you are generating the quote document in.
-]: any -> any {
+]: any -> record<file: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12663,7 +12663,7 @@ export def "ramps get-by-number" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<ramp: record<charges: list<record>, description: string, id: string, intervals: list<record>, name: string, number: string, subscriptionNumber: string>, processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ramp_number | is-empty) { error make --unspanned { msg: "path parameter 'rampNumber' must be non-empty" } }
@@ -12693,7 +12693,7 @@ export def "ramps-ramp-metrics get-by-number" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<rampMetrics: record<description: string, discountTcb: float, discountTcv: float, grossTcb: float, grossTcv: float, intervals: list<record>, name: string, netTcb: float, netTcv: float, number: string>, processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ramp_number | is-empty) { error make --unspanned { msg: "path parameter 'rampNumber' must be non-empty" } }
@@ -12725,7 +12725,7 @@ export def "rateplan-product-rate-plan get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, productRatePlans: table<description: string, effectiveEndDate: string, effectiveStartDate: string, id: string, name: string, productRatePlanCharges: list, status: string, BillingPeriod__NS: string, Class__NS: string, Department__NS: string, IncludeChildren__NS: string, IntegrationId__NS: string, IntegrationStatus__NS: string, ItemType__NS: string, Location__NS: string, MultiCurrencyPrice__NS: string, Price__NS: string, Subsidiary__NS: string, SyncDate__NS: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($product_id | is-empty) { error make --unspanned { msg: "path parameter 'product_id' must be non-empty" } }
@@ -12769,7 +12769,7 @@ export def "refunds list" [
   --qp-sort: string # This parameter restricts the order of the data returned in the response. You can use this parameter to supply a dimension you want to sort on. A sortable field uses the following form: *operator* *field_name* You can use at most two sortable fields in one URL path. Use a comma to separate sortable fields. For example: *operator* *field_name*, *operator* *field_name* *operator* is used to mark the order of sequencing. The operator is optional. If you only specify the sortable field without any operator, the response data is sorted in descending order by this field. - The `-` operator indicates an ascending order. - The `+` operator indicates a descending order. By default, the response data is displayed in descending order by refund number. *field_name* indicates the name of a sortable field. The supported sortable fields of this operation are as below: - number - accountId - amount - refundDate - paymentId - createdDate - createdById - updatedDate - updatedById Examples: - /v1/refunds?sort=+number - /v1/refunds?status=Processed&sort=-number,+amount
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, refunds: table<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record, gatewayId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, type: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "accountId" $account_id "scalar") (serialize-qp "amount" $amount "scalar") (serialize-qp "createdById" $created_by_id "scalar") (serialize-qp "createdDate" $created_date "scalar") (serialize-qp "methodType" $method_type "scalar") (serialize-qp "number" $number "scalar") (serialize-qp "paymentId" $payment_id "scalar") (serialize-qp "refundDate" $refund_date "scalar") (serialize-qp "status" $status "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "updatedById" $updated_by_id "scalar") (serialize-qp "updatedDate" $updated_date "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -12803,7 +12803,7 @@ export def "refunds-reconcile create" [
   --gateway-reconciliation-reason: string # The reason of gateway reconciliation.
   --gateway-reconciliation-status: string # The status of gateway reconciliation.
   --payout-id: string # The payout ID of the refund from the gateway side.
-]: any -> any {
+]: any -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12836,7 +12836,7 @@ export def "refunds delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -12866,7 +12866,7 @@ export def "refunds get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -12906,7 +12906,7 @@ export def "refunds update" [
   --origin-ns: string # Origin of the corresponding object in NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the refund was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --syncto-net-suite-ns: string # Specifies whether the refund should be synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -12939,7 +12939,7 @@ export def "refunds-cancel update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: float, cancelledOn: string, comment: string, createdById: string, createdDate: string, creditMemoId: string, financeInformation: record<bankAccountAccountingCode: string, bankAccountAccountingCodeType: string, transferredToAccounting: string, unappliedPaymentAccountingCode: string, unappliedPaymentAccountingCodeType: string>, gatewayId: string, gatewayReconciliationReason: string, gatewayReconciliationStatus: string, gatewayResponse: string, gatewayResponseCode: string, gatewayState: string, id: string, markedForSubmissionOn: string, methodType: string, number: string, paymentId: string, paymentMethodId: string, paymentMethodSnapshotId: string, payoutId: string, reasonCode: string, referenceId: string, refundDate: string, refundTransactionTime: string, secondRefundReferenceId: string, settledOn: string, softDescriptor: string, softDescriptorPhone: string, status: string, submittedOn: string, success: bool, type: string, updatedById: string, updatedDate: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, SynctoNetSuite__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -12969,7 +12969,7 @@ export def "refunds-parts list" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<parts: table<amount: float, createdById: string, createdDate: string, creditMemoId: string, id: string, paymentId: string, updatedById: string, updatedDate: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -13000,7 +13000,7 @@ export def "refunds-parts get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<amount: float, createdById: string, createdDate: string, creditMemoId: string, id: string, paymentId: string, success: bool, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -13033,7 +13033,7 @@ export def "refunds-parts-itemparts list" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<itemParts: table<amount: float, createdById: string, createdDate: string, creditMemoItemId: string, creditTaxItemId: string, id: string, updatedById: string, updatedDate: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -13067,7 +13067,7 @@ export def "refunds-parts-itemparts get-item" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<amount: float, createdById: string, createdDate: string, creditMemoItemId: string, creditTaxItemId: string, id: string, success: bool, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($refund_id | is-empty) { error make --unspanned { msg: "path parameter 'refundId' must be non-empty" } }
@@ -13100,7 +13100,7 @@ export def "revenue-events-revenue-schedules get" [
   --page-size: int # Number of rows returned per page. (default: 8)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, revenueEventDetails: table<accountId: string, createdOn: string, currency: string, eventType: string, notes: string, number: string, recognitionEnd: string, recognitionStart: string, revenueItems: list, subscriptionChargeId: string, subscriptionId: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
@@ -13131,7 +13131,7 @@ export def "revenue-events get-details" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, createdOn: string, currency: string, eventType: string, notes: string, number: string, recognitionEnd: string, recognitionStart: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, isAccountingPeriodClosed: bool>, subscriptionChargeId: string, subscriptionId: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_number | is-empty) { error make --unspanned { msg: "path parameter 'event-number' must be non-empty" } }
@@ -13162,7 +13162,7 @@ export def "revenue-items-charge-revenue-summaries get-by-summary" [
   --page-size: int # Number of rows returned per page. (default: 300)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, isAccountingPeriodClosed: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($crs_number | is-empty) { error make --unspanned { msg: "path parameter 'crs-number' must be non-empty" } }
@@ -13194,7 +13194,7 @@ export def "revenue-items-revenue-events get-by-charge" [
   --page-size: int # Number of rows returned per page. (default: 300)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, isAccountingPeriodClosed: bool>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($event_number | is-empty) { error make --unspanned { msg: "path parameter 'event-number' must be non-empty" } }
@@ -13227,7 +13227,7 @@ export def "revenue-items-revenue-events update-custom-fieldson" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   revenue_items: list # Revenue items are listed in ascending order by the accounting period start date. Include at least one custom field. — item shape: {accountingPeriodName: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13261,7 +13261,7 @@ export def "revenue-items-revenue-schedules get" [
   --page-size: int # Number of rows returned per page. (default: 300)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, isAccountingPeriodClosed: bool, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
@@ -13294,7 +13294,7 @@ export def "revenue-items-revenue-schedules update-custom-fieldson" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   revenue_items: list # Revenue items are listed in ascending order by the accounting period start date. Include at least one custom field. — item shape: {accountingPeriodName: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13327,7 +13327,7 @@ export def "revenue-recognition-rules-product-charges get-rec-ruleby-rate-plan" 
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<revenueRecognitionRuleName: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
@@ -13357,7 +13357,7 @@ export def "revenue-recognition-rules-subscription-charges get-rec" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<revenueRecognitionRuleName: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
@@ -13387,7 +13387,7 @@ export def "revenue-schedules-credit-memo-items get-r-sby" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, isAccountingPeriodClosed: bool, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string>, revenueScheduleDate: string, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($cmi_id | is-empty) { error make --unspanned { msg: "path parameter 'cmi-id' must be non-empty" } }
@@ -13421,7 +13421,7 @@ export def "revenue-schedules-credit-memo-items create-r-sfor-manual-distributio
   --notes: string # Additional information about this record. Character Limit: 2,000
   --revenue-distributions: list # An array of revenue distributions. Represents how you want to distribute revenue for this revenue schedule. You can distribute revenue into a maximum of 250 accounting periods with one revenue schedule. The sum of new Amounts must equal the the Charge Amount of the specified Invoice Item. — item shape: {accountingPeriodName: string, newAmount: string}
   --revenue-event: any # Represents a change to a revenue schedule, such as posting an invoice or distributing revenue. You must specify the `eventType` or the `eventTypeSystemID`, or both. If you have configured more than one revenue event type with the same label, you must specify the `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13459,7 +13459,7 @@ export def "revenue-schedules-credit-memo-items-distribute-revenue-with-date-ran
   recognition_end: string # The end date of a recognition period in `yyyy-mm-dd` format. The maximum difference between the `recognitionStart` and `recognitionEnd` date fields is equal to 250 multiplied by the length of an accounting period. (format: date)
   recognition_start: string # The start date of a recognition period in `yyyy-mm-dd` format. If there is a closed accounting period between the `recognitionStart` and `recognitionEnd` dates, the revenue that would be placed in the closed accounting period is instead placed in the next open accounting period. (format: date)
   --revenue-event: any # Must specify at least one of `eventType` or `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13492,7 +13492,7 @@ export def "revenue-schedules-debit-memo-items get-r-sby" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, isAccountingPeriodClosed: bool, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string>, revenueScheduleDate: string, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($dmi_id | is-empty) { error make --unspanned { msg: "path parameter 'dmi-id' must be non-empty" } }
@@ -13526,7 +13526,7 @@ export def "revenue-schedules-debit-memo-items create-r-sfor-manual-distribution
   --notes: string # Additional information about this record. Character Limit: 2,000
   --revenue-distributions: list # An array of revenue distributions. Represents how you want to distribute revenue for this revenue schedule. You can distribute revenue into a maximum of 250 accounting periods with one revenue schedule. The sum of new Amounts must equal the the Charge Amount of the specified Invoice Item. — item shape: {accountingPeriodName: string, newAmount: string}
   --revenue-event: any # Represents a change to a revenue schedule, such as posting an invoice or distributing revenue. You must specify the `eventType` or the `eventTypeSystemID`, or both. If you have configured more than one revenue event type with the same label, you must specify the `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13564,7 +13564,7 @@ export def "revenue-schedules-debit-memo-items-distribute-revenue-with-date-rang
   recognition_end: string # The end date of a recognition period in `yyyy-mm-dd` format. The maximum difference between the `recognitionStart` and `recognitionEnd` date fields is equal to 250 multiplied by the length of an accounting period. (format: date)
   recognition_start: string # The start date of a recognition period in `yyyy-mm-dd` format. If there is a closed accounting period between the `recognitionStart` and `recognitionEnd` dates, the revenue that would be placed in the closed accounting period is instead placed in the next open accounting period. (format: date)
   --revenue-event: any # Must specify at least one of `eventType` or `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13597,7 +13597,7 @@ export def "revenue-schedules-invoice-item-adjustments get-r-sby" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, isAccountingPeriodClosed: bool, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string>, revenueScheduleDate: string, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_adj_key | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-adj-key' must be non-empty" } }
@@ -13631,7 +13631,7 @@ export def "revenue-schedules-invoice-item-adjustments create-r-sfor-manual-dist
   --notes: string # Additional information about this record. Character Limit: 2,000
   --revenue-distributions: list # An array of revenue distributions. Represents how you want to distribute revenue for this revenue schedule. You can distribute revenue into a maximum of 250 accounting periods with one revenue schedule. The sum of new Amounts must equal the the Charge Amount of the specified Invoice Item. — item shape: {accountingPeriodName: string, newAmount: string}
   --revenue-event: any # Represents a change to a revenue schedule, such as posting an invoice or distributing revenue. You must specify the `eventType` or the `eventTypeSystemID`, or both. If you have configured more than one revenue event type with the same label, you must specify the `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13669,7 +13669,7 @@ export def "revenue-schedules-invoice-item-adjustments-distribute-revenue-with-d
   recognition_end: string # The end date of a recognition period in `yyyy-mm-dd` format. The maximum difference between the `recognitionStart` and `recognitionEnd` date fields is equal to 250 multiplied by the length of an accounting period. (format: date)
   recognition_start: string # The start date of a recognition period in `yyyy-mm-dd` format. If there is a closed accounting period between the `recognitionStart` and `recognitionEnd` dates, the revenue that would be placed in the closed accounting period is instead placed in the next open accounting period. (format: date)
   revenue_event: any # Must specify at least one of `eventType` or `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13702,7 +13702,7 @@ export def "revenue-schedules-invoice-items get-r-sby" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, isAccountingPeriodClosed: bool, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string>, revenueScheduleDate: string, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($invoice_item_id | is-empty) { error make --unspanned { msg: "path parameter 'invoice-item-id' must be non-empty" } }
@@ -13736,7 +13736,7 @@ export def "revenue-schedules-invoice-items create-r-sfor-manual-distribution" [
   --notes: string # Additional information about this record. Character Limit: 2,000
   --revenue-distributions: list # An array of revenue distributions. Represents how you want to distribute revenue for this revenue schedule. You can distribute revenue into a maximum of 250 accounting periods with one revenue schedule. The sum of new Amounts must equal the the Charge Amount of the specified Invoice Item. — item shape: {accountingPeriodName: string, newAmount: string}
   --revenue-event: any # Represents a change to a revenue schedule, such as posting an invoice or distributing revenue. You must specify the `eventType` or the `eventTypeSystemID`, or both. If you have configured more than one revenue event type with the same label, you must specify the `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13774,7 +13774,7 @@ export def "revenue-schedules-invoice-items-distribute-revenue-with-date-range c
   recognition_end: string # The end date of a recognition period in `yyyy-mm-dd` format. The maximum difference between the `recognitionStart` and `recognitionEnd` date fields is equal to 250 multiplied by the length of an accounting period. (format: date)
   recognition_start: string # The start date of a recognition period in `yyyy-mm-dd` format. If there is a closed accounting period between the `recognitionStart` and `recognitionEnd` dates, the revenue that would be placed in the closed accounting period is instead placed in the next open accounting period. (format: date)
   revenue_event: any # Must specify at least one of `eventType` or `eventTypeSystemId`.
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13809,7 +13809,7 @@ export def "revenue-schedules-product-charges get-r-sby-and-billing" [
   --page-size: int # Number of rows returned per page. (default: 8)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, revenueSchedules: table<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, productChargeId: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: list, revenueScheduleDate: string, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
@@ -13842,7 +13842,7 @@ export def "revenue-schedules-subscription-charges get-r-sfor-subsc" [
   --page-size: int # Number of rows returned per page. (default: 8)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, revenueSchedules: table<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: list, revenueScheduleDate: string, subscriptionChargeId: string, subscriptionId: string, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($charge_key | is-empty) { error make --unspanned { msg: "path parameter 'charge-key' must be non-empty" } }
@@ -13885,7 +13885,7 @@ export def "revenue-schedules-subscription-charges create-r-sfor-subsc" [
   --revenue-distributions: list # An array of revenue distributions. Represents how you want to distribute revenue for this revenue schedule. You can distribute revenue into a maximum of 250 accounting periods with one revenue schedule. The sum of the newAmount fields must be equal to the amount field. — item shape: {accountingPeriodName: string, newAmount: string}
   --revenue-event: any # Represents a change to a revenue schedule, such as posting an invoice or distributing revenue.
   revenue_schedule_date: string # The effective date of the revenue schedule. For example, the revenue schedule date for bookings-based revenue recognition is typically set to the order date or contract date. The date cannot be in a closed accounting period. The date must be in `yyyy-mm-dd` format. (format: date)
-]: any -> any {
+]: any -> record<revenueScheduleNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -13918,7 +13918,7 @@ export def "revenue-schedules delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
@@ -13948,7 +13948,7 @@ export def "revenue-schedules get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, amount: string, createdOn: string, currency: string, linkedTransactionId: string, linkedTransactionNumber: string, linkedTransactionType: string, notes: string, number: string, recognitionRuleName: string, recognizedRevenue: string, referenceId: string, revenueItems: table<accountingPeriodEndDate: string, accountingPeriodName: string, accountingPeriodStartDate: string, amount: string, currency: string, deferredRevenueAccountingCode: string, deferredRevenueAccountingCodeType: string, isAccountingPeriodClosed: bool, recognizedRevenueAccountingCode: string, recognizedRevenueAccountingCodeType: string>, revenueScheduleDate: string, subscriptionChargeId: string, subscriptionId: string, success: bool, undistributedUnrecognizedRevenue: string, unrecognizedRevenue: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($rs_number | is-empty) { error make --unspanned { msg: "path parameter 'rs-number' must be non-empty" } }
@@ -13980,7 +13980,7 @@ export def "revenue-schedules-basic-information update-get" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --notes: string # Additional information about this record.
   --reference-id: string # Reference ID is used only in the custom unlimited rule to create a revenue schedule. In this scenario, the revenue schedule is not linked to an invoice item or invoice item adjustment. Use this field only when the revenue schedule is not linked to an invoice item or invoice item adjustment, such as for revenue schedules based on the Custom - Unlimited recognition model.
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14018,7 +14018,7 @@ export def "revenue-schedules-distribute-revenue-across-accounting-periods updat
   --event-type-system-id: string # System ID of the revenue event type. Each eventType has a unique system ID. You can configure your revenue event type system IDs by navigating to **Settings > Finance > Configure Revenue Event Types** in the Zuora UI. Cannot be duplicated.
   --notes: string # Additional information about this record.
   --revenue-distributions: list # An array of revenue distributions. Represents how you want to distribute revenue for this revenue schedule. You can distribute revenue into a maximum of 250 accounting periods with one revenue schedule. — item shape: {accountingPeriodName: string, newAmount: string}
-]: any -> any {
+]: any -> record<revenueEventNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14058,7 +14058,7 @@ export def "revenue-schedules-distribute-revenue-on-specific-date update" [
   --event-type-system-id: string # System ID of the revenue event type. Each eventType has a unique system ID. You can configure your revenue event type system IDs by navigating to **Settings > Finance > Configure Revenue Event Types** in the Zuora UI.
   --notes: string # Additional information about this record.
   --percentage: string # Percentage of the total recognition amount or total undistributed to distribute. Required if distributionType is either: * specific date (delta percent total) * specific date (delta percent undistributed) (format: decimal)
-]: any -> any {
+]: any -> record<revenueEventNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14097,7 +14097,7 @@ export def "revenue-schedules-distribute-revenue-with-date-range update-by-recog
   --notes: string # Additional information about this record.
   recognition_end: string # The end date of a recognition period in `yyyy-mm-dd` format. The maximum difference between the `recognitionStart` and `recognitionEnd` date fields is equal to 250 multiplied by the length of an accounting period. (format: date)
   recognition_start: string # The start date of a recognition period in `yyyy-mm-dd` format. If there is a closed accounting period between the `recognitionStart` and `recognitionEnd` dates, the revenue that would be placed in the closed accounting period is instead placed in the next open accounting period. (format: date)
-]: any -> any {
+]: any -> record<revenueEventNumber: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14137,7 +14137,7 @@ export def "revpro-accounting-codes update-rev-pro" [
   product_rate_plan_charge_id: string # The ID of your product rate plan charge.
   recognized_revenue_account: string # The name of the account where the Account Type is "Recognized Revenue".
   unbilled_receivables_account: string # The name of the account where the Account Type is "Unbilled Receivables".
-]: any -> any {
+]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14171,7 +14171,7 @@ export def "rsa-signatures create" [
   method: string # The type of the request. Set it to POST.
   page_id: string # The page id of your Payment Pages 2.0 form. Click **Show Page Id** next to the Payment Page name in the Hosted Page List to retrieve the page id.
   uri: string # The URL that the Payment Page will be served from. * For US Production environment: Use https://www.zuora.com/apps/PublicHostedPageLite.do * For US API Sandbox environment: Use https://apisandbox.zuora.com/apps/PublicHostedPageLite.do * For EU Cloud Production environment: Use https://eu.zuora.com/apps/PublicHostedPageLite.do * For EU Cloud Sandbox environment: Use https://sandbox.eu.zuora.com/apps/PublicHostedPageLite.do * For US Cloud Production environment: Use https://na.zuora.com/apps/PublicHostedPageLite.do * For US Cloud Sandbox environment: Use https://sandbox.na.zuora.com/apps/PublicHostedPageLite.do * For US Central Sandbox environment: Use https://test.zuora.com/apps/PublicHostedPageLite.do * For EU Central Sandbox environment: Use https://test.eu.zuora.com/apps/PublicHostedPageLite.do
-]: any -> any {
+]: any -> record<key: string, signature: string, success: bool, tenantId: string, token: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14205,7 +14205,7 @@ export def "rsa-signatures-decrypt create" [
   method: string # The type of the request. Set it to POST.
   public_key: string # The public key generated by Zuora.
   signature: string # The signature generated by Zuora.
-]: any -> any {
+]: any -> record<decryptedSignature: string, publicKey: string, signature: string, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14239,7 +14239,7 @@ export def "sequence-sets list" [
   --name: string # The name of a specific sequence set.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<sequenceSets: table<creditMemo: record, debitMemo: record, id: string, invoice: record, name: string, payment: record, refund: record>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "pageSize" $page_size "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
@@ -14270,7 +14270,7 @@ export def "sequence-sets create" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --sequence-sets: list # Array of sequence sets configured for billing documents, payments, and refunds. — item shape: {creditMemo: record, debitMemo: record, invoice: record, name: string, payment?: record, refund?: record}
-]: any -> any {
+]: any -> record<sequenceSets: table<creditMemo: record, debitMemo: record, id: string, invoice: record, name: string, payment: record, refund: record>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14302,7 +14302,7 @@ export def "sequence-sets delete" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14332,7 +14332,7 @@ export def "sequence-sets get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<creditMemo: record<prefix: string, startNumber: int>, debitMemo: record<prefix: string, startNumber: int>, id: string, invoice: record<prefix: string, startNumber: int>, name: string, payment: record<prefix: string, startNumber: int>, refund: record<prefix: string, startNumber: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -14373,7 +14373,7 @@ export def "sequence-sets update" [
   --name: string # The name of the sequence set configured for billing documents, payments, and refunds.
   --payment: record # Container for the prefix and starting number of payments. — shape: {prefix?: string, startNumber?: int}
   --refund: record # Container for the prefix and starting number of refunds. — shape: {prefix?: string, startNumber?: int}
-]: any -> any {
+]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14405,7 +14405,7 @@ export def "settings-finance-revenue-automation-start-date get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<startDate: string, success: bool, updatedBy: string, updatedOn: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/v1/settings/finance/revenue-automation-start-date")
@@ -14475,7 +14475,7 @@ export def "subscriptions create" [
   --project-ns: string # The NetSuite project that the subscription was created from. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sales-order-ns: string # The NetSuite sales order than the subscription was created from. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the subscription was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<contractedMrr: float, creditMemoId: string, invoiceId: string, paidAmount: float, paymentId: string, subscriptionId: string, subscriptionNumber: string, success: bool, totalContractedValue: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14509,7 +14509,7 @@ export def "subscriptions-accounts get" [
   --charge-detail: string # The segmented rate plan charges. When an amendment results in a change to a charge, Zuora creates a segmented rate plan charge. Use this field to track segment charges. Possible values are: * __last-segment__: (Default) The last rate plan charge on the subscription. The last rate plan charge is the last one in the order of time on the subscription rather than the most recent changed charge on the subscription. * __current-segment__: The segmented charge that is active on today’s date (effectiveStartDate <= today’s date < effectiveEndDate). * __all-segments__: All the segmented charges. The `chargeSegments` field is returned in the response. The `chargeSegments` field contains an array of the charge information for all the charge segments. * __specific-segment&as-of-date=date__: The segmented charge that is active on a date you specified (effectiveStartDate <= specific date < effectiveEndDate). The format of the date is yyyy-mm-dd.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, subscriptions: table<accountId: string, accountName: string, accountNumber: string, autoRenew: bool, contractEffectiveDate: string, contractedMrr: float, currentTerm: int, currentTermPeriodType: string, customerAcceptanceDate: string, id: string, initialTerm: int, initialTermPeriodType: string, invoiceOwnerAccountId: string, invoiceOwnerAccountName: string, invoiceOwnerAccountNumber: string, invoiceSeparately: string, notes: string, orderNumber: string, ratePlans: list, renewalSetting: string, renewalTerm: int, renewalTermPeriodType: string, revision: string, serviceActivationDate: string, status: string, subscriptionEndDate: string, subscriptionNumber: string, subscriptionStartDate: string, termEndDate: string, termStartDate: string, termType: string, totalContractedValue: float, CpqBundleJsonId__QT: string, OpportunityCloseDate__QT: string, OpportunityName__QT: string, QuoteBusinessType__QT: string, QuoteNumber__QT: string, QuoteType__QT: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Project__NS: string, SalesOrder__NS: string, SyncDate__NS: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -14558,7 +14558,7 @@ export def "subscriptions-preview create" [
   --target-date: string # Date through which to calculate charges if an invoice is generated, as yyyy-mm-dd. Default is current date. **Note:** This field is in Zuora REST API version control. Supported minor versions are 207.0 or later. To use this field in the method, you must set the **zuora-version** parameter to the minor version number in the request header. See [Zuora REST API Versions](https://www.zuora.com/developer/api-reference/#section/API-Versions) for more information. (format: date)
   --term-start-date: string # The date on which the subscription term begins, as yyyy-mm-dd. If this is a renewal subscription, this date is different from the subscription start date. (format: date)
   term_type: string # Possible values are: `TERMED`, `EVERGREEN`.
-]: any -> any {
+]: any -> record<amount: float, amountWithoutTax: float, chargeMetrics: record<dmrr: string, dtcv: string, mrr: string, number: string, originRatePlanId: string, originalId: string, productRatePlanChargeId: string, productRatePlanId: string, tcv: string>, contractedMrr: float, creditMemo: record<amount: float, amountWithoutTax: float, creditMemoItems: list<record>, taxAmount: float>, invoice: record, invoiceItems: table<chargeAmount: float, chargeDescription: string, chargeName: string, productName: string, productRatePlanChargeId: string, quantity: float, serviceEndDate: string, serviceStartDate: string, taxAmount: float, unitOfMeasure: string>, invoiceTargetDate: string, success: bool, targetDate: string, taxAmount: float, totalContractedValue: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14591,7 +14591,7 @@ export def "subscriptions get" [
   --charge-detail: string # The segmented rate plan charges. When an amendment results in a change to a charge, Zuora creates a segmented rate plan charge. Use this field to track segment charges. Possible values are: * __last-segment__: (Default) The last rate plan charge on the subscription. The last rate plan charge is the last one in the order of time on the subscription rather than the most recent changed charge on the subscription. * __current-segment__: The segmented charge that is active on today’s date (effectiveStartDate <= today’s date < effectiveEndDate). * __all-segments__: All the segmented charges. The `chargeSegments` field is returned in the response. The `chargeSegments` field contains an array of the charge information for all the charge segments. * __specific-segment&as-of-date=date__: The segmented charge that is active on a date you specified ((specific date = effectiveStartDate) OR (effectiveStartDate < specific date < effectiveEndDate)). The format of the date is yyyy-mm-dd.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, accountName: string, accountNumber: string, autoRenew: bool, contractEffectiveDate: string, contractedMrr: float, currentTerm: int, currentTermPeriodType: string, customerAcceptanceDate: string, id: string, initialTerm: int, initialTermPeriodType: string, invoiceOwnerAccountId: string, invoiceOwnerAccountName: string, invoiceOwnerAccountNumber: string, invoiceSeparately: string, notes: string, orderNumber: string, ratePlans: table<id: string, lastChangeType: string, productId: string, productName: string, productRatePlanId: string, productSku: string, ratePlanCharges: list, ratePlanName: string, subscriptionProductFeatures: list>, renewalSetting: string, renewalTerm: int, renewalTermPeriodType: string, revision: string, serviceActivationDate: string, status: string, subscriptionEndDate: string, subscriptionNumber: string, subscriptionStartDate: string, success: bool, termEndDate: string, termStartDate: string, termType: string, totalContractedValue: float, CpqBundleJsonId__QT: string, OpportunityCloseDate__QT: string, OpportunityName__QT: string, QuoteBusinessType__QT: string, QuoteNumber__QT: string, QuoteType__QT: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Project__NS: string, SalesOrder__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
@@ -14664,7 +14664,7 @@ export def "subscriptions update" [
   --project-ns: string # The NetSuite project that the subscription was created from. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sales-order-ns: string # The NetSuite sales order than the subscription was created from. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
   --sync-date-ns: string # Date when the subscription was synchronized with NetSuite. Only available if you have installed the [Zuora Connector for NetSuite](https://www.zuora.com/connect/app/?appId=265).
-]: any -> any {
+]: any -> record<amount: float, amountWithoutTax: float, chargeMetrics: record<dmrr: string, dtcv: string, mrr: string, number: string, originRatePlanId: string, originalId: string, productRatePlanChargeId: string, productRatePlanId: string, tcv: string>, creditMemo: record<amount: float, amountWithoutTax: float, creditMemoItems: list<record>, taxAmount: float>, creditMemoId: string, invoice: record, invoiceId: string, invoiceItems: table<chargeAmount: float, chargeDescription: string, chargeName: string, productName: string, productRatePlanChargeId: string, quantity: float, serviceEndDate: string, serviceStartDate: string, unitOfMeasure: string>, invoiceTargetDate: string, paidAmount: float, paymentId: string, subscriptionId: string, success: bool, targetDate: string, taxAmount: float, totalDeltaMrr: float, totalDeltaTcv: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14711,7 +14711,7 @@ export def "subscriptions-cancel update" [
   --invoice-target-date: string # **Note:** This field has been replaced by the `targetDate` field. The `invoiceTargetDate` field is only available for backward compatibility. Date through which to calculate charges if an invoice is generated, as yyyy-mm-dd. Default is current date. This field is in Zuora REST API version control. Supported minor versions are `207.0` and earlier. (format: date)
   --run-billing: oneof<nothing, bool> # Creates an invoice for a subscription. If you have the Invoice Settlement feature enabled, a credit memo might also be created based on the [invoice and credit memo generation rule](https://knowledgecenter.zuora.com/CB_Billing/Invoice_Settlement/Credit_and_Debit_Memos/Rules_for_Generating_Invoices_and_Credit_Memos). The billing documents generated in this operation is only for this subscription, not for the entire customer account. Possible values: - `true`: An invoice is created. If you have the Invoice Settlement feature enabled, a credit memo might also be created. - `false`: No invoice is created. **Note:** This field is in Zuora REST API version control. Supported minor versions are `211.0` or later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (default: false)
   --target-date: string # Date through which to calculate charges if an invoice or a credit memo is generated, as yyyy-mm-dd. Default is current date. **Note:** The credit memo is only available if you have the Invoice Settlement feature enabled. This field is in Zuora REST API version control. Supported minor versions are `211.0` and later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (format: date)
-]: any -> any {
+]: any -> record<cancelledDate: string, creditMemoId: string, invoiceId: string, paidAmount: float, paymentId: string, subscriptionId: string, success: bool, totalDeltaMrr: float, totalDeltaTcv: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14755,7 +14755,7 @@ export def "subscriptions-renew update" [
   --invoice-target-date: string # **Note:** This field has been replaced by the `targetDate` field. The `invoiceTargetDate` field is only available for backward compatibility. Date through which to calculate charges if an invoice is generated, as yyyy-mm-dd. Default is current date. This field is in Zuora REST API version control. Supported minor versions are `207.0` and earlier. (format: date)
   --run-billing: oneof<nothing, bool> # Creates an invoice for a subscription. If you have the Invoice Settlement feature enabled, a credit memo might also be created based on the [invoice and credit memo generation rule](https://knowledgecenter.zuora.com/CB_Billing/Invoice_Settlement/Credit_and_Debit_Memos/Rules_for_Generating_Invoices_and_Credit_Memos). The billing documents generated in this operation is only for this subscription, not for the entire customer account. Possible values: - `true`: An invoice is created. If you have the Invoice Settlement feature enabled, a credit memo might also be created. - `false`: No invoice is created. **Note:** This field is in Zuora REST API version control. Supported minor versions are `211.0` or later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (default: false)
   --target-date: string # Date through which to calculate charges if an invoice or a credit memo is generated, as yyyy-mm-dd. Default is current date. **Note:** The credit memo is only available if you have the Invoice Settlement feature enabled. This field is in Zuora REST API version control. Supported minor versions are `211.0` and later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (format: date)
-]: any -> any {
+]: any -> record<creditMemoId: string, invoiceId: string, paidAmount: float, paymentId: string, success: bool, termEndDate: string, termStartDate: string, totalDeltaMrr: float, totalDeltaTcv: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14805,7 +14805,7 @@ export def "subscriptions-resume update" [
   --resume-specific-date: string # A specific date when the subscription resumption takes effect, in the format yyyy-mm-dd. **Note:** This field is only applicable only when the `resumePolicy` field is set to `SpecificDate`. The value should not be earlier than the subscription suspension date. (format: date)
   --run-billing: oneof<nothing, bool> # Creates an invoice for a subscription. If you have the Invoice Settlement feature enabled, a credit memo might also be created based on the [invoice and credit memo generation rule](https://knowledgecenter.zuora.com/CB_Billing/Invoice_Settlement/Credit_and_Debit_Memos/Rules_for_Generating_Invoices_and_Credit_Memos). The billing documents generated in this operation is only for this subscription, not for the entire customer account. Possible values: - `true`: An invoice is created. If you have the Invoice Settlement feature enabled, a credit memo might also be created. - `false`: No invoice is created. **Note:** This field is in Zuora REST API version control. Supported minor versions are `211.0` or later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (default: false)
   --target-date: string # Date through which to calculate charges if an invoice or a credit memo is generated, as yyyy-mm-dd. Default is current date. **Note:** The credit memo is only available if you have the Invoice Settlement feature enabled. This field is in Zuora REST API version control. Supported minor versions are `211.0` and later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (format: date)
-]: any -> any {
+]: any -> record<creditMemoId: string, invoiceId: string, paidAmount: float, paymentId: string, resumeDate: string, subscriptionId: string, success: bool, termEndDate: string, totalDeltaTcv: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14860,7 +14860,7 @@ export def "subscriptions-suspend update" [
   suspend_policy: string # Suspend methods. Specify a way to suspend a subscription. Value: * `Today`: The subscription suspension takes effect on today's date. * `EndOfLastInvoicePeriod`: The subscription suspension takes effect at the end of the last invoice period. The suspend date defaults to a date that is one day after the last invoiced period. You can choose this option to avoid any negative invoices (credits) issued back to the customer after the subscription suspension. * `SpecificDate`: The subscription suspension takes effect on a specific date. You must define the specific date in the `suspendSpecificDate` field. * `FixedPeriodsFromToday`: The subscription suspension takes effect after a specified period based on today's date. You must specify the `suspendPeriods` and `suspendPeriodsType` fields to define the period.
   --suspend-specific-date: string # A specific date when the subscription suspension takes effect, in the format yyyy-mm-dd. **Note:** This field is only applicable only when the suspendPolicy field is set to SpecificDate. The value should not be earlier than the subscription contract effective date, later than the subscription term end date, or within a period for which the customer has been invoiced. (format: date)
   --target-date: string # Date through which to calculate charges if an invoice or a credit memo is generated, as yyyy-mm-dd. Default is current date. **Note:** The credit memo is only available if you have the Invoice Settlement feature enabled. This field is in Zuora REST API version control. Supported minor versions are `211.0` and later. To use this field in the method, you must set the `zuora-version` parameter to the minor version number in the request header. (format: date)
-]: any -> any {
+]: any -> record<creditMemoId: string, invoiceId: string, paidAmount: float, paymentId: string, resumeDate: string, subscriptionId: string, success: bool, suspendDate: string, termEndDate: string, totalDeltaTcv: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -14895,7 +14895,7 @@ export def "subscriptions-versions get-by-and" [
   --charge-detail: string # The segmented rate plan charges. When an amendment results in a change to a charge, Zuora creates a segmented rate plan charge. Use this field to track segment charges. Possible values are: * __last-segment__: (Default) The last rate plan charge on the subscription. The last rate plan charge is the last one in the order of time on the subscription rather than the most recent changed charge on the subscription. * __current-segment__: The segmented charge that is active on today’s date (effectiveStartDate <= today’s date < effectiveEndDate). * __all-segments__: All the segmented charges. The `chargeSegments` field is returned in the response. The `chargeSegments` field contains an array of the charge information for all the charge segments. * __specific-segment&as-of-date=date__: The segmented charge that is active on a date you specified (effectiveStartDate <= specific date < effectiveEndDate). The format of the date is yyyy-mm-dd.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<accountId: string, accountName: string, accountNumber: string, autoRenew: bool, contractEffectiveDate: string, contractedMrr: float, currentTerm: int, currentTermPeriodType: string, customerAcceptanceDate: string, id: string, initialTerm: int, initialTermPeriodType: string, invoiceOwnerAccountId: string, invoiceOwnerAccountName: string, invoiceOwnerAccountNumber: string, invoiceSeparately: string, notes: string, orderNumber: string, ratePlans: table<id: string, lastChangeType: string, productId: string, productName: string, productRatePlanId: string, productSku: string, ratePlanCharges: list, ratePlanName: string, subscriptionProductFeatures: list>, renewalSetting: string, renewalTerm: int, renewalTermPeriodType: string, revision: string, serviceActivationDate: string, status: string, subscriptionEndDate: string, subscriptionNumber: string, subscriptionStartDate: string, success: bool, termEndDate: string, termStartDate: string, termType: string, totalContractedValue: float, CpqBundleJsonId__QT: string, OpportunityCloseDate__QT: string, OpportunityName__QT: string, QuoteBusinessType__QT: string, QuoteNumber__QT: string, QuoteType__QT: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Project__NS: string, SalesOrder__NS: string, SyncDate__NS: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscription-key' must be non-empty" } }
@@ -14927,7 +14927,7 @@ export def "subscriptions-ramp-metrics get-by-key" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<rampMetrics: record<description: string, discountTcb: float, discountTcv: float, grossTcb: float, grossTcv: float, intervals: list<record>, name: string, netTcb: float, netTcv: float, number: string>, processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionKey' must be non-empty" } }
@@ -14957,7 +14957,7 @@ export def "subscriptions-ramps get-by-key" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<ramps: table<charges: list, description: string, id: string, intervals: list, name: string, number: string, subscriptionNumber: string>, processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_key | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionKey' must be non-empty" } }
@@ -14990,7 +14990,7 @@ export def "subscriptions-custom-fields update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --custom-fields: record # Container for custom fields of a Subscription object.
   --rate-plans: list # item shape: {charges?: list, customFields?: record, ratePlanId: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15027,7 +15027,7 @@ export def "subscriptions-versions-custom-fields update-of-specified" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --custom-fields: record # Container for custom fields of a Subscription object.
   --rate-plans: list # item shape: {charges?: list, customFields?: record, ratePlanId: string}
-]: any -> any {
+]: any -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15061,7 +15061,7 @@ export def "taxationitems delete-taxation-item" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<processId: string, reasons: table<code: string, message: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -15091,7 +15091,7 @@ export def "taxationitems get-taxation-item" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<createdById: string, createdDate: string, exemptAmount: float, financeInformation: record<onAccountAccountingCode: string, onAccountAccountingCodeType: string, salesTaxPayableAccountingCode: string, salesTaxPayableAccountingCodeType: string>, id: string, jurisdiction: string, locationCode: string, memoItemId: string, name: string, sourceTaxItemId: string, success: bool, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, updatedById: string, updatedDate: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -15134,7 +15134,7 @@ export def "taxationitems update-taxation-item" [
   --tax-rate: float # The tax rate applied to the credit or debit memo. (format: double)
   --tax-rate-description: string # The description of the tax rate.
   --tax-rate-type: string@tax-rate-type-completer # The type of the tax rate applied to the credit or debit memo.
-]: any -> any {
+]: any -> record<createdById: string, createdDate: string, exemptAmount: float, financeInformation: record<onAccountAccountingCode: string, onAccountAccountingCodeType: string, salesTaxPayableAccountingCode: string, salesTaxPayableAccountingCodeType: string>, id: string, jurisdiction: string, locationCode: string, memoItemId: string, name: string, sourceTaxItemId: string, success: bool, taxAmount: float, taxCode: string, taxCodeDescription: string, taxDate: string, taxRate: float, taxRateDescription: string, taxRateType: string, updatedById: string, updatedDate: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15168,7 +15168,7 @@ export def "transactions-invoices-accounts get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<invoices: table<accountId: string, accountName: string, accountNumber: string, amount: string, balance: string, body: string, createdBy: string, creditBalanceAdjustmentAmount: string, dueDate: string, id: string, invoiceDate: string, invoiceFiles: string, invoiceItems: string, invoiceNumber: string, invoiceTargetDate: string, reversed: bool, status: string, IntegrationId__NS: string, IntegrationStatus__NS: string, SyncDate__NS: string>, nextPage: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -15200,7 +15200,7 @@ export def "transactions-payments-accounts get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, payments: table<accountID: string, accountName: string, accountNumber: string, amount: string, effectiveDate: string, gatewayTransactionNumber: string, id: string, paidInvoices: list, paymentMethodID: string, paymentNumber: string, status: string, type: string, IntegrationId__NS: string, IntegrationStatus__NS: string, Origin__NS: string, SyncDate__NS: string, Transaction__NS: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -15231,7 +15231,7 @@ export def "usage create" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   file: string # The usage data to import. (format: binary)
-]: any -> any {
+]: any -> record<checkImportStatus: string, size: int, success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15266,7 +15266,7 @@ export def "usage-accounts get" [
   --page-size: int # Number of rows returned per page. (default: 20)
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<nextPage: string, success: bool, usage: table<accountId: string, accountName: string, accountNumber: string, chargeNumber: string, id: string, quantity: string, sourceName: string, startDateTime: string, status: string, submissionDateTime: string, subscriptionNumber: string, unitOfMeasure: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_key | is-empty) { error make --unspanned { msg: "path parameter 'account-key' must be non-empty" } }
@@ -15297,7 +15297,7 @@ export def "users-accept-access update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -15327,7 +15327,7 @@ export def "users-accessible-entities get" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<entities: table<displayName: string, id: string, locale: string, name: string, parentId: string, status: string, tenantId: string, timezone: string>, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -15357,7 +15357,7 @@ export def "users-deny-access update" [
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
-]: nothing -> any {
+]: nothing -> record<success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($username | is-empty) { error make --unspanned { msg: "path parameter 'username' must be non-empty" } }
@@ -15388,7 +15388,7 @@ export def "users-request-access update-send" [
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   target_entity_ids: list<string> # The ID of the entities that the user wants to access.
-]: any -> any {
+]: any -> record<success: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15428,7 +15428,7 @@ export def "workflows list" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<data: table<calloutTrigger: bool, createdAt: string, description: string, id: int, interval: string, name: string, ondemandTrigger: bool, scheduledTrigger: bool, timezone: string, type: string, updatedAt: string>, pagination: record<next_page: string, page: int, page_length: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "callout_trigger" $callout_trigger "scalar") (serialize-qp "interval" $interval "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "ondemand_trigger" $ondemand_trigger "scalar") (serialize-qp "scheduled_trigger" $scheduled_trigger "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_length" $page_length "scalar")] | flatten | str join "&"
@@ -15462,7 +15462,7 @@ export def "workflows-import create" [
   --linkages: list # item shape: {linkage_type?: "Start"|"Success"|"Failure"|"Iterate"|"true"|"false"|"Approve"|"Reject", source_task_id?: int, source_workflow_id?: int, target_task_id?: int}
   --tasks: list # item shape: {action_type?: "Approval"|"Attachment"|"Billing::BillRun"|"Billing::CurrencyConversion"|"Billing::CustomInvoice"|"Callout"|"Cancel"|"Create"|"CustomObject::Create"|"CustomObject::Delete"|"CustomObject::Query"|"CustomObject::Update"|"Data::BillingPreviewRun"|"Data::Link"|"Delay"|"Delete"|"Download::SFTP"|"Email"|"Export"|"File::CustomPDF::CustomDocument"|"If"|"InvoiceGenerate"|"Iterate"|"Logic::CSVTranslator"|"Logic::Case"|"Logic::CustomCode"|"Logic::JSONTransform"|"Logic::Lambda"|"Logic::ResponseFormatter"|"Logic::XMLTransform"|"NewProduct"|"Notifications::GoogleCloudPrint"|"Notifications::PhoneCall"|"Notifications::SMS"|"Payment::GatewayReconciliation"|"Payment::PaymentRun"|"Query"|"RemoveProduct"|"Reporting::ReportData"|"Reporting::RunReport"|"Resume"|"Suspend"|"UI::Page"|"UI::Stop"|"Update"|"Upload::FTP"|"Upload::SFTP"|"WriteOff", ... (20 more fields)}
   --workflow: record # A workflow. — shape: {calloutTrigger?: bool, createdAt?: string, description?: string, id?: int, interval?: string, name?: string, ondemandTrigger?: bool, scheduledTrigger?: bool, timezone?: string, type?: "Workflow::Setup"|"Workflow::Instance", updatedAt?: string}
-]: any -> any {
+]: any -> record<calloutTrigger: bool, createdAt: string, description: string, id: int, interval: string, name: string, ondemandTrigger: bool, scheduledTrigger: bool, timezone: string, type: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15497,7 +15497,7 @@ export def "workflows-metrics-json get-usages" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<metrics: table<date: string, values: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "metrics" $metrics "scalar")] | flatten | str join "&"
@@ -15538,7 +15538,7 @@ export def "workflows-tasks list" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<data: table<action_type: string, call_type: string, concurrent_limit: int, data: record, end_time: string, error: string, error_class: string, error_details: string, id: int, instance: bool, name: string, object: string, object_id: string, original_task_id: int, original_workflow_id: int, parameters: record, start_time: string, status: string, tags: list, task_id: int, workflow_id: int>, pagination: record<next_page: string, page: int, page_length: int>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "id" $id "scalar") (serialize-qp "name" $name "scalar") (serialize-qp "instance" $instance "scalar") (serialize-qp "action_type" $action_type "scalar") (serialize-qp "object" $object "scalar") (serialize-qp "object_id" $object_id "scalar") (serialize-qp "call_type" $call_type "scalar") (serialize-qp "workflow_id" $workflow_id "scalar") (serialize-qp "tags" $tags "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "page_length" $page_length "scalar")] | flatten | str join "&"
@@ -15570,7 +15570,7 @@ export def "workflows-tasks-batch-update update" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --data: list # The list of tasks to update. — item shape: {action_type?: string, call_type?: string, concurrent_limit?: int, id: int, name?: string, object?: string, object_id?: string, status?: "Queued"|"Processing"|"Pending"|"Success"|"Stopped"|"Error", tags?: list<string>, workflow_id?: int}
-]: any -> any {
+]: any -> record<data: table<action_type: string, call_type: string, concurrent_limit: int, data: record, end_time: string, error: string, error_class: string, error_details: string, id: int, instance: bool, name: string, object: string, object_id: string, original_task_id: int, original_workflow_id: int, parameters: record, start_time: string, status: string, tags: list, task_id: int, workflow_id: int>, pagination: record<next_page: string, page: int, page_length: int>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15603,7 +15603,7 @@ export def "workflows-tasks get" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<action_type: string, call_type: string, concurrent_limit: int, data: record, end_time: string, error: string, error_class: string, error_details: string, id: int, instance: bool, name: string, object: string, object_id: string, original_task_id: int, original_workflow_id: int, parameters: record, start_time: string, status: string, tags: list<string>, task_id: int, workflow_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -15634,7 +15634,7 @@ export def "workflows-tasks-rerun create" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<action_type: string, call_type: string, concurrent_limit: int, data: record, end_time: string, error: string, error_class: string, error_details: string, id: int, instance: bool, name: string, object: string, object_id: string, original_task_id: int, original_workflow_id: int, parameters: record, start_time: string, status: string, tags: list<string>, task_id: int, workflow_id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($task_id | is-empty) { error make --unspanned { msg: "path parameter 'task_id' must be non-empty" } }
@@ -15665,7 +15665,7 @@ export def "workflows delete" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<id: string, success: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
@@ -15696,7 +15696,7 @@ export def "workflows get" [
   --authorization: string # `Bearer {token}` for a valid OAuth token.
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<cpuTime: string, createdAt: string, finishedAt: string, id: int, messages: record, name: string, originalWorkflowId: string, runTime: float, status: string, tasks: record<error: int, pending: int, processing: int, queued: int, stopped: int, success: int, total: int>, type: string, updatedAt: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
@@ -15735,7 +15735,7 @@ export def "workflows update" [
   --scheduled-trigger: oneof<nothing, bool> # If true, the workflow will run based on the configured schedule with the interval field.
   --status: string # Can be `Active` or `Inactive`. Active workfow definitions run like normal. Inactive workflow definitions cannot be run.
   --timezone: string # The timezone that corresponds with the cron expression in the interval field. See the [list of accepted timezone values](https://docs.google.com/spreadsheets/d/1skhepi-q5l9LyaMUPZjU_V9gzTphNMqNyV6ST5mygEo/edit?usp=sharing).
-]: any -> any {
+]: any -> record<callout_trigger: bool, createdAt: string, description: string, id: int, interval: string, name: string, ondemand_trigger: bool, priority: string, scheduled_trigger: bool, status: string, timezone: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -15767,7 +15767,7 @@ export def "workflows-export get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer-1 # Response content type
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
-]: nothing -> any {
+]: nothing -> record<linkages: table<linkage_type: string, source_task_id: int, source_workflow_id: int, target_task_id: int>, tasks: table<action_type: string, call_type: string, concurrent_limit: int, data: record, end_time: string, error: string, error_class: string, error_details: string, id: int, instance: bool, name: string, object: string, object_id: string, original_task_id: int, original_workflow_id: int, parameters: record, start_time: string, status: string, tags: list, task_id: int, workflow_id: int>, workflow: record<calloutTrigger: bool, createdAt: string, description: string, id: int, interval: string, name: string, ondemandTrigger: bool, scheduledTrigger: bool, timezone: string, type: string, updatedAt: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($workflow_id | is-empty) { error make --unspanned { msg: "path parameter 'workflow_id' must be non-empty" } }
@@ -15799,7 +15799,7 @@ export def "workflows-run create" [
   --zuora-entity-ids: string # An entity ID. If you have [Zuora Multi-entity](https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity) enabled and the OAuth token is valid for more than one entity, you must use this header to specify which entity to perform the operation in. If the OAuth token is only valid for a single entity, or you do not have Zuora Multi-entity enabled, you do not need to set this header.
   --zuora-track-id: string # A custom identifier for tracing the API call. If you set a value for this header, Zuora returns the same value in the response headers. This header enables you to associate your system process identifiers with Zuora API calls, to assist with troubleshooting in the event of an issue. The value of this field must use the US-ASCII character set and must not include any of the following characters: colon (`:`), semicolon (`;`), double quote (`"`), and quote (`'`).
   --body: record
-]: any -> any {
+]: any -> record<createdAt: string, id: int, name: string, originalWorkflowId: int, status: string, updatedAt: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

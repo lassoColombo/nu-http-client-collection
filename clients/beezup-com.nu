@@ -2325,7 +2325,7 @@ export def "user-catalogs-custom-columns-compute-expression create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   encrypted_expression: string # The encrypted excel expression of the column (e.g. uziushdczaniodnndonisodndsiondsoidsndoin)
   product_values: record # The key is the column identifier (e.g. {012929c0-e78b-462a-a96e-25c061575385: http://media.conforama.fr/Medias/500000/80000/5000/500/10/G_585511_A.jpg, 46602e10-bc45-4944-a440-63d5f7ece1f8: 42, 68082b11-4ffd-4bec-964a-465a471c7d37: SKU1234, b6d74510-41ce-42ec-947a-0bdf62e9beee: Refrigerateur, ba270fa0-8482-46be-905a-cae4ca746b92: http://www.conforama.fr/gros-electromenager/encastrable/refrigerateur-encastrable/refrigerateur-combine-161-litres-far-r5115s/p/585511})
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
@@ -2415,7 +2415,7 @@ export def "user-catalogs-custom-columns-expression get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -2970,7 +2970,7 @@ export def "user-catalogs-importations-custom-columns-expression get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -3091,7 +3091,7 @@ export def "user-catalogs-importations-product-samples-custom-columns get-value"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)
   if ($store_id | is-empty) { error make --unspanned { msg: "path parameter 'storeId' must be non-empty" } }
@@ -5848,7 +5848,7 @@ export def "user-marketplaces-orders-invoices-get-pdf-invoice get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   order_invoice_uri: string # order invoice url (e.g. http://www.mydomain.com)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "ocp-apim-subscription-key"))
   let base = ($base_url | default $BASE_URL)

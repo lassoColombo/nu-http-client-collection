@@ -145,7 +145,7 @@ export def "info-0-json list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<alt: string, day: string, img: string, link: string, month: string, news: string, num: float, safe_title: string, title: string, transcript: string, year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/info.0.json")
@@ -168,7 +168,7 @@ export def "info-0-json get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<alt: string, day: string, img: string, link: string, month: string, news: string, num: float, safe_title: string, title: string, transcript: string, year: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($comic_id | is-empty) { error make --unspanned { msg: "path parameter 'comicId' must be non-empty" } }

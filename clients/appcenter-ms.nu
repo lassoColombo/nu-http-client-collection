@@ -2877,7 +2877,7 @@ export def "v0-1-apps-crash-groups-crashes-native get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -2910,7 +2910,7 @@ export def "v0-1-apps-crash-groups-crashes-native-download get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -3108,7 +3108,7 @@ export def "v0-1-apps-crashes-attachments-text get-content" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -3681,7 +3681,7 @@ export def "v0-1-apps-devices-block-logs logs-by-owner-name-app-name" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }
@@ -3709,7 +3709,7 @@ export def "v0-1-apps-devices-block-logs logs-by-owner-name-app-name-install-id"
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-token"))
   let base = ($base_url | default $BASE_URL)
   if ($owner_name | is-empty) { error make --unspanned { msg: "path parameter 'owner_name' must be non-empty" } }

@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -142,8 +152,8 @@ export def commands []: nothing -> table {
 # --Data shape: {ExpirationDateTime?: string, Permissions: list<string>, TransactionFromDateTime?: string, TransactionToDateTime?: string}
 export def "account-access-consents create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientcredentialstoken: string # Auth token for Client-Credentials-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -160,7 +170,7 @@ export def "account-access-consents create" [
   risk: record # The Risk section is sent by the initiating party to the ASPSP. It is used to specify additional details for risk scoring for Account Info.
 ]: any -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_clientcredentialstoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account-access-consents")
   let req_body = {"Data": $data, "Risk": $risk} | compact
@@ -178,8 +188,8 @@ export def "account-access-consents create" [
 export def "account-access-consents delete" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientcredentialstoken: string # Auth token for Client-Credentials-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -192,7 +202,7 @@ export def "account-access-consents delete" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_clientcredentialstoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/account-access-consents/{consent_id}"))
@@ -209,8 +219,8 @@ export def "account-access-consents delete" [
 export def "account-access-consents get" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-clientcredentialstoken: string # Auth token for Client-Credentials-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -224,7 +234,7 @@ export def "account-access-consents get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<ConsentId: string, CreationDateTime: string, ExpirationDateTime: string, Permissions: list<string>, Status: string, StatusUpdateDateTime: string, TransactionFromDateTime: string, TransactionToDateTime: string>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>, Risk: record> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_clientcredentialstoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTCREDENTIALSTOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($consent_id | is-empty) { error make --unspanned { msg: "path parameter 'consentId' must be non-empty" } }
   let full_url = (build-url $base ({consent_id: (encode-path-segment $consent_id)} | format pattern "/account-access-consents/{consent_id}"))
@@ -240,8 +250,8 @@ export def "account-access-consents get" [
 # GET /accounts
 export def "accounts list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -255,7 +265,7 @@ export def "accounts list" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/accounts")
   let accept_val = ($accept | default "application/json")
@@ -271,8 +281,8 @@ export def "accounts list" [
 export def "accounts get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -286,7 +296,7 @@ export def "accounts get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Account: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}"))
@@ -303,8 +313,8 @@ export def "accounts get" [
 export def "accounts-balances get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -318,7 +328,7 @@ export def "accounts-balances get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Balance: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/balances"))
@@ -335,8 +345,8 @@ export def "accounts-balances get" [
 export def "accounts-beneficiaries get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -350,7 +360,7 @@ export def "accounts-beneficiaries get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Beneficiary: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/beneficiaries"))
@@ -367,8 +377,8 @@ export def "accounts-beneficiaries get" [
 export def "accounts-parties get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -382,7 +392,7 @@ export def "accounts-parties get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Party: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/parties"))
@@ -399,8 +409,8 @@ export def "accounts-parties get" [
 export def "accounts-party get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -414,7 +424,7 @@ export def "accounts-party get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Party: record<Name: string, PartyId: string>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/party"))
@@ -431,8 +441,8 @@ export def "accounts-party get" [
 export def "accounts-scheduled-payments get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -446,7 +456,7 @@ export def "accounts-scheduled-payments get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<ScheduledPayment: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/scheduled-payments"))
@@ -463,8 +473,8 @@ export def "accounts-scheduled-payments get" [
 export def "accounts-standing-orders get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -478,7 +488,7 @@ export def "accounts-standing-orders get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<StandingOrder: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}/standing-orders"))
@@ -495,8 +505,8 @@ export def "accounts-standing-orders get" [
 export def "accounts-statements list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -512,7 +522,7 @@ export def "accounts-statements list" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "fromStatementDateTime" $from_statement_date_time "scalar") (serialize-qp "toStatementDateTime" $to_statement_date_time "scalar")] | flatten | str join "&"
@@ -531,8 +541,8 @@ export def "accounts-statements get" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -546,7 +556,7 @@ export def "accounts-statements get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Statement: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
@@ -565,8 +575,8 @@ export def "accounts-statements-file get" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -578,8 +588,8 @@ export def "accounts-statements-file get" [
   --x-fapi-interaction-id: string # An RFC4122 UID used as a correlation id.
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
-]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+]: nothing -> oneof<string, record, nothing> {
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
@@ -598,8 +608,8 @@ export def "accounts-statements-transactions get" [
   account_id: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -613,7 +623,7 @@ export def "accounts-statements-transactions get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementId' must be non-empty" } }
@@ -631,8 +641,8 @@ export def "accounts-statements-transactions get" [
 export def "accounts-transactions get" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -648,7 +658,7 @@ export def "accounts-transactions get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Transaction: list<record>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
   let qp = [(serialize-qp "fromBookingDateTime" $from_booking_date_time "scalar") (serialize-qp "toBookingDateTime" $to_booking_date_time "scalar")] | flatten | str join "&"
@@ -665,8 +675,8 @@ export def "accounts-transactions get" [
 # GET /party
 export def "party get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -680,7 +690,7 @@ export def "party get" [
   --x-customer-user-agent: string # Indicates the user-agent that the PSU is using.
   --sandbox-id: string # The unique id of the sandbox to be used
 ]: nothing -> record<Data: record<Party: record<Name: string, PartyId: string>>, Links: record<First: string, Last: string, Next: string, Prev: string, Self: string>, Meta: record<FirstAvailableDateTime: string, LastAvailableDateTime: string, TotalPages: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/party")
   let accept_val = ($accept | default "application/json")
@@ -695,8 +705,8 @@ export def "party get" [
 # POST /sandbox
 export def "sandbox create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -707,7 +717,7 @@ export def "sandbox create" [
   sandbox_id: string # Sandbox Id
 ]: any -> record<sandboxId: string, users: table<accounts: list, cards: list, retryCacheEntries: list, userId: string>> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox")
   let req_body = {"sandboxId": $sandbox_id} | compact
@@ -723,8 +733,8 @@ export def "sandbox create" [
 # --users item shape: {accounts?: list, cards?: list, retryCacheEntries?: list, userId?: string}
 export def "sandbox update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -735,7 +745,7 @@ export def "sandbox update" [
   --users: list # List of users (nullable) — item shape: {accounts?: list, cards?: list, retryCacheEntries?: list, userId?: string}
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/sandbox")
   let req_body = {"sandboxId": $sandbox_id, "users": $users} | compact
@@ -751,8 +761,8 @@ export def "sandbox update" [
 export def "sandbox delete" [
   sandbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -760,7 +770,7 @@ export def "sandbox delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($sandbox_id | is-empty) { error make --unspanned { msg: "path parameter 'sandboxId' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_id: (encode-path-segment $sandbox_id)} | format pattern "/sandbox/{sandbox_id}"))
@@ -775,8 +785,8 @@ export def "sandbox delete" [
 export def "sandbox get" [
   sandbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-authorizationcodetoken: string # Auth token for Authorization-Code-Token (Authorization)
+  --token-clientid: string # Auth token for Client-Id (Client-Id)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -785,7 +795,7 @@ export def "sandbox get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
 ]: nothing -> record<sandboxId: string, users: table<accounts: list, cards: list, retryCacheEntries: list, userId: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_authorizationcodetoken | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_AUTHORIZATIONCODETOKEN_TOKEN | default "")) "bearer") (build-auth ($token_clientid | default ($env | get -o ACCOUNT_AND_TRANSACTION_API_SPECIFICATION_UK_CLIENTID_TOKEN | default "")) "client-id")])
   let base = ($base_url | default $BASE_URL)
   if ($sandbox_id | is-empty) { error make --unspanned { msg: "path parameter 'sandboxId' must be non-empty" } }
   let full_url = (build-url $base ({sandbox_id: (encode-path-segment $sandbox_id)} | format pattern "/sandbox/{sandbox_id}"))

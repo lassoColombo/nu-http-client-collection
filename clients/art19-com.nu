@@ -160,7 +160,7 @@ export def "classification-inclusions list" [
   --classified-type: string@classified-type-completer # Limit the result to classification inclusions linked to this type of entity.
   --q: string # Limit the result to classification inclusions linked to a classification containing the parameter value disregarding case.
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: created_at)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "classification_id" $classification_id "scalar") (serialize-qp "classification_type" $classification_type "scalar") (serialize-qp "classified_id" $classified_id "scalar") (serialize-qp "classified_type" $classified_type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -184,7 +184,7 @@ export def "classification-inclusions get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<classification_id: string, classification_type: string, classified_id: string, classified_type: string, created_at: string, position: int, primary: bool, updated_at: string>, id: string, relationships: record<classification: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -214,7 +214,7 @@ export def "classifications list" [
   --q: string # Limit the result to classifications with a value containing the parameter value disregarding case.
   --is-country: string # If this parameter is provided and not empty, limit the result to classifications of type `Geography` representing countries. The credential must have at least one privilege with a network, series, or advertiser profile. (e.g. true)
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: value)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "is_country" $is_country "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -238,7 +238,7 @@ export def "classifications get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<created_at: string, display_name: string, metadata: record, parent_id: string, tree_path: list, type: string, updated_at: string, value: string, value_path: string>, id: string, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -267,7 +267,7 @@ export def "credits list" [
   --creditable-id: string # Limit the result to credits for the entity with this ID only. If the entity is not published, the credential needs to have the right privilege to list the credits for it. (format: uuid, e.g. 76654e16-76ce-4945-92e9-e0a381917853)
   --creditable-type: string@creditable-type-completer # Limit the result to credits linked to this type of entity only. Depending on the privileges of the credential, this list might be further reduced to only published entities.
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: position)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "creditable_id" $creditable_id "scalar") (serialize-qp "creditable_type" $creditable_type "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -291,7 +291,7 @@ export def "credits get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<created_at: string, position: int, type: string, updated_at: string>, id: string, relationships: record<creditable: record, person: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -328,7 +328,7 @@ export def "episodes list" [
   --series-id: string # Limit the result to episodes linked to this series. (format: uuid, e.g. d0ceb1ff-b95b-4c1e-a7e5-a36ed7b4d3b7)
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
   --year: string # Limit the result to episodes released in this year.
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "included_in_inventory_calendar" $included_in_inventory_calendar "scalar") (serialize-qp "month" $month "scalar") (serialize-qp "published" $published "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "released_after" $released_after "scalar") (serialize-qp "released_before" $released_before "scalar") (serialize-qp "rss" $rss "scalar") (serialize-qp "season_id" $season_id "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "sort" $qp_sort "csv") (serialize-qp "year" $year "scalar")] | flatten | str join "&"
@@ -352,7 +352,7 @@ export def "episodes get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<allow_user_comments: bool, cascaded_cover_image_id: string, cover_image_id: string, created_at: string, description: string, description_is_html: bool, description_plain: string, file_name: string, itunes_type: string, listen_count: int, premium_status: string, published: bool, release_end_at: string, release_immediately: bool, released_at: string, rss_guid: string, season_id: string, series_id: string, sort_title: string, status: string, title: string, updated_at: string>, id: string, relationships: record<cascaded_cover_image: record, classification_inclusions: record, cover_image: record, credits: record, default_marker_points: record, episode_versions: record, images: record, season: record, segment_lists: record, series: record, taggings: record, tags: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -377,7 +377,7 @@ export def "episodes-next-sibling get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rss: oneof<nothing, bool> # If `true`, get the next released and published episode with an available media file.
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<allow_user_comments: bool, cascaded_cover_image_id: string, cover_image_id: string, created_at: string, description: string, description_is_html: bool, description_plain: string, file_name: string, itunes_type: string, listen_count: int, premium_status: string, published: bool, release_end_at: string, release_immediately: bool, released_at: string, rss_guid: string, season_id: string, series_id: string, sort_title: string, status: string, title: string, updated_at: string>, id: string, relationships: record<cascaded_cover_image: record, classification_inclusions: record, cover_image: record, credits: record, default_marker_points: record, episode_versions: record, images: record, season: record, segment_lists: record, series: record, taggings: record, tags: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -403,7 +403,7 @@ export def "episodes-previous-sibling get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --rss: oneof<nothing, bool> # If `true`, get the previously released and published episode with an available media file.
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<allow_user_comments: bool, cascaded_cover_image_id: string, cover_image_id: string, created_at: string, description: string, description_is_html: bool, description_plain: string, file_name: string, itunes_type: string, listen_count: int, premium_status: string, published: bool, release_end_at: string, release_immediately: bool, released_at: string, rss_guid: string, season_id: string, series_id: string, sort_title: string, status: string, title: string, updated_at: string>, id: string, relationships: record<cascaded_cover_image: record, classification_inclusions: record, cover_image: record, credits: record, default_marker_points: record, episode_versions: record, images: record, season: record, segment_lists: record, series: record, taggings: record, tags: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -428,7 +428,7 @@ export def "images list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi")] | flatten | str join "&"
@@ -452,7 +452,7 @@ export def "images get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<bucket_id: string, bucket_type: string, created_at: string, crop_data: record, status: string, updated_at: string>, id: string, relationships: record<media_assets: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -476,7 +476,7 @@ export def "media-assets list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --ids: list<string> # The list of IDs to filter by. Repeat this parameter for each ID you want to include in the filter. The brackets *MUST* be percent-encoded, per the requirements in [RFC 3986 § 3.4](https://tools.ietf.org/html/rfc3986#section-3.4).
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi")] | flatten | str join "&"
@@ -500,7 +500,7 @@ export def "media-assets get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<attachment_id: string, attachment_type: string, cdn_url: string, content_type: string, created_at: string, file_name: string, file_size: int, size_height: int, size_width: int, style: string, updated_at: string>, id: string, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -530,7 +530,7 @@ export def "networks list" [
   --ad-rep-account-id: string # Limit the result to networks containing at least one series with an ad deal of this Ad Ops profile. (format: uuid)
   --ad-deal-status: list<string> # Limit the result to networks containing at least one series with an ad deal matching one of the values in this parameter.
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: name)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "ad_deal_status" $ad_deal_status "csv") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -554,7 +554,7 @@ export def "networks get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<copyright: string, created_at: string, description: string, description_is_html: bool, description_plain: string, facebook_url: string, instagram_url: string, linkedin_url: string, name: string, public_email: string, public_page_enabled: bool, slug: string, tumblr_url: string, twitter_url: string, updated_at: string, website_url: string>, id: string, relationships: record<cover_image: record, images: record, parent: record, series: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -582,7 +582,7 @@ export def "people list" [
   --page-size: int # Indicate how many records to return per page. The maximum is 100.
   --q: string # Limit the result to people with a full name containing this parameter in a case-insensitive way.
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: last_name,first_name)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -606,7 +606,7 @@ export def "people get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<avatar_id: string, biography: string, born: string, created_at: string, died: string, first_name: string, from_country: string, from_locality: string, from_region: string, last_name: string, public_email: string, updated_at: string>, id: string, relationships: record<avatar: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -635,7 +635,7 @@ export def "seasons list" [
   --series-id: string # Limit the result to seasons owned by this series. (format: uuid, e.g. 7ebd702d-07c8-4da9-a7a8-cf18ec414d5c)
   --q: string # Limit the result to seasons with a title containing this parameter in a case-insensitive way.
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "series_id" $series_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -659,7 +659,7 @@ export def "seasons get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<cascaded_cover_image_id: string, cover_image_id: string, created_at: string, description: string, description_is_html: bool, description_plain: string, first_released_episode_id: string, last_released_episode_id: string, season_number: int, sort_title: string, status: string, title: string, updated_at: string>, id: string, relationships: record<cascaded_cover_image: record, classification_inclusions: record, cover_image: record, credits: record, episodes: record, first_released_episode: record, images: record, last_released_episode: record, series: record, taggings: record, tags: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -689,7 +689,7 @@ export def "series list" [
   --network-id: string # Limit the result to series owned by this network. (format: uuid, e.g. 5317358a-527e-4365-a343-361854286cc7)
   --q: string # Limit the result to series with a title or slug containing this parameter in a case-insensitive way.
   --qp-sort: list<string> # Specify how to sort the result. Please refer to either the top section or the [JSON:API specification](https://jsonapi.org/format/#fetching-sorting) on how sorting works in general. (default: sort_title)
-]: nothing -> any {
+]: nothing -> record<data: table<attributes: record, id: string, relationships: record, type: string>, links: record<first: string, last: string, next: string, prev: string, self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ids[]" $ids "multi") (serialize-qp "page[number]" $page_number "scalar") (serialize-qp "page[size]" $page_size "scalar") (serialize-qp "ad_rep_account_id" $ad_rep_account_id "scalar") (serialize-qp "network_id" $network_id "scalar") (serialize-qp "q" $q "scalar") (serialize-qp "sort" $qp_sort "csv")] | flatten | str join "&"
@@ -713,7 +713,7 @@ export def "series get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<data: record<attributes: record<amazon_subscription_url: string, castbox_subscription_url: string, cover_image_id: string, created_at: string, description: string, description_is_html: bool, description_plain: string, facebook_url: string, google_subscription_url: string, iheart_subscription_url: string, instagram_url: string, itunes_subscription_badge_enabled: bool, itunes_subscription_url: string, linkedin_url: string, pocket_casts_subscription_url: string, podcast_subscription_url: string, public_page_enabled: bool, public_title: string, radio_public_subscription_url: string, rss_author: string, rss_copyright: string, rss_email: string, rss_owner: string, slug: string, sort_title: string, spotify_subscription_badge_enabled: bool, spotify_subscription_url: string, status: string, stitcher_subscription_badge_enabled: bool, stitcher_subscription_url: string, title: string, tumblr_url: string, tune_in_subscription_url: string, twitter_url: string, type: string, updated_at: string, website_url: string>, id: string, relationships: record<classification_inclusions: record, cover_image: record, credits: record, episodes: record, images: record, network: record, seasons: record, taggings: record, tags: record>, type: string>, links: record<self: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

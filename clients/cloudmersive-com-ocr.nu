@@ -594,7 +594,7 @@ export def "ocr-preprocessing-image-binarize create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   image_file: string # Image file to perform OCR on. Common file formats such as PNG, JPEG are supported. (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -624,7 +624,7 @@ export def "ocr-preprocessing-image-binarize-advanced create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   image_file: string # Image file to perform OCR on. Common file formats such as PNG, JPEG are supported. (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -684,7 +684,7 @@ export def "ocr-preprocessing-image-unrotate create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   image_file: string # Image file to perform OCR on. Common file formats such as PNG, JPEG are supported. (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -714,7 +714,7 @@ export def "ocr-preprocessing-image-unrotate-advanced create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   image_file: string # Image file to perform OCR on. Common file formats such as PNG, JPEG are supported. (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)
@@ -744,7 +744,7 @@ export def "ocr-preprocessing-image-unskew create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   image_file: string # Image file to perform OCR on. Common file formats such as PNG, JPEG are supported. (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "apikey"))
   let base = ($base_url | default $BASE_URL)

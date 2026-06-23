@@ -194,7 +194,7 @@ export def "api-information get-endpoints" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --openapi: oneof<nothing, bool> # Return an OpenAPI specification. (e.g. true)
-]: nothing -> any {
+]: nothing -> record<methods: list<string>, path: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "openapi" $openapi "scalar")] | flatten | str join "&"
@@ -222,7 +222,7 @@ export def "categories list" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<icon: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record, interactions: record>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, resource_key: string, subcategories: list<record>, top_level: bool, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -247,7 +247,7 @@ export def "categories get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<icon: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record<channels: record, groups: record, users: record, videos: record>, interactions: record<follow: record>>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, resource_key: string, subcategories: table<link: string, name: string, uri: string>, top_level: bool, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
@@ -277,7 +277,7 @@ export def "categories-channels get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-1 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: list<record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
@@ -308,7 +308,7 @@ export def "categories-groups get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-2 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<created_time: string, description: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<comment: string, invite: string, join: string, videos: string, view: string>, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
@@ -341,7 +341,7 @@ export def "categories-videos get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-3 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
@@ -368,7 +368,7 @@ export def "categories-videos check" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($category | is-empty) { error make --unspanned { msg: "path parameter 'category' must be non-empty" } }
@@ -399,7 +399,7 @@ export def "channels list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-4 # The way to sort the results. Option descriptions: * `relevant` - Relevant sorting is available only for search queries.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: list<record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -424,7 +424,7 @@ export def "channels create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, link: string, metadata: record<connections: record<privacy_users: record, users: record, videos: record>, interactions: record<add_moderators: record, add_to: record, follow: record, moderate_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -476,7 +476,7 @@ export def "channels get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, link: string, metadata: record<connections: record<privacy_users: record, users: record, videos: record>, interactions: record<add_moderators: record, add_to: record, follow: record, moderate_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -502,7 +502,7 @@ export def "channels update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, link: string, metadata: record<connections: record<privacy_users: record, users: record, videos: record>, interactions: record<add_moderators: record, add_to: record, follow: record, moderate_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -530,7 +530,7 @@ export def "channels-categories get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<icon: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record, interactions: record>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, resource_key: string, subcategories: list<record>, top_level: bool, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -672,7 +672,7 @@ export def "channels-moderators list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -784,7 +784,7 @@ export def "channels-moderators get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record<albums: record, appearances: record, block: record, categories: record, channels: record, feed: record, folders: record, followers: record, following: record, groups: record, likes: record, moderated_channels: record, pictures: record, portfolios: record, recommended_channels: record, recommended_users: record, shared: record, videos: record, watched_videos: record, watchlater: record>, interactions: record<add_privacy_user: record, block: record, follow: record, report: record>>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preferences: record<videos: record<privacy: record>>, resource_key: string, upload_quota: record<lifetime: record<free: float, max: float, used: float>, periodic: record<free: float, max: float, reset_date: string, used: float>, space: record<free: float, max: float, showing: string, used: float>>, uri: string, websites: table<description: string, link: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -840,7 +840,7 @@ export def "channels-privacy-users get" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -867,7 +867,7 @@ export def "channels-privacy-users update-by-channel-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -949,7 +949,7 @@ export def "channels-tags get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<canonical: string, metadata: record<connections: record>, name: string, resource_key: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -975,7 +975,7 @@ export def "channels-tags create-by-channel-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> table<canonical: string, metadata: record<connections: record>, name: string, resource_key: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1090,7 +1090,7 @@ export def "channels-users get-subscribers" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1153,7 +1153,7 @@ export def "channels-videos list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-6 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1236,7 +1236,7 @@ export def "channels-videos get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1293,7 +1293,7 @@ export def "channels-videos-comments get-alt1" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<created_on: string, metadata: record<connections: record>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1322,7 +1322,7 @@ export def "channels-videos-comments create-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<created_on: string, metadata: record<connections: record<replies: record>>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1357,7 +1357,7 @@ export def "channels-videos-credits get-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<name: string, role: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, video: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1386,7 +1386,7 @@ export def "channels-videos-credits create-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<name: string, role: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, video: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1420,7 +1420,7 @@ export def "channels-videos-likes get-alt1" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1450,7 +1450,7 @@ export def "channels-videos-pictures get-thumbnails-alt1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1479,7 +1479,7 @@ export def "channels-videos-pictures create-thumbnail-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1511,7 +1511,7 @@ export def "channels-videos-privacy-users get-alt1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1539,7 +1539,7 @@ export def "channels-videos-privacy-users create-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1566,7 +1566,7 @@ export def "channels-videos-texttracks get-text-tracks-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<active: bool, hls_link: string, hls_link_expires_time: string, language: string, link: string, link_expires_time: string, name: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($channel_id | is-empty) { error make --unspanned { msg: "path parameter 'channel_id' must be non-empty" } }
@@ -1594,7 +1594,7 @@ export def "channels-videos-texttracks create-text-track-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, hls_link: string, hls_link_expires_time: string, language: string, link: string, link_expires_time: string, name: string, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1622,7 +1622,7 @@ export def "contentratings get-content-ratings" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<code: string, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/contentratings")
@@ -1645,7 +1645,7 @@ export def "creativecommons get-cc-licenses" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<code: string, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/creativecommons")
@@ -1674,7 +1674,7 @@ export def "groups list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-4 # The way to sort the results. Option descriptions: * `relevant` - Relevant sorting is available only for search queries.
-]: nothing -> any {
+]: nothing -> table<created_time: string, description: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<comment: string, invite: string, join: string, videos: string, view: string>, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -1699,7 +1699,7 @@ export def "groups create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<created_time: string, description: string, link: string, metadata: record<connections: record<users: record, videos: record>, interactions: record<join: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<comment: string, invite: string, join: string, videos: string, view: string>, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1751,7 +1751,7 @@ export def "groups get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_time: string, description: string, link: string, metadata: record<connections: record<users: record, videos: record>, interactions: record<join: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<comment: string, invite: string, join: string, videos: string, view: string>, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -1782,7 +1782,7 @@ export def "groups-users get-members" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -1815,7 +1815,7 @@ export def "groups-videos list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -1869,7 +1869,7 @@ export def "groups-videos get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -1896,7 +1896,7 @@ export def "groups-videos create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($group_id | is-empty) { error make --unspanned { msg: "path parameter 'group_id' must be non-empty" } }
@@ -1922,7 +1922,7 @@ export def "languages get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --filter: string@filter-completer-4 # The attribute by which to filter the results. Option descriptions: * `texttracks` - Only return text track supported languages
-]: nothing -> any {
+]: nothing -> table<code: string, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar")] | flatten | str join "&"
@@ -1946,7 +1946,7 @@ export def "me get-user-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record<albums: record, appearances: record, block: record, categories: record, channels: record, feed: record, folders: record, followers: record, following: record, groups: record, likes: record, moderated_channels: record, pictures: record, portfolios: record, recommended_channels: record, recommended_users: record, shared: record, videos: record, watched_videos: record, watchlater: record>, interactions: record<add_privacy_user: record, block: record, follow: record, report: record>>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preferences: record<videos: record<privacy: record>>, resource_key: string, upload_quota: record<lifetime: record<free: float, max: float, used: float>, periodic: record<free: float, max: float, reset_date: string, used: float>, space: record<free: float, max: float, showing: string, used: float>>, uri: string, websites: table<description: string, link: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me")
@@ -1970,7 +1970,7 @@ export def "me update-edit-user-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record<albums: record, appearances: record, block: record, categories: record, channels: record, feed: record, folders: record, followers: record, following: record, groups: record, likes: record, moderated_channels: record, pictures: record, portfolios: record, recommended_channels: record, recommended_users: record, shared: record, videos: record, watched_videos: record, watchlater: record>, interactions: record<add_privacy_user: record, block: record, follow: record, report: record>>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preferences: record<videos: record<privacy: record>>, resource_key: string, upload_quota: record<lifetime: record<free: float, max: float, used: float>, periodic: record<free: float, max: float, reset_date: string, used: float>, space: record<free: float, max: float, showing: string, used: float>>, uri: string, websites: table<description: string, link: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2026,7 +2026,7 @@ export def "me-albums create-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record<videos: record>, interactions: record<add_custom_thumbnails: record, add_logos: record, add_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, web_brand_color: bool, web_custom_logo: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2078,7 +2078,7 @@ export def "me-albums get-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record<videos: record>, interactions: record<add_custom_thumbnails: record, add_logos: record, add_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, web_brand_color: bool, web_custom_logo: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
@@ -2104,7 +2104,7 @@ export def "me-albums update-edit-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record<videos: record>, interactions: record<add_custom_thumbnails: record, add_logos: record, add_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, web_brand_color: bool, web_custom_logo: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2142,7 +2142,7 @@ export def "me-albums-videos list" [
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-9 # The way to sort the results.
   --weak-search: oneof<nothing, bool> # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
@@ -2226,7 +2226,7 @@ export def "me-albums-videos get-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --password: string # The password of the album. (e.g. hunter1)
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($album_id | is-empty) { error make --unspanned { msg: "path parameter 'album_id' must be non-empty" } }
@@ -2317,7 +2317,7 @@ export def "me-appearances get-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -2345,7 +2345,7 @@ export def "me-categories get-category-subscriptions-alt1" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-10 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<icon: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record, interactions: record>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, resource_key: string, subcategories: list<record>, top_level: bool, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -2450,7 +2450,7 @@ export def "me-channels get-subscriptions-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-1 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: list<record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -2549,7 +2549,7 @@ export def "me-customlogos get-custom-logos-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/customlogos")
@@ -2572,7 +2572,7 @@ export def "me-customlogos create-custom-logo-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/customlogos")
@@ -2596,7 +2596,7 @@ export def "me-customlogos get-custom-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($logo_id | is-empty) { error make --unspanned { msg: "path parameter 'logo_id' must be non-empty" } }
@@ -2624,7 +2624,7 @@ export def "me-feed get-alt1" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --type: string@type-completer # The feed type.
-]: nothing -> any {
+]: nothing -> table<category: record<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, channel: record<categories: list, created_time: string, description: string, header: record, link: string, metadata: record, modified_time: string, name: string, pictures: record, privacy: record, resource_key: string, tags: list, uri: string, user: record>, clip: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, group: record<created_time: string, description: string, link: string, metadata: record, modified_time: string, name: string, pictures: record, privacy: record, resource_key: string, uri: string, user: record>, metadata: record<connections: record>, tag: record<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, time: string, type: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "offset" $offset "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "type" $type "scalar")] | flatten | str join "&"
@@ -2653,7 +2653,7 @@ export def "me-followers get-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -2683,7 +2683,7 @@ export def "me-following get-user-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -2815,7 +2815,7 @@ export def "me-groups get-user-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-2 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<created_time: string, description: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<comment: string, invite: string, join: string, videos: string, view: string>, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -2920,7 +2920,7 @@ export def "me-likes get-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3024,7 +3024,7 @@ export def "me-ondemand-pages get-user-vods-alt1" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-11 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<background: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record, rent: record>, film: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, genres: list<record>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, trailer: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3094,7 +3094,7 @@ export def "me-ondemand-purchases get-vod" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-12 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<background: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record, rent: record>, film: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, genres: list<record>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, trailer: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3119,7 +3119,7 @@ export def "me-ondemand-purchases check-if-vod-was-purchased-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<background: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record<active: bool, price: float>, rent: record<active: bool, period: string, price: float>>, film: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, genres: table<canonical: string, interactions: record, link: string, metadata: record, name: string, uri: string>, link: string, metadata: record<connections: record<metadata: record>, interactions: record<buy: record, rent: record, subscribe: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, trailer: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -3145,7 +3145,7 @@ export def "me-pictures list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -3169,7 +3169,7 @@ export def "me-pictures create-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/me/pictures")
@@ -3218,7 +3218,7 @@ export def "me-pictures get-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portraitset_id | is-empty) { error make --unspanned { msg: "path parameter 'portraitset_id' must be non-empty" } }
@@ -3244,7 +3244,7 @@ export def "me-pictures update-edit-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3276,7 +3276,7 @@ export def "me-portfolios list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<created_time: string, description: string, link: string, metadata: record<connections: record>, modified_time: string, name: string, sort: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3301,7 +3301,7 @@ export def "me-portfolios get-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_time: string, description: string, link: string, metadata: record<connections: record<videos: record>>, modified_time: string, name: string, sort: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
@@ -3332,7 +3332,7 @@ export def "me-portfolios-videos list" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-13 # The way to sort the results. Option descriptions: * `default` - This will sort to the default sort set on the portfolio.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
@@ -3386,7 +3386,7 @@ export def "me-portfolios-videos get-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($portfolio_id | is-empty) { error make --unspanned { msg: "path parameter 'portfolio_id' must be non-empty" } }
@@ -3440,7 +3440,7 @@ export def "me-presets list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<metadata: record<connections: record>, name: string, settings: record<buttons: record, logos: record, outro: record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -3465,7 +3465,7 @@ export def "me-presets get-embed-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<metadata: record<connections: record<videos: record>>, name: string, settings: record<buttons: record<embed: bool, hd: bool, like: bool, share: bool, vote: bool, watchlater: bool>, logos: record<custom: bool, sticky_custom: bool, vimeo: bool>, outro: record<clips: string, link: record, text: string, type: string, videos: string>>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
@@ -3491,7 +3491,7 @@ export def "me-presets update-edit-embed-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<metadata: record<connections: record<videos: record>>, name: string, settings: record<buttons: record<embed: bool, hd: bool, like: bool, share: bool, vote: bool, watchlater: bool>, logos: record<custom: bool, sticky_custom: bool, vimeo: bool>, outro: record<clips: string, link: record, text: string, type: string, videos: string>>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3521,7 +3521,7 @@ export def "me-presets-videos get-embed-alt1" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($preset_id | is-empty) { error make --unspanned { msg: "path parameter 'preset_id' must be non-empty" } }
@@ -3830,7 +3830,7 @@ export def "me-videos get-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-16 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "containing_uri" $containing_uri "scalar") (serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "filter_playable" $filter_playable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -3855,7 +3855,7 @@ export def "me-videos upload-alt1" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3882,7 +3882,7 @@ export def "me-videos check-if-user-owns-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -3931,7 +3931,7 @@ export def "me-watched-videos get-watch-history" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar")] | flatten | str join "&"
@@ -3987,7 +3987,7 @@ export def "me-watchlater get-watch-later-queue-alt1" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "filter_embeddable" $filter_embeddable "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -4037,7 +4037,7 @@ export def "me-watchlater check-watch-later-queue-alt1" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -4087,7 +4087,7 @@ export def "oauth-access-token create-exchange-auth-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<access_token: string, app: record<name: string, uri: string>, expires_on: string, refresh_token: string, scope: string, token_type: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4114,7 +4114,7 @@ export def "oauth-authorize-client create-auth" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<access_token: string, app: record<name: string, uri: string>, expires_on: string, refresh_token: string, scope: string, token_type: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4141,7 +4141,7 @@ export def "oauth-authorize-vimeo-oauth1 create-convert-access-token" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<access_token: string, app: record<name: string, uri: string>, expires_on: string, refresh_token: string, scope: string, token_type: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4167,7 +4167,7 @@ export def "oauth-verify verify-token" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<access_token: string, app: record<name: string, uri: string>, expires_on: string, refresh_token: string, scope: string, token_type: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/oauth/verify")
@@ -4190,7 +4190,7 @@ export def "ondemand-genres list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<canonical: string, interactions: record<page: record>, link: string, metadata: record<connections: record>, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ondemand/genres")
@@ -4214,7 +4214,7 @@ export def "ondemand-genres get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<canonical: string, interactions: record<page: record<added: bool, options: list, uri: string>>, link: string, metadata: record<connections: record<pages: record>>, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
@@ -4245,7 +4245,7 @@ export def "ondemand-genres-pages get-vods" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-17 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<background: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record, rent: record>, film: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, genres: list<record>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, trailer: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
@@ -4272,7 +4272,7 @@ export def "ondemand-genres-pages get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<background: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record<active: bool, price: float>, rent: record<active: bool, period: string, price: float>>, film: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, genres: table<canonical: string, interactions: record, link: string, metadata: record, name: string, uri: string>, link: string, metadata: record<connections: record<metadata: record>, interactions: record<buy: record, rent: record, subscribe: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, trailer: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($genre_id | is-empty) { error make --unspanned { msg: "path parameter 'genre_id' must be non-empty" } }
@@ -4323,7 +4323,7 @@ export def "ondemand-pages get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<background: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record<active: bool, price: float>, rent: record<active: bool, period: string, price: float>>, film: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, genres: table<canonical: string, interactions: record, link: string, metadata: record, name: string, uri: string>, link: string, metadata: record<connections: record<metadata: record>, interactions: record<buy: record, rent: record, subscribe: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, trailer: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4349,7 +4349,7 @@ export def "ondemand-pages update-edit-vod" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<background: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record<active: bool, price: float>, rent: record<active: bool, period: string, price: float>>, film: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, genres: table<canonical: string, interactions: record, link: string, metadata: record, name: string, uri: string>, link: string, metadata: record<connections: record<metadata: record>, interactions: record<buy: record, rent: record, subscribe: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, trailer: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4379,7 +4379,7 @@ export def "ondemand-pages-backgrounds list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4405,7 +4405,7 @@ export def "ondemand-pages-backgrounds create-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4458,7 +4458,7 @@ export def "ondemand-pages-backgrounds get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4486,7 +4486,7 @@ export def "ondemand-pages-backgrounds update-edit-vod" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4515,7 +4515,7 @@ export def "ondemand-pages-genres list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<canonical: string, interactions: record<page: record>, link: string, metadata: record<connections: record>, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4568,7 +4568,7 @@ export def "ondemand-pages-genres get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<canonical: string, interactions: record<page: record<added: bool, options: list, uri: string>>, link: string, metadata: record<connections: record<pages: record>>, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4595,7 +4595,7 @@ export def "ondemand-pages-genres create-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<canonical: string, interactions: record<page: record<added: bool, options: list, uri: string>>, link: string, metadata: record<connections: record<pages: record>>, name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4626,7 +4626,7 @@ export def "ondemand-pages-likes get-vod" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4654,7 +4654,7 @@ export def "ondemand-pages-pictures get-vod-posters" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4680,7 +4680,7 @@ export def "ondemand-pages-pictures create-vod-poster" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4706,7 +4706,7 @@ export def "ondemand-pages-pictures get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4734,7 +4734,7 @@ export def "ondemand-pages-pictures update-edit-vod" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4766,7 +4766,7 @@ export def "ondemand-pages-promotions list" [
   --filter: string@filter-completer-12 # The filter to apply to the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> record<access_type: string, discount_type: string, download: bool, label: string, metadata: record<connections: record<codes: record>>, percent_off: float, product_type: string, stream_period: string, total: float, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4793,7 +4793,7 @@ export def "ondemand-pages-promotions create-vod" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<access_type: string, discount_type: string, download: bool, label: string, metadata: record<connections: record<codes: record>>, percent_off: float, product_type: string, stream_period: string, total: float, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4849,7 +4849,7 @@ export def "ondemand-pages-promotions get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<access_type: string, discount_type: string, download: bool, label: string, metadata: record<connections: record<codes: record>>, percent_off: float, product_type: string, stream_period: string, total: float, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4878,7 +4878,7 @@ export def "ondemand-pages-promotions-codes get-vod" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> record<code: string, link: string, max_uses: float, uses: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4906,7 +4906,7 @@ export def "ondemand-pages-regions delete-vod-by-ondemand-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> table<country_code: string, country_name: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -4934,7 +4934,7 @@ export def "ondemand-pages-regions list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<country_code: string, country_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -4960,7 +4960,7 @@ export def "ondemand-pages-regions update-vod" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<country_code: string, country_name: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5016,7 +5016,7 @@ export def "ondemand-pages-regions get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<country_code: string, country_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5043,7 +5043,7 @@ export def "ondemand-pages-regions create-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<country_code: string, country_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5074,7 +5074,7 @@ export def "ondemand-pages-seasons list" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-18 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<description: string, metadata: record<connections: record>, name: string, position: float, resource_key: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5101,7 +5101,7 @@ export def "ondemand-pages-seasons get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<description: string, metadata: record<connections: record<videos: record>>, name: string, position: float, resource_key: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5132,7 +5132,7 @@ export def "ondemand-pages-seasons-videos get-vod" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-19 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5164,7 +5164,7 @@ export def "ondemand-pages-videos list" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-20 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5218,7 +5218,7 @@ export def "ondemand-pages-videos get-vod" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ondemand_id | is-empty) { error make --unspanned { msg: "path parameter 'ondemand_id' must be non-empty" } }
@@ -5246,7 +5246,7 @@ export def "ondemand-pages-videos create-to-vod" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<buy: record<active: bool, price: record, purchased: bool>, description: string, duration: string, episode: float, interactions: record<page: record<added: bool, options: list, uri: string>>, link: string, metadata: record<connections: record<season: record>, interactions: record<likes: record, watchlater: record>>, name: string, options: list<string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, play_progress: float, position: float, release_date: string, release_year: float, rent: record<active: bool, price: record, purchased: bool>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5274,7 +5274,7 @@ export def "ondemand-regions list" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<country_code: string, country_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/ondemand/regions")
@@ -5298,7 +5298,7 @@ export def "ondemand-regions get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<country_code: string, country_name: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($country | is-empty) { error make --unspanned { msg: "path parameter 'country' must be non-empty" } }
@@ -5323,7 +5323,7 @@ export def "tags get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<canonical: string, metadata: record<connections: record<videos: record>>, name: string, resource_key: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -5352,7 +5352,7 @@ export def "tags-videos get" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-21 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($word | is-empty) { error make --unspanned { msg: "path parameter 'word' must be non-empty" } }
@@ -5405,7 +5405,7 @@ export def "users list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-4 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar")] | flatten | str join "&"
@@ -5430,7 +5430,7 @@ export def "users get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record<albums: record, appearances: record, block: record, categories: record, channels: record, feed: record, folders: record, followers: record, following: record, groups: record, likes: record, moderated_channels: record, pictures: record, portfolios: record, recommended_channels: record, recommended_users: record, shared: record, videos: record, watched_videos: record, watchlater: record>, interactions: record<add_privacy_user: record, block: record, follow: record, report: record>>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preferences: record<videos: record<privacy: record>>, resource_key: string, upload_quota: record<lifetime: record<free: float, max: float, used: float>, periodic: record<free: float, max: float, reset_date: string, used: float>, space: record<free: float, max: float, showing: string, used: float>>, uri: string, websites: table<description: string, link: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5456,7 +5456,7 @@ export def "users update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record<albums: record, appearances: record, block: record, categories: record, channels: record, feed: record, folders: record, followers: record, following: record, groups: record, likes: record, moderated_channels: record, pictures: record, portfolios: record, recommended_channels: record, recommended_users: record, shared: record, videos: record, watched_videos: record, watchlater: record>, interactions: record<add_privacy_user: record, block: record, follow: record, report: record>>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preferences: record<videos: record<privacy: record>>, resource_key: string, upload_quota: record<lifetime: record<free: float, max: float, used: float>, periodic: record<free: float, max: float, reset_date: string, used: float>, space: record<free: float, max: float, showing: string, used: float>>, uri: string, websites: table<description: string, link: string, name: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5516,7 +5516,7 @@ export def "users-albums create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record<videos: record>, interactions: record<add_custom_thumbnails: record, add_logos: record, add_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, web_brand_color: bool, web_custom_logo: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5572,7 +5572,7 @@ export def "users-albums get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record<videos: record>, interactions: record<add_custom_thumbnails: record, add_logos: record, add_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, web_brand_color: bool, web_custom_logo: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5600,7 +5600,7 @@ export def "users-albums update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<allow_continuous_play: bool, allow_downloads: bool, allow_share: bool, brand_color: string, created_time: string, custom_logo: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, description: string, domain: string, duration: float, embed: record<html: string>, embed_brand_color: bool, embed_custom_logo: bool, hide_nav: bool, hide_vimeo_logo: bool, layout: string, link: string, metadata: record<connections: record<videos: record>, interactions: record<add_custom_thumbnails: record, add_logos: record, add_videos: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<password: string, view: string>, resource_key: string, review_mode: bool, sort: string, theme: string, uri: string, url: string, use_custom_domain: bool, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, web_brand_color: bool, web_custom_logo: bool> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5632,7 +5632,7 @@ export def "users-albums-custom-thumbnails get-thumbs" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5660,7 +5660,7 @@ export def "users-albums-custom-thumbnails create-thumb" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5717,7 +5717,7 @@ export def "users-albums-custom-thumbnails get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5747,7 +5747,7 @@ export def "users-albums-custom-thumbnails update-thumb" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5780,7 +5780,7 @@ export def "users-albums-logos list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5808,7 +5808,7 @@ export def "users-albums-logos create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5865,7 +5865,7 @@ export def "users-albums-logos get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -5895,7 +5895,7 @@ export def "users-albums-logos update" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -5936,7 +5936,7 @@ export def "users-albums-videos list" [
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-9 # The way to sort the results.
   --weak-search: oneof<nothing, bool> # Whether to include private videos in the search. Please note that a separate search service provides this functionality. The service performs a partial text search on the video's name. (e.g. false)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6026,7 +6026,7 @@ export def "users-albums-videos get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --password: string # The password of the album. (e.g. hunter1)
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6123,7 +6123,7 @@ export def "users-appearances get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6153,7 +6153,7 @@ export def "users-categories get-category-subscriptions" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-10 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<icon: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record, interactions: record>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, resource_key: string, subcategories: list<record>, top_level: bool, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6266,7 +6266,7 @@ export def "users-channels get-subscriptions" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-1 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: list<record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6373,7 +6373,7 @@ export def "users-customlogos get-custom-logos" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6398,7 +6398,7 @@ export def "users-customlogos create-custom-logo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6424,7 +6424,7 @@ export def "users-customlogos get-custom" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6454,7 +6454,7 @@ export def "users-feed get" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --type: string@type-completer # The feed type.
-]: nothing -> any {
+]: nothing -> table<category: record<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, channel: record<categories: list, created_time: string, description: string, header: record, link: string, metadata: record, modified_time: string, name: string, pictures: record, privacy: record, resource_key: string, tags: list, uri: string, user: record>, clip: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, group: record<created_time: string, description: string, link: string, metadata: record, modified_time: string, name: string, pictures: record, privacy: record, resource_key: string, uri: string, user: record>, metadata: record<connections: record>, tag: record<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, time: string, type: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6485,7 +6485,7 @@ export def "users-followers get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6517,7 +6517,7 @@ export def "users-following get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6659,7 +6659,7 @@ export def "users-groups get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-2 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<created_time: string, description: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<comment: string, invite: string, join: string, videos: string, view: string>, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6772,7 +6772,7 @@ export def "users-likes get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6884,7 +6884,7 @@ export def "users-ondemand-pages get-vods" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-11 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<background: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record, rent: record>, film: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, genres: list<record>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, trailer: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6953,7 +6953,7 @@ export def "users-ondemand-purchases check-if-vod-was-purchased" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<background: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, colors: record<primary: string, secondary: string>, content_rating: list<string>, created_time: string, description: string, domain_link: string, episodes: record<buy: record<active: bool, price: float>, rent: record<active: bool, period: string, price: float>>, film: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, genres: table<canonical: string, interactions: record, link: string, metadata: record, name: string, uri: string>, link: string, metadata: record<connections: record<metadata: record>, interactions: record<buy: record, rent: record, subscribe: record>>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preorder: record<active: bool, cancel_time: string, publish_time: string, time: string>, published: record<enabled: bool, time: string>, rating: float, resource_key: string, sku: string, subscription: record<active: bool, link: string, period: string, price: record>, theme: string, thumbnail: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, trailer: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -6980,7 +6980,7 @@ export def "users-pictures list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7006,7 +7006,7 @@ export def "users-pictures create" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7059,7 +7059,7 @@ export def "users-pictures get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7087,7 +7087,7 @@ export def "users-pictures update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7121,7 +7121,7 @@ export def "users-portfolios list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<created_time: string, description: string, link: string, metadata: record<connections: record>, modified_time: string, name: string, sort: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7148,7 +7148,7 @@ export def "users-portfolios get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_time: string, description: string, link: string, metadata: record<connections: record<videos: record>>, modified_time: string, name: string, sort: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7181,7 +7181,7 @@ export def "users-portfolios-videos list" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-13 # The way to sort the results. Option descriptions: * `default` - This will sort to the default sort set on the portfolio.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7239,7 +7239,7 @@ export def "users-portfolios-videos get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7297,7 +7297,7 @@ export def "users-presets list" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<metadata: record<connections: record>, name: string, settings: record<buttons: record, logos: record, outro: record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7324,7 +7324,7 @@ export def "users-presets get-embed" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<metadata: record<connections: record<videos: record>>, name: string, settings: record<buttons: record<embed: bool, hd: bool, like: bool, share: bool, vote: bool, watchlater: bool>, logos: record<custom: bool, sticky_custom: bool, vimeo: bool>, outro: record<clips: string, link: record, text: string, type: string, videos: string>>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7352,7 +7352,7 @@ export def "users-presets update-edit-embed" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<metadata: record<connections: record<videos: record>>, name: string, settings: record<buttons: record<embed: bool, hd: bool, like: bool, share: bool, vote: bool, watchlater: bool>, logos: record<custom: bool, sticky_custom: bool, vimeo: bool>, outro: record<clips: string, link: record, text: string, type: string, videos: string>>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7384,7 +7384,7 @@ export def "users-presets-videos get-embed" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7737,7 +7737,7 @@ export def "users-uploads get-attempt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<clip: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>, complete_uri: string, form: string, ticket_id: string, upload_link: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7772,7 +7772,7 @@ export def "users-videos get" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-16 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7799,7 +7799,7 @@ export def "users-videos upload" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -7828,7 +7828,7 @@ export def "users-videos check-if-owns" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7861,7 +7861,7 @@ export def "users-watchlater get-watch-later-queue" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-7 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7915,7 +7915,7 @@ export def "users-watchlater check-watch-later-queue" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'user_id' must be non-empty" } }
@@ -7975,7 +7975,7 @@ export def "videos list" [
   --query: string # Search query. (e.g. staff picks)
   --qp-sort: string@sort-completer-22 # The way to sort the results.
   --uris: string # The comma-separated list of videos to find. (e.g. /videos/122375452,/videos/273576296)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "direction" $direction "scalar") (serialize-qp "filter" $filter "scalar") (serialize-qp "links" $links "scalar") (serialize-qp "page" $page "scalar") (serialize-qp "per_page" $per_page "scalar") (serialize-qp "query" $query "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "uris" $uris "scalar")] | flatten | str join "&"
@@ -8025,7 +8025,7 @@ export def "videos get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8051,7 +8051,7 @@ export def "videos update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<categories: table<icon: record, last_video_featured_time: string, link: string, metadata: record, name: string, parent: record, pictures: record, resource_key: string, subcategories: list, top_level: bool, uri: string>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record<embed: bool, fullscreen: bool, hd: bool, like: bool, scaling: bool, share: bool, watchlater: bool>, color: string, logos: record<custom: record, vimeo: bool>, playbar: bool, speed: bool, title: record<name: string, owner: string, portrait: string>, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record<comments: record, credits: record, likes: record, ondemand: record, pictures: record, playback: record, recommendations: record, related: record, season: record, texttracks: record, trailer: record, users_with_access: record, versions: record>, interactions: record<buy: record, channel: record, like: record, rent: record, report: record, subscribe: record, watched: record, watchlater: record>>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record<connections: record>, modified_time: string, name: string, resource_key: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list<record>, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: table<canonical: string, metadata: record, name: string, resource_key: string, uri: string>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, width: float> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8079,7 +8079,7 @@ export def "videos-available-channels get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, created_time: string, description: string, header: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<view: string>, resource_key: string, tags: list<record>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8104,7 +8104,7 @@ export def "videos-categories get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<icon: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record, interactions: record>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, resource_key: string, subcategories: list<record>, top_level: bool, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8130,7 +8130,7 @@ export def "videos-categories update-suggest-category" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<icon: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, last_video_featured_time: string, link: string, metadata: record<connections: record<channels: record, groups: record, users: record, videos: record>, interactions: record<follow: record>>, name: string, parent: record<link: string, name: string, uri: string>, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, resource_key: string, subcategories: table<link: string, name: string, uri: string>, top_level: bool, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8161,7 +8161,7 @@ export def "videos-comments list" [
   --direction: string@direction-completer # The sort direction of the results. (e.g. asc)
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<created_on: string, metadata: record<connections: record>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8188,7 +8188,7 @@ export def "videos-comments create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<created_on: string, metadata: record<connections: record<replies: record>>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8244,7 +8244,7 @@ export def "videos-comments get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<created_on: string, metadata: record<connections: record<replies: record>>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8272,7 +8272,7 @@ export def "videos-comments update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<created_on: string, metadata: record<connections: record<replies: record>>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8304,7 +8304,7 @@ export def "videos-comments-replies get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<created_on: string, metadata: record<connections: record>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8333,7 +8333,7 @@ export def "videos-comments-replies create-reply" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<created_on: string, metadata: record<connections: record<replies: record>>, resource_key: string, text: string, type: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8367,7 +8367,7 @@ export def "videos-credits list" [
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --query: string # The search query to use to filter the results. (e.g. Stop motion)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<name: string, role: string, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, video: record<categories: list, content_rating: list, context: record, created_time: string, description: string, duration: float, embed: record, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record, modified_time: string, name: string, parent_folder: record, password: string, pictures: record, privacy: record, release_time: string, resource_key: string, spatial: record, stats: record, status: string, tags: list, transcode: record, upload: record, uri: string, user: record, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8394,7 +8394,7 @@ export def "videos-credits create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<name: string, role: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, video: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8450,7 +8450,7 @@ export def "videos-credits get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<name: string, role: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, video: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8478,7 +8478,7 @@ export def "videos-credits update-edit" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<name: string, role: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>, video: record<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8511,7 +8511,7 @@ export def "videos-likes get" [
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
   --qp-sort: string@sort-completer-5 # The way to sort the results.
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8539,7 +8539,7 @@ export def "videos-pictures get-thumbnails" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8566,7 +8566,7 @@ export def "videos-pictures create-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8622,7 +8622,7 @@ export def "videos-pictures get-thumbnail" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8650,7 +8650,7 @@ export def "videos-pictures update-edit-thumbnail" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -8762,7 +8762,7 @@ export def "videos-privacy-domains get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<allow_hd: bool, domain: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8844,7 +8844,7 @@ export def "videos-privacy-users get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8870,7 +8870,7 @@ export def "videos-privacy-users create-by-video-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8923,7 +8923,7 @@ export def "videos-privacy-users create-by-video-id-user-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record<albums: record, appearances: record, block: record, categories: record, channels: record, feed: record, folders: record, followers: record, following: record, groups: record, likes: record, moderated_channels: record, pictures: record, portfolios: record, recommended_channels: record, recommended_users: record, shared: record, videos: record, watched_videos: record, watchlater: record>, interactions: record<add_privacy_user: record, block: record, follow: record, report: record>>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list<record>, type: string, uri: string>, preferences: record<videos: record<privacy: record>>, resource_key: string, upload_quota: record<lifetime: record<free: float, max: float, used: float>, periodic: record<free: float, max: float, reset_date: string, used: float>, space: record<free: float, max: float, showing: string, used: float>>, uri: string, websites: table<description: string, link: string, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8949,7 +8949,7 @@ export def "videos-tags get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<canonical: string, metadata: record<connections: record>, name: string, resource_key: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -8975,7 +8975,7 @@ export def "videos-tags create-by-video-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> table<canonical: string, metadata: record<connections: record>, name: string, resource_key: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9084,7 +9084,7 @@ export def "videos-texttracks get-text-tracks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<active: bool, hls_link: string, hls_link_expires_time: string, language: string, link: string, link_expires_time: string, name: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -9110,7 +9110,7 @@ export def "videos-texttracks create-text-track" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, hls_link: string, hls_link_expires_time: string, language: string, link: string, link_expires_time: string, name: string, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9166,7 +9166,7 @@ export def "videos-texttracks get-text-track" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, hls_link: string, hls_link_expires_time: string, language: string, link: string, link_expires_time: string, name: string, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -9194,7 +9194,7 @@ export def "videos-texttracks update-edit-text-track" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, hls_link: string, hls_link_expires_time: string, language: string, link: string, link_expires_time: string, name: string, type: string, uri: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9223,7 +9223,7 @@ export def "videos-timelinethumbnails create-custom-logo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -9249,7 +9249,7 @@ export def "videos-timelinethumbnails get-custom-logo" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<active: bool, link: string, resource_key: string, sizes: table<height: float, link: string, link_with_play_button: string, width: float>, type: string, uri: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }
@@ -9276,7 +9276,7 @@ export def "videos-versions create" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<active: bool, app: record<name: string, uri: string>, created_time: string, duration: float, filename: string, filesize: float, metadata: record<connections: record<video: record>>, modified_time: string, play: record<progressive: list<record>, status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, upload_date: string, uri: string, user: record<account: string, bio: string, content_filter: list<string>, created_time: string, email: string, link: string, location: string, metadata: record<connections: record, interactions: record>, name: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, preferences: record<videos: record>, resource_key: string, upload_quota: record<lifetime: record, periodic: record, space: record>, uri: string, websites: list<record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -9307,7 +9307,7 @@ export def "videos-videos get-related" [
   --filter: string@filter-completer-16 # The attribute by which to filter the results.
   --page: float # The page number of the results to show. (e.g. 1)
   --per-page: float # The number of items to show on each page of results, up to a maximum of 100. (e.g. 10)
-]: nothing -> any {
+]: nothing -> table<categories: list<record>, content_rating: list<string>, context: record<action: string, resource: record, resource_type: string>, created_time: string, description: string, duration: float, embed: record<buttons: record, color: string, logos: record, playbar: bool, speed: bool, title: record, uri: string, volume: bool>, height: float, language: string, last_user_action_event_date: string, license: string, link: string, metadata: record<connections: record, interactions: record>, modified_time: string, name: string, parent_folder: record<created_time: string, metadata: record, modified_time: string, name: string, resource_key: string, uri: string, user: record>, password: string, pictures: record<active: bool, link: string, resource_key: string, sizes: list, type: string, uri: string>, privacy: record<add: bool, comments: string, download: bool, embed: string, view: string>, release_time: string, resource_key: string, spatial: record<director_timeline: list, field_of_view: float, projection: string, stereo_format: string>, stats: record<plays: float>, status: string, tags: list<record>, transcode: record<status: string>, upload: record<approach: string, complete_uri: string, form: string, link: string, redirect_url: string, size: float, status: string, upload_link: string>, uri: string, user: record<account: string, bio: string, content_filter: list, created_time: string, email: string, link: string, location: string, metadata: record, name: string, pictures: record, preferences: record, resource_key: string, upload_quota: record, uri: string, websites: list>, width: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($video_id | is-empty) { error make --unspanned { msg: "path parameter 'video_id' must be non-empty" } }

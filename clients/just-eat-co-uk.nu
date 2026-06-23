@@ -342,7 +342,7 @@ export def "consumers get" [
   --email-address: string # Email address of the consumer.
   --account-type: string@account-type-completer # The account type of the consumer - currently only 'registered' accounts are supported. (default: registered)
   --count: string # Returns the number of consumers that matches the `emailAddress` and `accountType`. The query value should be empty, e.g. `/consumers/uk/?emailAddress=someone@email.com&accountType=registered&count`.
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($tenant | is-empty) { error make --unspanned { msg: "path parameter 'tenant' must be non-empty" } }

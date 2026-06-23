@@ -179,7 +179,7 @@ export def "artifact-upload upload" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --main-artifact: oneof<nothing, bool> # Flag telling if this should be considered as primary or secondary artifact. Default to 'true'
   file: string # The artifact to upload (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -209,7 +209,7 @@ export def "export export-snapshot" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --service-ids: list<string> # List of service identifiers to export
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "serviceIds" $service_ids "multi")] | flatten | str join "&"

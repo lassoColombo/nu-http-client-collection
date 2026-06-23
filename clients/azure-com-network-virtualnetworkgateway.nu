@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter-data: string # Start Packet capture parameters.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -464,7 +464,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --sas-url: string # SAS url for packet capture on virtual network gateway.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -501,7 +501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
   --device-family: string # The device family for the vpn device.
   --firmware-version: string # The firmware version for the vpn device.
   --vendor: string # The vendor for the vpn device.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -902,7 +902,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --client-root-certificates: list<string> # A list of client root certificates public certificate data encoded as Base-64 strings. Optional parameter for external radius based authentication with EAPTLS.
   --processor-architecture: string@processor-architecture-completer # VPN client Processor Architecture.
   --radius-server-auth-certificate: string # The public certificate data for the radius server authentication certificate as a Base-64 encoded string. Required only if external radius authentication has been configured with EAPTLS authentication.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -940,7 +940,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --client-root-certificates: list<string> # A list of client root certificates public certificate data encoded as Base-64 strings. Optional parameter for external radius based authentication with EAPTLS.
   --processor-architecture: string@processor-architecture-completer # VPN client Processor Architecture.
   --radius-server-auth-certificate: string # The public certificate data for the radius server authentication certificate as a Base-64 encoded string. Required only if external radius authentication has been configured with EAPTLS authentication.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1131,7 +1131,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }
@@ -1268,7 +1268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --filter-data: string # Start Packet capture parameters.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1303,7 +1303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
   --sas-url: string # SAS url for packet capture on virtual network gateway.
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1337,7 +1337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client API version.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($subscription_id | is-empty) { error make --unspanned { msg: "path parameter 'subscriptionId' must be non-empty" } }

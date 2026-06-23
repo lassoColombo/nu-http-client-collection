@@ -148,7 +148,7 @@ export def "make-pdf create" [
   --html: string
   key: string
   --url: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

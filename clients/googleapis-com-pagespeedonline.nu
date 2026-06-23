@@ -18,6 +18,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -143,8 +153,8 @@ export def commands []: nothing -> table {
 # operationId: pagespeedonline.pagespeedapi.runpagespeed
 export def "pagespeedonline-run-pagespeed get-runpagespeed" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-oauth2: string # Auth token for Oauth2 (Authorization)
+  --token-oauth2c: string # Auth token for Oauth2c (Authorization)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -170,7 +180,7 @@ export def "pagespeedonline-run-pagespeed get-runpagespeed" [
   --utm-campaign: string # Campaign name for analytics.
   --utm-source: string # Campaign source for analytics.
 ]: nothing -> record<analysisUTCTimestamp: string, captchaResult: string, id: string, kind: string, lighthouseResult: record<audits: record, categories: record<accessibility: record, best_practices: record, performance: record, pwa: record, seo: record>, categoryGroups: record, configSettings: record<channel: string, emulatedFormFactor: string, formFactor: string, locale: string, onlyCategories: any>, entities: list<record>, environment: record<benchmarkIndex: float, credits: record, hostUserAgent: string, networkUserAgent: string>, fetchTime: string, finalDisplayedUrl: string, finalUrl: string, fullPageScreenshot: any, i18n: record<rendererFormattedStrings: record>, lighthouseVersion: string, mainDocumentUrl: string, requestedUrl: string, runWarnings: list<any>, runtimeError: record<code: string, message: string>, stackPacks: list<record>, timing: record<total: float>, userAgent: string>, loadingExperience: record<id: string, initial_url: string, metrics: record, origin_fallback: bool, overall_category: string>, originLoadingExperience: record<id: string, initial_url: string, metrics: record, origin_fallback: bool, overall_category: string>, version: record<major: string, minor: string>> {
-  let auth = (build-auth $token ($auth_scheme | default "bearer"))
+  let auth = (merge-auth [(build-auth ($token_oauth2 | default ($env | get -o PAGESPEED_INSIGHTS_API_OAUTH2_TOKEN | default "")) "bearer") (build-auth ($token_oauth2c | default ($env | get -o PAGESPEED_INSIGHTS_API_OAUTH2C_TOKEN | default "")) "bearer")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "$.xgafv" $xgafv "scalar") (serialize-qp "access_token" $access_token "scalar") (serialize-qp "alt" $alt "scalar") (serialize-qp "callback" $callback "scalar") (serialize-qp "fields" $fields "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "oauth_token" $oauth_token "scalar") (serialize-qp "prettyPrint" $pretty_print "scalar") (serialize-qp "quotaUser" $quota_user "scalar") (serialize-qp "upload_protocol" $upload_protocol "scalar") (serialize-qp "uploadType" $upload_type "scalar") (serialize-qp "url" $url "scalar") (serialize-qp "captchaToken" $captcha_token "scalar") (serialize-qp "category" $category "multi") (serialize-qp "locale" $locale "scalar") (serialize-qp "strategy" $strategy "scalar") (serialize-qp "utm_campaign" $utm_campaign "scalar") (serialize-qp "utm_source" $utm_source "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/pagespeedonline/v5/runPagespeed" $qp)

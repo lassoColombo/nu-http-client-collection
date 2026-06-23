@@ -156,7 +156,7 @@ export def "abuse-tickets list" [
   --created-end: string # The latest abuse ticket creation date to pull abuse tickets for (format: iso-datetime)
   --limit: int # Number of abuse ticket numbers to return. (format: integer-positive, default: 100)
   --offset: int # The earliest result set record number to pull abuse tickets for (format: integer-positive, default: 0)
-]: nothing -> any {
+]: nothing -> record<pagination: record<first: string, last: string, next: string, previous: string, total: int>, ticketIds: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "type" $type "scalar") (serialize-qp "closed" $closed "scalar") (serialize-qp "sourceDomainOrIp" $source_domain_or_ip "scalar") (serialize-qp "target" $target "scalar") (serialize-qp "createdStart" $created_start "scalar") (serialize-qp "createdEnd" $created_end "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
@@ -187,7 +187,7 @@ export def "abuse-tickets create" [
   --body-source: string # The URL or IP where live abuse content is located at. ie: https://www.example.com/bad_stuff/bad.php
   --target: string # The brand/company the abuse is targeting. ie: brand name/bank name
   --type: string@type-completer # The type of abuse being reported.
-]: any -> any {
+]: any -> record<u_number: string> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -214,7 +214,7 @@ export def "abuse-tickets get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<closed: bool, closedAt: string, createdAt: string, domainIp: string, reporter: string, source: string, target: string, ticketId: string, type: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($ticket_id | is-empty) { error make --unspanned { msg: "path parameter 'ticketId' must be non-empty" } }

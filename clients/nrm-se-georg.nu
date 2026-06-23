@@ -179,7 +179,7 @@ export def "autocomplete complete-auto" [
   --layers: string
   --country-code: string
   --size: int # format: int32
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"
@@ -204,7 +204,7 @@ export def "coordinates list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --coordinates: string
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "coordinates" $coordinates "scalar")] | flatten | str join "&"
@@ -230,7 +230,7 @@ export def "reverse get-geo-code" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --lat: float # format: double
   --lng: float # format: double
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lng" $lng "scalar")] | flatten | str join "&"
@@ -259,7 +259,7 @@ export def "search list" [
   --layers: string
   --country-code: string
   --size: int # format: int32
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "sources" $sources "scalar") (serialize-qp "layers" $layers "scalar") (serialize-qp "countryCode" $country_code "scalar") (serialize-qp "size" $size "scalar")] | flatten | str join "&"

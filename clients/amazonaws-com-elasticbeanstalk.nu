@@ -287,7 +287,7 @@ export def "api get-apply-environment-managed-action" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ActionId: record, ActionDescription: record, ActionType: record, Status: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "ActionId" $action_id "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -323,7 +323,7 @@ export def "api create-apply-environment-managed-action" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ActionId: record, ActionDescription: record, ActionType: record, Status: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -438,7 +438,7 @@ export def "api get-check-dns-availability" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Available: record, FullyQualifiedCNAME: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "CNAMEPrefix" $cname_prefix "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -474,7 +474,7 @@ export def "api create-check-dns-availability" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Available: record, FullyQualifiedCNAME: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -515,7 +515,7 @@ export def "api get-compose-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Environments: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "GroupName" $group_name "scalar") (serialize-qp "VersionLabels" $version_labels "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -551,7 +551,7 @@ export def "api create-compose-environments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Environments: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -593,7 +593,7 @@ export def "api get-create-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "ResourceLifecycleConfig" $resource_lifecycle_config "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -629,7 +629,7 @@ export def "api create-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -676,7 +676,7 @@ export def "api get-create-application-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "SourceBuildInformation" $source_build_information "multi") (serialize-qp "SourceBundle" $source_bundle "multi") (serialize-qp "BuildConfiguration" $build_configuration "multi") (serialize-qp "AutoCreateApplication" $auto_create_application "scalar") (serialize-qp "Process" $process "scalar") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -712,7 +712,7 @@ export def "api create-application-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -759,7 +759,7 @@ export def "api get-create-configuration-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "SourceConfiguration" $source_configuration "multi") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -795,7 +795,7 @@ export def "api create-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -847,7 +847,7 @@ export def "api get-create-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "GroupName" $group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "CNAMEPrefix" $cname_prefix "scalar") (serialize-qp "Tier" $tier "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "OperationsRole" $operations_role "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -883,7 +883,7 @@ export def "api create-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -927,7 +927,7 @@ export def "api get-create-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>, Builder: record<ARN: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PlatformName" $platform_name "scalar") (serialize-qp "PlatformVersion" $platform_version "scalar") (serialize-qp "PlatformDefinitionBundle" $platform_definition_bundle "multi") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "Tags" $tags "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -963,7 +963,7 @@ export def "api create-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>, Builder: record<ARN: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1001,7 +1001,7 @@ export def "api get-create-storage-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<S3Bucket: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1036,7 +1036,7 @@ export def "api create-storage-location" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<S3Bucket: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1377,7 +1377,7 @@ export def "api get-delete-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1413,7 +1413,7 @@ export def "api create-delete-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PlatformSummary: record<PlatformArn: record, PlatformOwner: record, PlatformStatus: record, PlatformCategory: record, OperatingSystemName: record, OperatingSystemVersion: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformVersion: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1451,7 +1451,7 @@ export def "api get-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: record>, ApplicationVersionQuota: record<Maximum: record>, EnvironmentQuota: record<Maximum: record>, ConfigurationTemplateQuota: record<Maximum: record>, CustomPlatformQuota: record<Maximum: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1486,7 +1486,7 @@ export def "api create-get-account-attributes" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ResourceQuotas: record<ApplicationQuota: record<Maximum: record>, ApplicationVersionQuota: record<Maximum: record>, EnvironmentQuota: record<Maximum: record>, ConfigurationTemplateQuota: record<Maximum: record>, CustomPlatformQuota: record<Maximum: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1525,7 +1525,7 @@ export def "api get-application-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ApplicationVersions: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabels" $version_labels "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1561,7 +1561,7 @@ export def "api create-get-application-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ApplicationVersions: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1600,7 +1600,7 @@ export def "api get-applications" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Applications: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationNames" $application_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1636,7 +1636,7 @@ export def "api create-get-applications" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Applications: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1680,7 +1680,7 @@ export def "api get-configuration-options" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SolutionStackName: record, PlatformArn: record, Options: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "Options" $options "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1716,7 +1716,7 @@ export def "api create-get-configuration-options" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<SolutionStackName: record, PlatformArn: record, Options: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1757,7 +1757,7 @@ export def "api get-configuration-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ConfigurationSettings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1793,7 +1793,7 @@ export def "api create-get-configuration-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ConfigurationSettings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1834,7 +1834,7 @@ export def "api get-environment-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EnvironmentName: record, HealthStatus: record, Status: record, Color: record, Causes: record, ApplicationMetrics: record<Duration: record, RequestCount: record, StatusCodes: record<Status2xx: record, Status3xx: record, Status4xx: record, Status5xx: record>, Latency: record<P999: record, P99: record, P95: record, P90: record, P85: record, P75: record, P50: record, P10: record>>, InstancesHealth: record<NoData: record, Unknown: record, Pending: record, Ok: record, Info: record, Warning: record, Degraded: record, Severe: record>, RefreshedAt: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1870,7 +1870,7 @@ export def "api create-get-environment-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EnvironmentName: record, HealthStatus: record, Status: record, Color: record, Causes: record, ApplicationMetrics: record<Duration: record, RequestCount: record, StatusCodes: record<Status2xx: record, Status3xx: record, Status4xx: record, Status5xx: record>, Latency: record<P999: record, P99: record, P95: record, P90: record, P85: record, P75: record, P50: record, P10: record>>, InstancesHealth: record<NoData: record, Unknown: record, Pending: record, Ok: record, Info: record, Warning: record, Degraded: record, Severe: record>, RefreshedAt: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1912,7 +1912,7 @@ export def "api get-environment-managed-action-history" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ManagedActionHistoryItems: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "MaxItems" $max_items "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -1950,7 +1950,7 @@ export def "api create-get-environment-managed-action-history" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ManagedActionHistoryItems: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1991,7 +1991,7 @@ export def "api get-environment-managed-actions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ManagedActions: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "Status" $status "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2027,7 +2027,7 @@ export def "api create-get-environment-managed-actions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ManagedActions: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2067,7 +2067,7 @@ export def "api get-environment-resources" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EnvironmentResources: record<EnvironmentName: record, AutoScalingGroups: record, Instances: record, LaunchConfigurations: record, LaunchTemplates: record, LoadBalancers: record, Triggers: record, Queues: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2103,7 +2103,7 @@ export def "api create-get-environment-resources" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EnvironmentResources: record<EnvironmentName: record, AutoScalingGroups: record, Instances: record, LaunchConfigurations: record, LaunchTemplates: record, LoadBalancers: record, Triggers: record, Queues: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2149,7 +2149,7 @@ export def "api get-environments" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Environments: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "EnvironmentIds" $environment_ids "multi") (serialize-qp "EnvironmentNames" $environment_names "multi") (serialize-qp "IncludeDeleted" $include_deleted "scalar") (serialize-qp "IncludedDeletedBackTo" $included_deleted_back_to "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2185,7 +2185,7 @@ export def "api create-get-environments" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Environments: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2235,7 +2235,7 @@ export def "api get-events" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Events: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "RequestId" $request_id "scalar") (serialize-qp "Severity" $severity "scalar") (serialize-qp "StartTime" $start_time "scalar") (serialize-qp "EndTime" $end_time "scalar") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2273,7 +2273,7 @@ export def "api create-get-events" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Events: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2315,7 +2315,7 @@ export def "api get-instances-health" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<InstanceHealthList: record, RefreshedAt: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "AttributeNames" $attribute_names "multi") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2351,7 +2351,7 @@ export def "api create-get-instances-health" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<InstanceHealthList: record, RefreshedAt: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2390,7 +2390,7 @@ export def "api get-platform-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PlatformDescription: record<PlatformArn: record, PlatformOwner: record, PlatformName: record, PlatformVersion: record, SolutionStackName: record, PlatformStatus: record, DateCreated: record, DateUpdated: record, PlatformCategory: record, Description: record, Maintainer: record, OperatingSystemName: record, OperatingSystemVersion: record, ProgrammingLanguages: record, Frameworks: record, CustomAmiList: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2426,7 +2426,7 @@ export def "api create-get-platform-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PlatformDescription: record<PlatformArn: record, PlatformOwner: record, PlatformName: record, PlatformVersion: record, SolutionStackName: record, PlatformStatus: record, DateCreated: record, DateUpdated: record, PlatformCategory: record, Description: record, Maintainer: record, OperatingSystemName: record, OperatingSystemVersion: record, ProgrammingLanguages: record, Frameworks: record, CustomAmiList: record, SupportedTierList: record, SupportedAddonList: record, PlatformLifecycleState: record, PlatformBranchName: record, PlatformBranchLifecycleState: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2539,7 +2539,7 @@ export def "api get-list-available-solution-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SolutionStacks: record, SolutionStackDetails: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2574,7 +2574,7 @@ export def "api create-list-available-solution-stacks" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SolutionStacks: record, SolutionStackDetails: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2612,7 +2612,7 @@ export def "api get-list-platform-branches" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PlatformBranchSummaryList: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2650,7 +2650,7 @@ export def "api create-list-platform-branches" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PlatformBranchSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2691,7 +2691,7 @@ export def "api get-list-platform-versions" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<PlatformSummaryList: record, NextToken: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "Filters" $filters "multi") (serialize-qp "MaxRecords" $max_records "scalar") (serialize-qp "NextToken" $next_token "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2729,7 +2729,7 @@ export def "api create-list-platform-versions" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<PlatformSummaryList: record, NextToken: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -2768,7 +2768,7 @@ export def "api get-list-tags-for-resource" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ResourceArn: record, ResourceTags: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ResourceArn" $resource_arn "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -2804,7 +2804,7 @@ export def "api create-list-tags-for-resource" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ResourceArn: record, ResourceTags: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3074,7 +3074,7 @@ export def "api get-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EnvironmentInfo: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "InfoType" $info_type "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3110,7 +3110,7 @@ export def "api create-get-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EnvironmentInfo: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3230,7 +3230,7 @@ export def "api get-terminate-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "TerminateResources" $terminate_resources "scalar") (serialize-qp "ForceTerminate" $force_terminate "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3266,7 +3266,7 @@ export def "api create-terminate-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3306,7 +3306,7 @@ export def "api get-update-application" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3342,7 +3342,7 @@ export def "api create-update-application" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Application: record<ApplicationArn: record, ApplicationName: record, Description: record, DateCreated: record, DateUpdated: record, Versions: record, ConfigurationTemplates: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3382,7 +3382,7 @@ export def "api get-update-application-resource-lifecycle" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ApplicationName: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "ResourceLifecycleConfig" $resource_lifecycle_config "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3418,7 +3418,7 @@ export def "api create-update-application-resource-lifecycle" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ApplicationName: record, ResourceLifecycleConfig: record<ServiceRole: record, VersionLifecycleConfig: record<MaxCountRule: record, MaxAgeRule: record>>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3459,7 +3459,7 @@ export def "api get-update-application-version" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3495,7 +3495,7 @@ export def "api create-update-application-version" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<ApplicationVersion: record<ApplicationVersionArn: record, ApplicationName: record, Description: record, VersionLabel: record, SourceBuildInformation: record<SourceType: record, SourceRepository: record, SourceLocation: record>, BuildArn: record, SourceBundle: record<S3Bucket: record, S3Key: record>, DateCreated: record, DateUpdated: record, Status: record>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3538,7 +3538,7 @@ export def "api get-update-configuration-template" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3574,7 +3574,7 @@ export def "api create-update-configuration-template" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<SolutionStackName: record, PlatformArn: record, ApplicationName: record, TemplateName: record, Description: record, EnvironmentName: record, DeploymentStatus: record, DateCreated: record, DateUpdated: record, OptionSettings: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3624,7 +3624,7 @@ export def "api get-update-environment" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "EnvironmentId" $environment_id "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "GroupName" $group_name "scalar") (serialize-qp "Description" $description "scalar") (serialize-qp "Tier" $tier "multi") (serialize-qp "VersionLabel" $version_label "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "SolutionStackName" $solution_stack_name "scalar") (serialize-qp "PlatformArn" $platform_arn "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "OptionsToRemove" $options_to_remove "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3660,7 +3660,7 @@ export def "api create-update-environment" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<EnvironmentName: record, EnvironmentId: record, ApplicationName: record, VersionLabel: record, SolutionStackName: record, PlatformArn: record, TemplateName: record, Description: record, EndpointURL: record, CNAME: record, DateCreated: record, DateUpdated: record, Status: record, AbortableOperationInProgress: record, Health: record, HealthStatus: record, Resources: record<LoadBalancer: record<LoadBalancerName: record, Domain: record, Listeners: record>>, Tier: record<Name: record, Type: record, Version: record>, EnvironmentLinks: record, EnvironmentArn: record, OperationsRole: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -3779,7 +3779,7 @@ export def "api get-validate-configuration-settings" [
   --x-amz-security-token: string
   --x-amz-signature: string
   --x-amz-signed-headers: string
-]: nothing -> any {
+]: nothing -> record<Messages: record> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "ApplicationName" $application_name "scalar") (serialize-qp "TemplateName" $template_name "scalar") (serialize-qp "EnvironmentName" $environment_name "scalar") (serialize-qp "OptionSettings" $option_settings "multi") (serialize-qp "Action" $action "scalar") (serialize-qp "Version" $version "scalar")] | flatten | str join "&"
@@ -3815,7 +3815,7 @@ export def "api create-validate-configuration-settings" [
   --x-amz-signature: string
   --x-amz-signed-headers: string
   --body: any
-]: any -> any {
+]: any -> record<Messages: record> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

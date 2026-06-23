@@ -147,7 +147,7 @@ export def "travel-trip-parser create-request" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --body: any
-]: any -> any {
+]: any -> record<data: record<bookingDate: string, bookingNumber: string, creationDateTime: string, description: string, end: record<address: record, iataCode: string, localDateTime: string, name: string>, price: record<base: string, currency: string, total: string, totalTaxes: string>, products: list<any>, provider: string, reference: string, stakeholders: list<record>, start: record<address: record, iataCode: string, localDateTime: string, name: string>, title: string, travelAgency: record<address: record, email: record, officeName: string, phone: record>, type: string>, warnings: table<code: int, detail: string, source: record, title: string>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

@@ -1240,7 +1240,7 @@ export def "convert-image create" [
   --accept: string@accept-completer # Response content type
   file: string # Source image file (format: binary)
   format: string@format-completer # Output file format (default: PNG)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1445,7 +1445,7 @@ export def "crop-image create" [
   width: float # Width (X-axis right, negative to reverse)
   file: string # Source image file (format: binary)
   position: string@position-completer # Crop start position (use negative values to reverse crop area) (default: TopLeft)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1643,7 +1643,7 @@ export def "flip-image create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   file: string # Source image file (format: binary)
   orientation: string@orientation-completer # Horizontal or Vertical (default: Horizontal)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -1785,7 +1785,7 @@ export def "generate-qr-code generate" [
   --dry-run(-n) # Return the request that would be sent without executing it
   input: string # Text value(s) (vertical bar delimited by type)
   payload: string@payload-completer # Payload type (default: Plain Text (string))
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2168,7 +2168,7 @@ export def "resize-image resize" [
   --height: float # Image height (pixels or percent)
   units: string@units-completer # Image adjustment units (default: Pixels)
   --width: float # Image width (pixels or percent)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2198,7 +2198,7 @@ export def "rotate-image create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   degrees: string # Number of degrees
   file: string # Source image file (format: binary)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2457,7 +2457,7 @@ export def "string-to-file create" [
   extension: string@extension-completer # File extension (default: TXT)
   filename: string # Name of file (without extension)
   input: string # Text string (body of file)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2486,7 +2486,7 @@ export def "text-to-speech create" [
   text: string # Text to convert (10,000 characters max)
   type: string@type-completer-2 # Text or file type (default: PlainText)
   voice: string@voice-completer # Voice locale (must match language of input text) (default: en-US, Aria (Female))
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)
@@ -2685,7 +2685,7 @@ export def "watermark-image create" [
   size: float # Font size (points)
   text: string # Watermark text
   vertical: string@vertical-completer # Vertical alignment (default: Center)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "x-ibm-client-id"))
   let base = ($base_url | default $BASE_URL)

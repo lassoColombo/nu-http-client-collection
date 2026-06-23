@@ -226,7 +226,7 @@ export def "operations-policy-current reset" [
   --api-version: string@api-version-completer # Client API version.
   --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -287,7 +287,7 @@ export def "operations-policy-update-policy update-prepare-to" [
   --api-version: string@api-version-completer # Client API version.
   --tee: string@tee-completer # Specifies the trusted execution environment to be used to validate the evidence
   --body: string
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)

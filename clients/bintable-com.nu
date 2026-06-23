@@ -147,7 +147,7 @@ export def "balance get-lookup" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-key: string # The API key, which you can get from bintable.com website.
-]: nothing -> any {
+]: nothing -> table<data: record, message: string, result: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api_key" $api_key "scalar")] | flatten | str join "&"

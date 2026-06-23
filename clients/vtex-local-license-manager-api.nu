@@ -19,6 +19,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -140,8 +150,8 @@ export def commands []: nothing -> table {
 # operationId: GetListUsers
 export def "license-manager-site-pvt-logins-list-paged get-users" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -154,7 +164,7 @@ export def "license-manager-site-pvt-logins-list-paged get-users" [
   --sort-type: string # Defines the sorting order. `ASC` is used for ascendant order. `DSC` is used for descendant order (default: ASC)
   --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json
 ]: nothing -> record<items: table<accountNames: list, email: string, id: string, isAdmin: bool, isBlocked: bool, isReliable: bool, name: string, roles: list>, paging: record<page: int, pages: int, perPage: int, total: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/logins/list/paged" $qp)
@@ -171,8 +181,8 @@ export def "license-manager-site-pvt-logins-list-paged get-users" [
 # operationId: GetListRoles
 export def "license-manager-site-pvt-roles-list-paged get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -185,7 +195,7 @@ export def "license-manager-site-pvt-roles-list-paged get" [
   --sort-type: string # Defines the sorting order. ASC is used for ascendant order. DSC is used for descendant order (default: ASC)
   --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json
 ]: nothing -> record<items: table<id: int, isAdmin: bool, logins: string, name: string, products: list, resources: string, roleType: int>, paging: record<page: int, pages: int, perPage: int, total: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "numItems" $num_items "scalar") (serialize-qp "pageNumber" $page_number "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "sortType" $sort_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/api/license-manager/site/pvt/roles/list/paged" $qp)
@@ -202,8 +212,8 @@ export def "license-manager-site-pvt-roles-list-paged get" [
 # operationId: CreateUser
 export def "license-manager-users create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -214,7 +224,7 @@ export def "license-manager-users create" [
   name: string # Name of the user
 ]: any -> record<email: string, id: string, name: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/license-manager/users")
   let req_body = {"email": $email, "name": $name} | compact
@@ -231,8 +241,8 @@ export def "license-manager-users create" [
 export def "license-manager-users get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -241,7 +251,7 @@ export def "license-manager-users get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> record<email: string, id: string, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/license-manager/users/{user_id}"))
@@ -259,8 +269,8 @@ export def "license-manager-users get" [
 export def "license-manager-users-roles get-rolesby" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -269,7 +279,7 @@ export def "license-manager-users-roles get-rolesby" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> table<id: int, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/license-manager/users/{user_id}/roles"))
@@ -287,8 +297,8 @@ export def "license-manager-users-roles get-rolesby" [
 export def "license-manager-users-roles update-rolesin" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -298,7 +308,7 @@ export def "license-manager-users-roles update-rolesin" [
   --body: list
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   let full_url = (build-url $base ({user_id: (encode-path-segment $user_id)} | format pattern "/api/license-manager/users/{user_id}/roles"))
@@ -317,8 +327,8 @@ export def "license-manager-users-roles delete-rolefrom" [
   user_id: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -327,7 +337,7 @@ export def "license-manager-users-roles delete-rolefrom" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
   if ($role_id | is-empty) { error make --unspanned { msg: "path parameter 'roleId' must be non-empty" } }
@@ -345,8 +355,8 @@ export def "license-manager-users-roles delete-rolefrom" [
 # operationId: GetAccount
 export def "vlm-account get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -354,7 +364,7 @@ export def "vlm-account get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<accountName: string, address: string, appKey: record<name: string, token: string>, appKeys: table<appKey: string, appToken: string, createdIn: string, id: string, isActive: bool, isBlocked: bool, label: string>, city: string, cnpj: string, companyName: string, complement: string, contact: record<email: string, name: string, phone: string>, country: string, creationDate: string, defaultUrl: string, district: string, hasLogo: bool, haveParentAccount: bool, hosts: list<string>, id: string, inactivationDate: string, isActive: bool, isOperating: bool, licenses: table<expiration: string, id: float, isPurchased: bool, name: string, products: list>, logo: string, lv: string, name: string, number: string, operationDate: string, parentAccountId: string, parentAccountName: string, postalCode: string, sites: table<LV: string, aliases: list, domains: list, hosts: list, id: float, logo: string, monetaryUnitId: float, name: string, tradingName: string>, sponsor: record<email: string, name: string, phone: string>, state: string, telephone: string, tradingName: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/account")
   let accept_val = "application/json"
@@ -368,8 +378,8 @@ export def "vlm-account get" [
 # operationId: GetByAccount
 export def "vlm-account-stores get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -377,7 +387,7 @@ export def "vlm-account-stores get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> table<hosts: list<string>, id: float, name: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/account/stores")
   let accept_val = "application/json"
@@ -391,8 +401,8 @@ export def "vlm-account-stores get" [
 # operationId: Getappkeysfromaccount
 export def "vlm-appkeys get-appkeysfromaccount" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -401,7 +411,7 @@ export def "vlm-appkeys get-appkeysfromaccount" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --content-type: string # The media type of the body of the request. Default value for license manager protocol is application/json (e.g. application/json)
 ]: nothing -> table<appKey: string, createdIn: string, id: string, isActive: bool, label: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/appkeys")
   let accept_val = "application/json"
@@ -417,8 +427,8 @@ export def "vlm-appkeys get-appkeysfromaccount" [
 # operationId: Createnewappkey
 export def "vlm-appkeys create-newappkey" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -428,7 +438,7 @@ export def "vlm-appkeys create-newappkey" [
   label: string # Label for application key
 ]: any -> record<appKey: string, appToken: string, createdIn: string, id: string, isActive: bool, label: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/api/vlm/appkeys")
   let req_body = {"label": $label} | compact
@@ -445,8 +455,8 @@ export def "vlm-appkeys create-newappkey" [
 export def "vlm-appkeys update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
+  --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -456,7 +466,7 @@ export def "vlm-appkeys update" [
   --is-active: oneof<nothing, bool> # If the application key should be active or inactive
 ]: any -> any {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-vtex-api-appkey"))
+  let auth = (merge-auth [(build-auth ($token_appkey | default ($env | get -o LICENSE_MANAGER_API_APPKEY_TOKEN | default "")) "x-vtex-api-appkey") (build-auth ($token_apptoken | default ($env | get -o LICENSE_MANAGER_API_APPTOKEN_TOKEN | default "")) "x-vtex-api-apptoken")])
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/api/vlm/appkeys/{id}"))

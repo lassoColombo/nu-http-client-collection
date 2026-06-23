@@ -151,7 +151,7 @@ export def "verification-result get" [
   --key: string # FraudLabs Pro API key.
   --format: string@format-completer # Returns the API response in json (default) or xml format.
   --otp: string # The OTP that was sent to the recipient’s phone.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "tran_id" $tran_id "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "otp" $otp "scalar")] | flatten | str join "&"
@@ -179,7 +179,7 @@ export def "verification-send create" [
   --tel: string # The recipient mobile phone number in E164 format which is a plus followed by just numbers with no spaces or parentheses.
   --key: string # FraudLabs Pro API key.
   --mesg: string # The message template for the SMS. Add as placeholder for the actual OTP to be generated. Max length is 140 characters. (allows empty value)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "country_code" $country_code "scalar") (serialize-qp "format" $format "scalar") (serialize-qp "tel" $tel "scalar") (serialize-qp "key" $key "scalar") (serialize-qp "mesg" $mesg "scalar")] | flatten | str join "&"

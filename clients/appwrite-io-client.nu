@@ -20,6 +20,16 @@ def build-auth [token?: string, auth_scheme?: string]: nothing -> record {
   }
 }
 
+# Merge multiple auth records (AND-form security: every scheme must be sent).
+def merge-auth [parts: list]: nothing -> record {
+  let active = ($parts | where {|p| $p.location != "none" })
+  let headers = ($parts | reduce --fold {} {|p, acc| $acc | merge $p.headers })
+  let query = ($parts | each {|p| $p.query } | where {|q| $q | is-not-empty } | str join "&")
+  let locs = ($active | each {|p| $p.location } | uniq)
+  let location = if ($locs | is-empty) { "none" } else { $locs | str join "+" }
+  {scheme: ($parts | each {|p| $p.scheme } | str join "+"), headers: $headers, query: $query, location: $location}
+}
+
 # Serialize a single query parameter based on collection style
 # Uses encode-path-segment for keys and values: RFC 3986 unreserved chars
 # ([A-Za-z0-9-._~]) stay literal; everything else gets %XX.
@@ -169,8 +179,8 @@ export def commands []: nothing -> table {
 # operationId: accountDelete
 export def "account delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -178,7 +188,7 @@ export def "account delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
   let accept_val = "application/json"
@@ -192,8 +202,8 @@ export def "account delete" [
 # operationId: accountGet
 export def "account get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -201,7 +211,7 @@ export def "account get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account")
   let accept_val = "application/json"
@@ -244,8 +254,8 @@ export def "account create" [
 # operationId: accountUpdateEmail
 export def "account-email update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -256,7 +266,7 @@ export def "account-email update" [
   password: string # User password. Must be between 6 to 32 chars.
 ]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/email")
   let req_body = {"email": $email, "password": $password} | compact
@@ -295,8 +305,8 @@ export def "account-jwt create" [
 # operationId: accountGetLogs
 export def "account-logs get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -304,7 +314,7 @@ export def "account-logs get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<logs: table<clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, deviceBrand: string, deviceModel: string, deviceName: string, event: string, ip: string, osCode: string, osName: string, osVersion: string, time: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/logs")
   let accept_val = "application/json"
@@ -318,8 +328,8 @@ export def "account-logs get" [
 # operationId: accountUpdateName
 export def "account-name update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -329,7 +339,7 @@ export def "account-name update" [
   name: string # User name. Max length: 128 chars.
 ]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/name")
   let req_body = {"name": $name} | compact
@@ -345,8 +355,8 @@ export def "account-name update" [
 # operationId: accountUpdatePassword
 export def "account-password update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -357,7 +367,7 @@ export def "account-password update" [
   password: string # New user password. Must be between 6 to 32 chars.
 ]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/password")
   let req_body = {"oldPassword": $old_password, "password": $password} | compact
@@ -373,8 +383,8 @@ export def "account-password update" [
 # operationId: accountGetPrefs
 export def "account-prefs get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -382,7 +392,7 @@ export def "account-prefs get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/prefs")
   let accept_val = "application/json"
@@ -396,8 +406,8 @@ export def "account-prefs get" [
 # operationId: accountUpdatePrefs
 export def "account-prefs update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -407,7 +417,7 @@ export def "account-prefs update" [
   prefs: record # Prefs key-value JSON object.
 ]: any -> record<_id: string, email: string, emailVerification: bool, name: string, passwordUpdate: int, prefs: record, registration: int, status: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/prefs")
   let req_body = {"prefs": $prefs} | compact
@@ -423,8 +433,8 @@ export def "account-prefs update" [
 # operationId: accountCreateRecovery
 export def "account-recovery create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -435,7 +445,7 @@ export def "account-recovery create" [
   url: string # URL to redirect the user back to your app from the recovery email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
 ]: any -> record<_id: string, expire: int, secret: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/recovery")
   let req_body = {"email": $email, "url": $url} | compact
@@ -451,8 +461,8 @@ export def "account-recovery create" [
 # operationId: accountUpdateRecovery
 export def "account-recovery update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -465,7 +475,7 @@ export def "account-recovery update" [
   user_id: string # User account UID address.
 ]: any -> record<_id: string, expire: int, secret: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/recovery")
   let req_body = {"password": $password, "passwordAgain": $password_again, "secret": $secret, "userId": $user_id} | compact
@@ -481,8 +491,8 @@ export def "account-recovery update" [
 # operationId: accountDeleteSessions
 export def "account-sessions delete" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -490,7 +500,7 @@ export def "account-sessions delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/sessions")
   let accept_val = "application/json"
@@ -504,8 +514,8 @@ export def "account-sessions delete" [
 # operationId: accountGetSessions
 export def "account-sessions list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -513,7 +523,7 @@ export def "account-sessions list" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<sessions: table<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/sessions")
   let accept_val = "application/json"
@@ -608,8 +618,8 @@ export def "account-sessions-oauth2 create-o-auth2" [
 export def "account-sessions delete-by-session-id" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -617,7 +627,7 @@ export def "account-sessions delete-by-session-id" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/account/sessions/{session_id}"))
@@ -633,8 +643,8 @@ export def "account-sessions delete-by-session-id" [
 export def "account-sessions get" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -642,7 +652,7 @@ export def "account-sessions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_id: string, clientCode: string, clientEngine: string, clientEngineVersion: string, clientName: string, clientType: string, clientVersion: string, countryCode: string, countryName: string, current: bool, deviceBrand: string, deviceModel: string, deviceName: string, expire: int, ip: string, osCode: string, osName: string, osVersion: string, provider: string, providerToken: string, providerUid: string, userId: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($session_id | is-empty) { error make --unspanned { msg: "path parameter 'sessionId' must be non-empty" } }
   let full_url = (build-url $base ({session_id: (encode-path-segment $session_id)} | format pattern "/account/sessions/{session_id}"))
@@ -657,8 +667,8 @@ export def "account-sessions get" [
 # operationId: accountCreateVerification
 export def "account-verification create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -668,7 +678,7 @@ export def "account-verification create" [
   url: string # URL to redirect the user back to your app from the verification email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
 ]: any -> record<_id: string, expire: int, secret: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/verification")
   let req_body = {"url": $url} | compact
@@ -684,8 +694,8 @@ export def "account-verification create" [
 # operationId: accountUpdateVerification
 export def "account-verification update" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -696,7 +706,7 @@ export def "account-verification update" [
   user_id: string # User unique ID.
 ]: any -> record<_id: string, expire: int, secret: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/account/verification")
   let req_body = {"secret": $secret, "userId": $user_id} | compact
@@ -713,8 +723,8 @@ export def "account-verification update" [
 export def "avatars-browsers get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -725,7 +735,7 @@ export def "avatars-browsers get" [
   --height: int # Image height. Pass an integer between 0 to 2000. Defaults to 100. (format: int32, default: 100)
   --quality: int # Image quality. Pass an integer between 0 to 100. Defaults to 100. (format: int32, default: 100)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
@@ -742,8 +752,8 @@ export def "avatars-browsers get" [
 export def "avatars-credit-cards get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -754,7 +764,7 @@ export def "avatars-credit-cards get" [
   --height: int # Image height. Pass an integer between 0 to 2000. Defaults to 100. (format: int32, default: 100)
   --quality: int # Image quality. Pass an integer between 0 to 100. Defaults to 100. (format: int32, default: 100)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
@@ -770,8 +780,8 @@ export def "avatars-credit-cards get" [
 # operationId: avatarsGetFavicon
 export def "avatars-favicon get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -780,7 +790,7 @@ export def "avatars-favicon get" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --url: string # Website URL which you want to fetch the favicon from. (format: url)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/favicon" $qp)
@@ -796,8 +806,8 @@ export def "avatars-favicon get" [
 export def "avatars-flags get" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -808,7 +818,7 @@ export def "avatars-flags get" [
   --height: int # Image height. Pass an integer between 0 to 2000. Defaults to 100. (format: int32, default: 100)
   --quality: int # Image quality. Pass an integer between 0 to 100. Defaults to 100. (format: int32, default: 100)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "quality" $quality "scalar")] | flatten | str join "&"
@@ -824,8 +834,8 @@ export def "avatars-flags get" [
 # operationId: avatarsGetImage
 export def "avatars-image get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -836,7 +846,7 @@ export def "avatars-image get" [
   --width: int # Resize preview image width, Pass an integer between 0 to 2000. (format: int32, default: 400)
   --height: int # Resize preview image height, Pass an integer between 0 to 2000. (format: int32, default: 400)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "url" $url "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/image" $qp)
@@ -851,8 +861,8 @@ export def "avatars-image get" [
 # operationId: avatarsGetInitials
 export def "avatars-initials get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -865,7 +875,7 @@ export def "avatars-initials get" [
   --color: string # Changes text color. By default a random color will be picked and stay will persistent to the given name. (default: )
   --background: string # Changes background color. By default a random color will be picked and stay will persistent to the given name. (default: )
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "color" $color "scalar") (serialize-qp "background" $background "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/initials" $qp)
@@ -880,8 +890,8 @@ export def "avatars-initials get" [
 # operationId: avatarsGetQR
 export def "avatars-qr get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -893,7 +903,7 @@ export def "avatars-qr get" [
   --margin: int # Margin from edge. Pass an integer between 0 to 10. Defaults to 1. (format: int32, default: 1)
   --download: oneof<nothing, bool> # Return resulting image with 'Content-Disposition: attachment ' headers for the browser to start downloading it. Pass 0 for no header, or 1 for otherwise. Default value is set to 0. (default: false)
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "text" $text "scalar") (serialize-qp "size" $size "scalar") (serialize-qp "margin" $margin "scalar") (serialize-qp "download" $download "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/avatars/qr" $qp)
@@ -909,8 +919,8 @@ export def "avatars-qr get" [
 export def "database-collections-documents list" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -925,7 +935,7 @@ export def "database-collections-documents list" [
   --order-cast: string # Order field type casting. Possible values are int, string, date, time or datetime. The database will attempt to cast the order field to the value you pass here. The default value is a string. (default: string)
   --search: string # Search query. Enter any free text search. The database will try to find a match against all document attributes and children. Max length: 256 chars. (default: )
 ]: nothing -> record<documents: table<_collection: string, _id: string, _permissions: record>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   let qp = [(serialize-qp "filters" $filters "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderField" $order_field "scalar") (serialize-qp "orderType" $order_type "scalar") (serialize-qp "orderCast" $order_cast "scalar") (serialize-qp "search" $search "scalar")] | flatten | str join "&"
@@ -942,8 +952,8 @@ export def "database-collections-documents list" [
 export def "database-collections-documents create" [
   collection_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -958,7 +968,7 @@ export def "database-collections-documents create" [
   --write: list<string> # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_collection: string, _id: string, _permissions: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   let full_url = (build-url $base ({collection_id: (encode-path-segment $collection_id)} | format pattern "/database/collections/{collection_id}/documents"))
@@ -977,8 +987,8 @@ export def "database-collections-documents delete" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -986,7 +996,7 @@ export def "database-collections-documents delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1004,8 +1014,8 @@ export def "database-collections-documents get" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1013,7 +1023,7 @@ export def "database-collections-documents get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_collection: string, _id: string, _permissions: record> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1031,8 +1041,8 @@ export def "database-collections-documents update" [
   collection_id: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1044,7 +1054,7 @@ export def "database-collections-documents update" [
   --write: list<string> # An array of strings with write permissions. By default inherits the existing write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_collection: string, _id: string, _permissions: record> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($collection_id | is-empty) { error make --unspanned { msg: "path parameter 'collectionId' must be non-empty" } }
   if ($document_id | is-empty) { error make --unspanned { msg: "path parameter 'documentId' must be non-empty" } }
@@ -1063,8 +1073,8 @@ export def "database-collections-documents update" [
 export def "functions-executions list" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1076,7 +1086,7 @@ export def "functions-executions list" [
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
 ]: nothing -> record<executions: table<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -1093,8 +1103,8 @@ export def "functions-executions list" [
 export def "functions-executions create" [
   function_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1104,7 +1114,7 @@ export def "functions-executions create" [
   --data: string # String of custom data to send to function.
 ]: any -> record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   let full_url = (build-url $base ({function_id: (encode-path-segment $function_id)} | format pattern "/functions/{function_id}/executions"))
@@ -1123,8 +1133,8 @@ export def "functions-executions get" [
   function_id: string
   execution_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1132,7 +1142,7 @@ export def "functions-executions get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_id: string, dateCreated: int, exitCode: int, functionId: string, status: string, stderr: string, stdout: string, time: float, trigger: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($function_id | is-empty) { error make --unspanned { msg: "path parameter 'functionId' must be non-empty" } }
   if ($execution_id | is-empty) { error make --unspanned { msg: "path parameter 'executionId' must be non-empty" } }
@@ -1148,8 +1158,8 @@ export def "functions-executions get" [
 # operationId: localeGet
 export def "locale get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1157,7 +1167,7 @@ export def "locale get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<continent: string, continentCode: string, country: string, countryCode: string, currency: string, eu: bool, ip: string> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale")
   let accept_val = "application/json"
@@ -1171,8 +1181,8 @@ export def "locale get" [
 # operationId: localeGetContinents
 export def "locale-continents get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1180,7 +1190,7 @@ export def "locale-continents get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<continents: table<code: string, name: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/continents")
   let accept_val = "application/json"
@@ -1194,8 +1204,8 @@ export def "locale-continents get" [
 # operationId: localeGetCountries
 export def "locale-countries get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1203,7 +1213,7 @@ export def "locale-countries get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<countries: table<code: string, name: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/countries")
   let accept_val = "application/json"
@@ -1217,8 +1227,8 @@ export def "locale-countries get" [
 # operationId: localeGetCountriesEU
 export def "locale-countries-eu get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1226,7 +1236,7 @@ export def "locale-countries-eu get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<countries: table<code: string, name: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/countries/eu")
   let accept_val = "application/json"
@@ -1240,8 +1250,8 @@ export def "locale-countries-eu get" [
 # operationId: localeGetCountriesPhones
 export def "locale-countries-phones get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1249,7 +1259,7 @@ export def "locale-countries-phones get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<phones: table<code: string, countryCode: string, countryName: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/countries/phones")
   let accept_val = "application/json"
@@ -1263,8 +1273,8 @@ export def "locale-countries-phones get" [
 # operationId: localeGetCurrencies
 export def "locale-currencies get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1272,7 +1282,7 @@ export def "locale-currencies get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<currencies: table<code: string, decimalDigits: int, name: string, namePlural: string, rounding: float, symbol: string, symbolNative: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/currencies")
   let accept_val = "application/json"
@@ -1286,8 +1296,8 @@ export def "locale-currencies get" [
 # operationId: localeGetLanguages
 export def "locale-languages get" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1295,7 +1305,7 @@ export def "locale-languages get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<languages: table<code: string, name: string, nativeName: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/locale/languages")
   let accept_val = "application/json"
@@ -1309,8 +1319,8 @@ export def "locale-languages get" [
 # operationId: storageListFiles
 export def "storage-files list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1322,7 +1332,7 @@ export def "storage-files list" [
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
 ]: nothing -> record<files: table<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/storage/files" $qp)
@@ -1337,8 +1347,8 @@ export def "storage-files list" [
 # operationId: storageCreateFile
 export def "storage-files create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1350,7 +1360,7 @@ export def "storage-files create" [
   --write: list<string> # An array of strings with write permissions. By default only the current user is granted with write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/storage/files")
   let req_body = {"file": $file, "read": $read, "write": $write} | compact
@@ -1369,8 +1379,8 @@ export def "storage-files create" [
 export def "storage-files delete" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1378,7 +1388,7 @@ export def "storage-files delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}"))
@@ -1394,8 +1404,8 @@ export def "storage-files delete" [
 export def "storage-files get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1403,7 +1413,7 @@ export def "storage-files get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}"))
@@ -1419,8 +1429,8 @@ export def "storage-files get" [
 export def "storage-files update" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1431,7 +1441,7 @@ export def "storage-files update" [
   write: list<string> # An array of strings with write permissions. By default no user is granted with any write permissions. [learn more about permissions](/docs/permissions) and get a full list of available permissions.
 ]: any -> record<_id: string, _permissions: record, dateCreated: int, mimeType: string, name: string, signature: string, sizeOriginal: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}"))
@@ -1449,8 +1459,8 @@ export def "storage-files update" [
 export def "storage-files-download get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1458,7 +1468,7 @@ export def "storage-files-download get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}/download"))
@@ -1474,8 +1484,8 @@ export def "storage-files-download get" [
 export def "storage-files-preview get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1494,7 +1504,7 @@ export def "storage-files-preview get" [
   --background: string # Preview image background color. Only works with transparent images (png). Use a valid HEX color, no # is needed for prefix. (default: )
   --output: string # Output format type (jpeg, jpg, png, gif and webp). (default: )
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let qp = [(serialize-qp "width" $width "scalar") (serialize-qp "height" $height "scalar") (serialize-qp "gravity" $gravity "scalar") (serialize-qp "quality" $quality "scalar") (serialize-qp "borderWidth" $border_width "scalar") (serialize-qp "borderColor" $border_color "scalar") (serialize-qp "borderRadius" $border_radius "scalar") (serialize-qp "opacity" $opacity "scalar") (serialize-qp "rotation" $rotation "scalar") (serialize-qp "background" $background "scalar") (serialize-qp "output" $output "scalar")] | flatten | str join "&"
@@ -1511,8 +1521,8 @@ export def "storage-files-preview get" [
 export def "storage-files-view get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1520,7 +1530,7 @@ export def "storage-files-view get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($file_id | is-empty) { error make --unspanned { msg: "path parameter 'fileId' must be non-empty" } }
   let full_url = (build-url $base ({file_id: (encode-path-segment $file_id)} | format pattern "/storage/files/{file_id}/view"))
@@ -1535,8 +1545,8 @@ export def "storage-files-view get" [
 # operationId: teamsList
 export def "teams list" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1548,7 +1558,7 @@ export def "teams list" [
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
 ]: nothing -> record<sum: int, teams: table<_id: string, dateCreated: int, name: string, sum: int>> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
   let full_url = (build-url $base "/teams" $qp)
@@ -1563,8 +1573,8 @@ export def "teams list" [
 # operationId: teamsCreate
 export def "teams create" [
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1575,7 +1585,7 @@ export def "teams create" [
   --roles: list<string> # Array of strings. Use this param to set the roles in the team for the user who created it. The default role is **owner**. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
 ]: any -> record<_id: string, dateCreated: int, name: string, sum: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/teams")
   let req_body = {"name": $name, "roles": $roles} | compact
@@ -1592,8 +1602,8 @@ export def "teams create" [
 export def "teams delete" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1601,7 +1611,7 @@ export def "teams delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
@@ -1617,8 +1627,8 @@ export def "teams delete" [
 export def "teams get" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1626,7 +1636,7 @@ export def "teams get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> record<_id: string, dateCreated: int, name: string, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
@@ -1642,8 +1652,8 @@ export def "teams get" [
 export def "teams update" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1653,7 +1663,7 @@ export def "teams update" [
   name: string # Team name. Max length: 128 chars.
 ]: any -> record<_id: string, dateCreated: int, name: string, sum: int> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}"))
@@ -1671,8 +1681,8 @@ export def "teams update" [
 export def "teams-memberships get" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1684,7 +1694,7 @@ export def "teams-memberships get" [
   --offset: int # Results offset. The default value is 0. Use this param to manage pagination. (format: int32, default: 0)
   --order-type: string # Order result by ASC or DESC order. (default: ASC)
 ]: nothing -> record<memberships: table<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list, teamId: string, userId: string>, sum: int> {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let qp = [(serialize-qp "search" $search "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "orderType" $order_type "scalar")] | flatten | str join "&"
@@ -1701,8 +1711,8 @@ export def "teams-memberships get" [
 export def "teams-memberships create" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1715,7 +1725,7 @@ export def "teams-memberships create" [
   url: string # URL to redirect the user back to your app from the invitation email. Only URLs from hostnames in your project platform list are allowed. This requirement helps to prevent an [open redirect](https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html) attack against your project API.
 ]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   let full_url = (build-url $base ({team_id: (encode-path-segment $team_id)} | format pattern "/teams/{team_id}/memberships"))
@@ -1734,8 +1744,8 @@ export def "teams-memberships delete" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1743,7 +1753,7 @@ export def "teams-memberships delete" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
 ]: nothing -> any {
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -1761,8 +1771,8 @@ export def "teams-memberships update-roles" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1772,7 +1782,7 @@ export def "teams-memberships update-roles" [
   roles: list<string> # Array of strings. Use this param to set the user roles in the team. A role can be any string. Learn more about [roles and permissions](/docs/permissions). Max length for each role is 32 chars.
 ]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }
@@ -1792,8 +1802,8 @@ export def "teams-memberships-status update" [
   team_id: string
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
-  --token(-t): string # Auth token
-  --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
+  --token-jwt: string # Auth token for JWT (X-Appwrite-JWT)
+  --token-project: string # Auth token for Project (X-Appwrite-Project)
   --insecure(-k) # Skip TLS verification
   --max-time(-m): duration # Timeout
   --raw(-r) # Fetch as text
@@ -1804,7 +1814,7 @@ export def "teams-memberships-status update" [
   user_id: string # User unique ID.
 ]: any -> record<_id: string, confirm: bool, email: string, invited: int, joined: int, name: string, roles: list<string>, teamId: string, userId: string> {
   let input = $in
-  let auth = (build-auth $token ($auth_scheme | default "x-appwrite-jwt"))
+  let auth = (merge-auth [(build-auth ($token_jwt | default ($env | get -o APPWRITE_JWT_TOKEN | default "")) "x-appwrite-jwt") (build-auth ($token_project | default ($env | get -o APPWRITE_PROJECT_TOKEN | default "")) "x-appwrite-project")])
   let base = ($base_url | default $BASE_URL)
   if ($team_id | is-empty) { error make --unspanned { msg: "path parameter 'teamId' must be non-empty" } }
   if ($membership_id | is-empty) { error make --unspanned { msg: "path parameter 'membershipId' must be non-empty" } }

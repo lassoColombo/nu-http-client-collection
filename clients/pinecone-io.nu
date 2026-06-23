@@ -175,7 +175,7 @@ export def "collections create" [
   --dry-run(-n) # Return the request that would be sent without executing it
   name: string # The unique name of a collection. (format: CollectionName, e.g. example)
   --body-source: string # The unique name of an index. (format: IndexName, e.g. example)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -202,7 +202,7 @@ export def "collections delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($collection_name | is-empty) { error make --unspanned { msg: "path parameter 'collectionName' must be non-empty" } }
@@ -310,7 +310,7 @@ export def "indexes create-index" [
   --pods: int # The number of pods for the index to use,including replicas. (format: int32, default: 1)
   --replicas: int # The number of replicas. Replicas duplicate your index. They provide higher availability and throughput. (format: int32, default: 1)
   --source-collection: string # The unique name of a collection. (format: CollectionName, e.g. example)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
@@ -337,7 +337,7 @@ export def "indexes delete-index" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)
   if ($index_name | is-empty) { error make --unspanned { msg: "path parameter 'indexName' must be non-empty" } }
@@ -389,7 +389,7 @@ export def "indexes update-configure-index" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --pod-type: string@pod-type-completer # The pod type
   --replicas: int # The desired number of replicas for the index. (format: int32, default: 1)
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "api-key"))
   let base = ($base_url | default $BASE_URL)

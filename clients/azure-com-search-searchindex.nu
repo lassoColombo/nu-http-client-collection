@@ -231,7 +231,7 @@ export def "docs-count get-documents-count" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --api-version: string # Client Api Version.
   --client-request-id: string # The tracking ID sent with the request to help with debugging.
-]: nothing -> any {
+]: nothing -> oneof<int, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"

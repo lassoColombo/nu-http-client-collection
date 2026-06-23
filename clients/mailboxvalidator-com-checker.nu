@@ -150,7 +150,7 @@ export def "email-free get" [
   --format: string@format-completer # Return the result in json (default) or xml format.
   --email: string # The email address to check if is from a free email provider.
   --key: string # API key.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "format" $format "scalar") (serialize-qp "email" $email "scalar") (serialize-qp "key" $key "scalar")] | flatten | str join "&"

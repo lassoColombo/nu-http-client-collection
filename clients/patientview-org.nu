@@ -149,7 +149,7 @@ export def "auth-login create-log" [
   --api-key: string
   --password: string
   --username: string
-]: any -> any {
+]: any -> record<auditActions: list<string>, checkSecretWord: bool, created: string, expiration: string, externalStandards: table<description: string, id: int, name: string>, groupFeatures: table<created: string, description: string, id: int, lastUpdate: string, name: string>, groupMessagingEnabled: bool, mustSetSecretWord: bool, patientFeatures: table<created: string, description: string, id: int, lastUpdate: string, name: string>, patientMessagingFeatureTypes: list<string>, patientRoles: table<description: string, id: int, name: string, visible: bool>, routes: table<controller: string, created: string, displayOrder: int, id: int, lookup: record, templateUrl: string, title: string, url: string>, secretWord: string, secretWordChoices: record, secretWordIndexes: list<string>, secretWordSalt: string, secretWordToken: string, securityRoles: table<description: string, id: int, name: string, visible: bool>, shouldEnterCondition: bool, staffFeatures: table<created: string, description: string, id: int, lastUpdate: string, name: string>, staffRoles: table<description: string, id: int, name: string, visible: bool>, token: string, user: record<apiKey: record<expired: bool, expiryDate: string, key: string>, canSwitchUser: bool, changePassword: bool, contactNumber: string, created: string, currentLogin: string, currentLoginIpAddress: string, dateOfBirth: string, deleted: bool, dummy: bool, email: string, emailVerified: bool, forename: string, groupRoles: list<record>, hideSecretWordNotification: bool, id: int, identifiers: list<record>, lastLogin: string, lastLoginIpAddress: string, latestDataReceivedBy: record<code: string, groupType: record, id: int, lastImportDate: string, name: string, parentCodes: list, shortName: string, visible: bool, visibleToJoin: bool>, latestDataReceivedDate: string, locked: bool, picture: string, roleDescription: string, secretWordIsSet: bool, surname: string, userFeatures: list<record>, username: string>, userFeatures: table<created: string, description: string, id: int, lastUpdate: string, name: string>, userGroups: table<code: string, groupType: record, id: int, lastImportDate: string, name: string, parentCodes: list, shortName: string, visible: bool, visibleToJoin: bool>> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -201,7 +201,7 @@ export def "auth-basicuserinformation get-basic-user-information" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> record<apiKey: record<expired: bool, expiryDate: string, key: string>, canSwitchUser: bool, changePassword: bool, contactNumber: string, created: string, currentLogin: string, currentLoginIpAddress: string, dateOfBirth: string, deleted: bool, dummy: bool, email: string, emailVerified: bool, forename: string, groupRoles: table<group: record, id: int, role: record>, hideSecretWordNotification: bool, id: int, identifiers: list<record>, lastLogin: string, lastLoginIpAddress: string, latestDataReceivedBy: record<code: string, groupType: record<created: string, description: string, descriptionFriendly: string, displayOrder: int, id: int, lastUpdate: string, lookupType: record, value: string>, id: int, lastImportDate: string, name: string, parentCodes: list<string>, shortName: string, visible: bool, visibleToJoin: bool>, latestDataReceivedDate: string, locked: bool, picture: string, roleDescription: string, secretWordIsSet: bool, surname: string, userFeatures: table<created: string, feature: record, id: int, lastUpdate: string, optInDate: string, optInHidden: bool, optInStatus: bool, optOutHidden: bool>, username: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($token_arg | is-empty) { error make --unspanned { msg: "path parameter 'token' must be non-empty" } }
@@ -226,7 +226,7 @@ export def "patient-basic get-details" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<diagnosisCodes: list<record>, fhirAllergies: list<record>, fhirConditions: list<record>, fhirEncounters: list<record>, fhirObservations: list<record>, fhirPatient: record<address1: string, address2: string, address3: string, address4: string, contacts: list, dateOfBirth: string, dateOfBirthNoTime: string, forename: string, gender: string, group: record, groupCode: string, identifier: string, identifiers: list, postcode: string, practitioners: list, surname: string>, fhirPractitioners: list<record>, group: record<address1: string, address2: string, address3: string, childGroups: list, code: string, contactPoints: list, created: string, fhirResourceId: string, groupFeatures: list, groupType: record, id: int, lastImportDate: string, lastUpdate: string, links: list, locations: list, name: string, parentGroups: list, postcode: string, sftpUser: string, shortName: string, visible: bool, visibleToJoin: bool>, id: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -481,7 +481,7 @@ export def "user-observations get-by-codes" [
   --limit: int # limit (format: int64)
   --offset: int # offset (format: int64)
   --order-direction: string # orderDirection
-]: nothing -> any {
+]: nothing -> record<data: table<key: list>, totalElements: int, totalPages: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -508,7 +508,7 @@ export def "user-observations get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<applies: string, bodySite: string, comments: string, comparator: string, diagram: string, group: record<address1: string, address2: string, address3: string, childGroups: list, code: string, contactPoints: list, created: string, fhirResourceId: string, groupFeatures: list, groupType: record, id: int, lastImportDate: string, lastUpdate: string, links: list, locations: list, name: string, parentGroups: list, postcode: string, sftpUser: string, shortName: string, visible: bool, visibleToJoin: bool>, id: int, identifier: string, location: string, name: string, temporaryUuid: string, units: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }
@@ -535,7 +535,7 @@ export def "user-observations-patiententered get-patient-entered" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> table<applies: string, bodySite: string, comments: string, comparator: string, diagram: string, group: record<address1: string, address2: string, address3: string, childGroups: list, code: string, contactPoints: list, created: string, fhirResourceId: string, groupFeatures: list, groupType: record, id: int, lastImportDate: string, lastUpdate: string, links: list, locations: list, name: string, parentGroups: list, postcode: string, sftpUser: string, shortName: string, visible: bool, visibleToJoin: bool>, id: int, identifier: string, location: string, name: string, temporaryUuid: string, units: string, value: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($user_id | is-empty) { error make --unspanned { msg: "path parameter 'userId' must be non-empty" } }

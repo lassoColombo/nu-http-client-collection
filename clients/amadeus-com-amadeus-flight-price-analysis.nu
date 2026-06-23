@@ -151,7 +151,7 @@ export def "analytics-itinerary-price-metrics get" [
   --departure-date: string # The date on which the traveler will depart from the origin to go to the destination. Dates are specified in the[ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) YYYY-MM-DD format. (e.g. 2021-03-21)
   --currency-code: string # the preferred currency for display. Currency is specified in the [ISO 4217](https://en.wikipedia.org/wiki/ISO_4217) format, e.g. EUR for Euro (default: EUR)
   --one-way: oneof<nothing, bool> # true to get price metrics for a one way trip, false to get price metrics for a round trip (default: false)
-]: nothing -> any {
+]: nothing -> record<data: table<currencyCode: string, departureDate: string, destination: record, oneWay: bool, origin: record, priceMetrics: list, transportType: string, type: string>, meta: record<href: string, methods: list<string>>, warnings: table<code: int, detail: string, source: record, title: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "originIataCode" $origin_iata_code "scalar") (serialize-qp "destinationIataCode" $destination_iata_code "scalar") (serialize-qp "departureDate" $departure_date "scalar") (serialize-qp "currencyCode" $currency_code "scalar") (serialize-qp "oneWay" $one_way "scalar")] | flatten | str join "&"

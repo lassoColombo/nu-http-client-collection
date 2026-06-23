@@ -231,7 +231,7 @@ export def "categories delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -374,7 +374,7 @@ export def "checkout-custom-fields delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -623,7 +623,7 @@ export def "custom-fields delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -769,7 +769,7 @@ export def "custom-fields-select-options delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -917,7 +917,7 @@ export def "customer-categories delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1005,7 +1005,7 @@ export def "customer-categories-customers-json delete" [
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
   --customers: list # item shape: {email?: string, id?: int}
-]: any -> any {
+]: any -> oneof<string, record, nothing> {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
@@ -1203,7 +1203,7 @@ export def "customers delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1349,7 +1349,7 @@ export def "customers-fields delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1576,7 +1576,7 @@ export def "hooks delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -1717,7 +1717,7 @@ export def "jsapps delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($code | is-empty) { error make --unspanned { msg: "path parameter 'code' must be non-empty" } }
@@ -2134,7 +2134,7 @@ export def "pages delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2552,7 +2552,7 @@ export def "products delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2727,7 +2727,7 @@ export def "products-attachments delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -2871,7 +2871,7 @@ export def "products-digital-products delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3101,7 +3101,7 @@ export def "products-images delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3245,7 +3245,7 @@ export def "products-options delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3430,7 +3430,7 @@ export def "products-options-values delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3790,7 +3790,7 @@ export def "promotions delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
@@ -3931,7 +3931,7 @@ export def "shipping-methods delete" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --login: string # API OAuth login. (format: string)
   --authtoken: string # API OAuth token. (format: string)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }

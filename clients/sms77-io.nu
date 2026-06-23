@@ -193,7 +193,7 @@ export def "balance get" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-]: nothing -> any {
+]: nothing -> oneof<float, string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let full_url = (build-url $base "/balance")
@@ -218,7 +218,7 @@ export def "contacts get" [
   --accept: string@accept-completer # Response content type
   --action: string@action-completer # Determines the action to execute.
   --json: float@json-completer # Defines whether to return the response as JSON or CSV separated by semicolon. (default: 0)
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "json" $json "scalar")] | flatten | str join "&"
@@ -248,7 +248,7 @@ export def "contacts create" [
   --nick: string # The contacts name.
   --empfaenger: string # The contacts phone number.
   --email: string # The contacts email address.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "action" $action "scalar") (serialize-qp "json" $json "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "nick" $nick "scalar") (serialize-qp "empfaenger" $empfaenger "scalar") (serialize-qp "email" $email "scalar")] | flatten | str join "&"
@@ -513,7 +513,7 @@ export def "status get" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --msg-id: string # The ID from the SMS.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "msg_id" $msg_id "scalar")] | flatten | str join "&"
@@ -565,7 +565,7 @@ export def "voice create" [
   --text: string # The text to convert to a voice message. Accepts valid XML too.
   --xml: float@xml-completer # Decides whether the parameter "text" is plain text or XML. The default value is 0.
   --qp-from: string # Sets the sender. Must be a verified sender. Use an inbound number of yours or one of ours.
-]: nothing -> any {
+]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "x-api-key"))
   let base = ($base_url | default $BASE_URL)
   let qp = [(serialize-qp "to" $qp_to "scalar") (serialize-qp "text" $text "scalar") (serialize-qp "xml" $xml "scalar") (serialize-qp "from" $qp_from "scalar")] | flatten | str join "&"
